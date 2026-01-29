@@ -39,7 +39,7 @@ const preprocessJobDescription = createStep({
     const jobDescription = normalized.slice(0, Math.max(0, maxChars));
 
     return {
-      jobDescription
+      jobDescription,
     };
   },
 });
@@ -55,8 +55,7 @@ const generateSkillCandidateTerms = createStep({
   outputSchema: z.array(z.string()),
   execute: async ({ inputData, mastra, setState }) => {
     const agent =
-      mastra?.getAgentById?.('skillsMatchingAgent') ??
-      mastra?.getAgent?.('skillsMatchingAgent');
+      mastra?.getAgentById?.('skillsMatchingAgent') ?? mastra?.getAgent?.('skillsMatchingAgent');
 
     if (!agent) {
       throw new Error('Skills matching agent not found');
@@ -70,9 +69,7 @@ const generateSkillCandidateTerms = createStep({
     const searchTerms = candidateTerms
       .map((term) => term.trim())
       .filter((term) => term.length > 0)
-      .filter(
-        (term) => !candidateTerms.includes(normalizeTerm(term)),
-      );
+      .filter((term) => !candidateTerms.includes(normalizeTerm(term)));
 
     setState({
       ...inputData,
@@ -87,13 +84,13 @@ const generateSkillCandidateTerms = createStep({
 // Fuzzy Match a skill terms against Topcoder Standardized Skills
 const fuzzyMatchTermSkills = createStep({
   id: 'fuzzy-match-term-skills',
-  description: 'Fuzzy match a search term against Topcoder\'s standardized skills',
+  description: "Fuzzy match a search term against Topcoder's standardized skills",
   inputSchema: z.string().min(1),
   outputSchema: z.object({
     term: z.string().min(1),
-    matches: z.array(skillMatchSchema)
+    matches: z.array(skillMatchSchema),
   }),
-  execute: async ({ inputData: searchTerm, mastra, requestContext}) => {
+  execute: async ({ inputData: searchTerm, mastra, requestContext }) => {
     const logger = mastra?.getLogger?.();
     const matchSize = Number(process.env.SKILL_MATCHING_FUZZY_MATCH_SIZE ?? 3);
 
@@ -102,7 +99,7 @@ const fuzzyMatchTermSkills = createStep({
     try {
       const toolResult = await standardizedSkillsFuzzyTool.execute?.(
         { term: searchTerm, size: matchSize },
-        {requestContext}
+        { requestContext },
       );
 
       if (!toolResult || 'error' in toolResult || !toolResult.matches) {
@@ -133,7 +130,7 @@ const fuzzyMatchTermSkills = createStep({
 // Semantic search a skill term against Topcoder Standardized Skills
 const semanticMatchTermSkills = createStep({
   id: 'semantic-match-term-skills',
-  description: 'Semantic search a term against Topcoder\'s standardized skills',
+  description: "Semantic search a term against Topcoder's standardized skills",
   inputSchema: z.string().min(1),
   outputSchema: z.object({
     term: z.string().min(1),
@@ -176,10 +173,12 @@ const semanticMatchTermSkills = createStep({
 const mapDirectMatchesToState = createStep({
   id: 'map-direct-matches-to-state',
   description: 'Map direct skill matches to the workflow state',
-  inputSchema: z.array(z.object({
-    term: z.string().min(1),
-    matches: z.array(skillMatchSchema)
-  })),
+  inputSchema: z.array(
+    z.object({
+      term: z.string().min(1),
+      matches: z.array(skillMatchSchema),
+    }),
+  ),
   outputSchema: z.array(scoredSkillSchema),
   stateSchema: extractionWorkflowStateSchema,
   execute: async ({ inputData, mastra, state, setState }) => {
@@ -213,10 +212,12 @@ const mapDirectMatchesToState = createStep({
 const mapSemanticMatchesToState = createStep({
   id: 'map-semantic-matches-to-state',
   description: 'Map semantic skill matches to the workflow state',
-  inputSchema: z.array(z.object({
-    term: z.string().min(1),
-    matches: z.array(semanticMatchSchema),
-  })),
+  inputSchema: z.array(
+    z.object({
+      term: z.string().min(1),
+      matches: z.array(semanticMatchSchema),
+    }),
+  ),
   outputSchema: z.array(scoredSkillSchema),
   stateSchema: extractionWorkflowStateSchema,
   execute: async ({ inputData, mastra, state, setState }) => {
@@ -255,16 +256,20 @@ const mapSemanticMatchesToState = createStep({
 const filterOutDirectMatches = createStep({
   id: 'filter-out-direct-matches',
   description: 'Filter out direct skill matches and pass remaining terms to semantic search',
-  inputSchema: z.array(z.object({
-    term: z.string().min(1),
-    matches: z.array(skillMatchSchema),
-  })),
+  inputSchema: z.array(
+    z.object({
+      term: z.string().min(1),
+      matches: z.array(skillMatchSchema),
+    }),
+  ),
   outputSchema: z.array(z.string().min(1)),
   stateSchema: extractionWorkflowStateSchema,
   execute: async ({ inputData }) => {
     const nonDirectTerms = inputData
-      .filter(({ term, matches }) =>
-        matches.length === 0 || !matches.some((match) => normalizeTerm(match.name) === normalizeTerm(term))
+      .filter(
+        ({ term, matches }) =>
+          matches.length === 0 ||
+          !matches.some((match) => normalizeTerm(match.name) === normalizeTerm(term)),
       )
       .map(({ term }) => term);
 
@@ -275,19 +280,21 @@ const filterOutDirectMatches = createStep({
 const semanticSearchWorkflow = createWorkflow({
   id: 'semantic-terms-workflow',
   description: 'Execute semantic search on term candidates not directly matching any TC skills',
-  inputSchema: z.array(z.object({
-    term: z.string().min(1),
-    matches: z.array(skillMatchSchema)
-  })),
+  inputSchema: z.array(
+    z.object({
+      term: z.string().min(1),
+      matches: z.array(skillMatchSchema),
+    }),
+  ),
   outputSchema: z.array(scoredSkillSchema),
   stateSchema: extractionWorkflowStateSchema,
 })
-.then(filterOutDirectMatches)
-.foreach(semanticMatchTermSkills, {
-  concurrency: Number(process.env.SKILL_MATCHING_CONCURRENCY ?? 5),
-})
-.then(mapSemanticMatchesToState)
-.commit();
+  .then(filterOutDirectMatches)
+  .foreach(semanticMatchTermSkills, {
+    concurrency: Number(process.env.SKILL_MATCHING_CONCURRENCY ?? 5),
+  })
+  .then(mapSemanticMatchesToState)
+  .commit();
 
 const skillRefinementOutputSchema = z.object({
   'map-direct-matches-to-state': z.array(scoredSkillSchema),
@@ -297,16 +304,19 @@ const skillRefinementOutputSchema = z.object({
 // Nested Workflow
 const skillSelectionAndRefinementWorkflow = createWorkflow({
   id: 'skill-selection-and-refinement-workflow',
-  description: 'Select directly matching skills and execute semantic search for the rest of skill candidates',
-  inputSchema: z.array(z.object({
-    term: z.string().min(1),
-    matches: z.array(skillMatchSchema)
-  })),
+  description:
+    'Select directly matching skills and execute semantic search for the rest of skill candidates',
+  inputSchema: z.array(
+    z.object({
+      term: z.string().min(1),
+      matches: z.array(skillMatchSchema),
+    }),
+  ),
   outputSchema: skillRefinementOutputSchema,
   stateSchema: extractionWorkflowStateSchema,
 })
-.parallel([mapDirectMatchesToState, semanticSearchWorkflow])
-.commit();
+  .parallel([mapDirectMatchesToState, semanticSearchWorkflow])
+  .commit();
 
 // Final step to output results from the working state
 const outputFinalState = createStep({
@@ -324,7 +334,8 @@ const outputFinalState = createStep({
 // Skill Extraction Workflow to extract and match Topcoder standardized skills from a given job description
 export const skillExtractionWorkflow = createWorkflow({
   id: 'skill-extraction-workflow',
-  description: 'Skill Extraction Workflow to extract and match Topcoder standardized skills from a given job description using iterative term generation and fuzzy matching with AI.',
+  description:
+    'Skill Extraction Workflow to extract and match Topcoder standardized skills from a given job description using iterative term generation and fuzzy matching with AI.',
   inputSchema: z.object({
     jobDescription: z.string().min(1),
   }),
@@ -342,11 +353,7 @@ export const skillExtractionWorkflow = createWorkflow({
 
 const normalizeTerm = (term: string) => term.trim().toLowerCase();
 
-const buildCandidateTermsPrompt = ({
-  jobDescription,
-}: {
-  jobDescription: string;
-}) => {
+const buildCandidateTermsPrompt = ({ jobDescription }: { jobDescription: string }) => {
   const baseInstructions = `Extract concise hard & soft capability skill search candidate terms from the job description. Return a JSON array of strings only.`;
   const refinementInstructions = `In priority order related to the job description, extract specific multi-word skill terms first, then simpler ones.`;
 

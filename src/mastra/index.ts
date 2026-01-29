@@ -2,13 +2,13 @@ import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { skillExtractionWorkflow } from './workflows/skills/skill-extraction-workflow';
-// import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
 import { PostgresStore } from '@mastra/pg';
 import {
   skillDiscoveryAnswerRelevancyScorer,
   skillDiscoveryPromptAlignmentScorer,
 } from './scorers/skills-matching-scorers';
+import { apiAuthLayer } from '../utils/auth';
 
 export const mastra = new Mastra({
   workflows: { skillExtractionWorkflow },
@@ -35,18 +35,11 @@ export const mastra = new Mastra({
     },
   }),
   server: {
-    studioBase: '/tc-ai-studio',
-    // auth: new MastraAuthAuth0({
-    //   domain: process.env.AUTH0_DOMAIN,
-    //   audience: process.env.AUTH0_AUDIENCE,
-    //   authorizeUser: async (...args) => {
-    //     // Custom authorization logic
-    //     console.log('Args are', args)
-    //     return true;
-    //   },
-    // }),
+    port: Number(process.env.PORT || 3000),
+    studioBase: '/studio',
+    auth: apiAuthLayer,
     build: {
-      apiReqLogs: true
+      apiReqLogs: true,
     },
   },
 });

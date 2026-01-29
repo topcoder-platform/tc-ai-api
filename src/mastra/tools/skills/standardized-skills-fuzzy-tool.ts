@@ -4,8 +4,8 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 interface SkillFuzzyMatchResponse {
-    id: string;
-    name: string;
+  id: string;
+  name: string;
 }
 
 const BASE_URL = `${process.env.TC_API_BASE}/v5/standardized-skills/skills/fuzzymatch`;

@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { ollama } from 'ai-sdk-ollama';
+import { ollama } from '../../../utils/providers/ollama';
 import { PostgresStore } from '@mastra/pg';
 import { skillDiscoveryScorers } from '../../scorers/skills-matching-scorers';
 
@@ -21,7 +21,8 @@ Output requirements:
 - Output STRICT JSON only.
 - Format: ["Term 1", "Term 2", ...]
 - No prose, no markdown, no extra keys.
-`},
+`,
+  },
   model: ollama('qwen3:latest', {
     options: {
       temperature: 0.1,
