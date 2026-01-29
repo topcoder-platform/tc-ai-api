@@ -37,7 +37,7 @@ export const mastra = new Mastra({
   server: {
     port: Number(process.env.PORT || 3000),
     studioBase: '/studio',
-    auth: apiAuthLayer,
+    auth: process.env.DISABLE_AUTH === 'true' ? undefined : apiAuthLayer,
     build: {
       apiReqLogs: true,
     },
