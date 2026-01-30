@@ -8,7 +8,7 @@ import {
   skillDiscoveryAnswerRelevancyScorer,
   skillDiscoveryPromptAlignmentScorer,
 } from './scorers/skills-matching-scorers';
-import { apiAuthLayer } from '../utils/auth';
+import { apiAuthLayer } from '../utils';
 
 export const mastra = new Mastra({
   workflows: { skillExtractionWorkflow },
