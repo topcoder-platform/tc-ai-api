@@ -1,0 +1,75 @@
+version: 2.1
+
+defaults: &defaults
+  docker:
+  - image: cimg/python:3.13.2-browsers
+install_dependency: &install_dependency
+  name: Installation of build and deployment dependencies.
+  command: |
+    sudo apt update
+    sudo apt install -y jq python3-pip
+    sudo pip3 install awscli --upgrade
+install_deploysuite: &install_deploysuite
+  name: Installation of install_deploysuite.
+  command: |
+    git clone --branch v1.4.19 https://github.com/topcoder-platform/tc-deploy-scripts ../buildscript
+    cp ./../buildscript/master_deploy.sh .
+    cp ./../buildscript/buildenv.sh .
+    cp ./../buildscript/awsconfiguration.sh .
+    cp ./../buildscript/psvar-processor.sh .
+
+builddeploy_steps: &builddeploy_steps
+  - checkout
+  - setup_remote_docker
+  - run: *install_dependency
+  - run: *install_deploysuite
+  - run: docker buildx build --no-cache=true -t ${APPNAME}:latest .
+  - run:
+      name: Running MasterScript.
+      command: |
+        ./awsconfiguration.sh $DEPLOY_ENV
+        source awsenvconf
+        ./psvar-processor.sh -t appenv -p /config/${APPNAME}/deployvar
+        source deployvar_env
+        ./master_deploy.sh -d ECS -e $DEPLOY_ENV -t latest -j /config/${APPNAME}/appvar -i ${APPNAME} -p FARGATE
+
+jobs:
+  # Build & Deploy against development backend
+  "build-dev":
+    !!merge <<: *defaults
+    environment:
+      DEPLOY_ENV: "DEV"
+      LOGICAL_ENV: "dev"
+      APPNAME: "tc-ai-api"
+      DEPLOYMENT_ENVIRONMENT: 'dev'
+    steps: *builddeploy_steps
+
+  "build-prod":
+    !!merge <<: *defaults
+    environment:
+      DEPLOY_ENV: "PROD"
+      LOGICAL_ENV: "prod"
+      APPNAME: "tc-ai-api"
+      DEPLOYMENT_ENVIRONMENT: 'prod'
+    steps: *builddeploy_steps
+
+workflows:
+  version: 2
+  build:
+    jobs:
+    # Development builds are executed on "develop" branch only.
+    - "build-dev":
+        context: org-global
+        filters:
+          branches:
+            only:
+              - develop
+            
+    # Production builds are exectuted only on tagged commits to the
+    # master branch.
+    - "build-prod":
+        context: org-global
+        filters:
+          branches:
+            only:
+              - master
