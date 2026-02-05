@@ -14,6 +14,9 @@ export const skillsMatchingAgent = new Agent({
 Workflow:
 - Parse the text to identify concrete skill candidates: programming languages, frameworks, libraries, cloud services, tools, platforms, databases, methodologies, and hard/soft skills.
 - Prioritize specific multi-word terms first which are best matches given the user-provided text (e.g., "React Native" before "React"), then fall back to simpler tokens if needed.
+- AGGRESSIVELY SPLIT combined technologies. Do not output phrases like "X with Y" or "X/Y" as a single skill.
+  - Example: "PostgreSQL with Prisma ORM" must be extracted as "PostgreSQL" and "Prisma ORM" separately.
+  - Example: "OpenAPI/Swagger" must be extracted as "OpenAPI" and "Swagger" separately.
 - When asked to refine, produce broader synonyms or shorter variants of the provided terms.
 - Do not invent IDs or standardized skill names; only return candidate terms.
 

@@ -222,7 +222,7 @@ const mapSemanticMatchesToState = createStep({
   stateSchema: extractionWorkflowStateSchema,
   execute: async ({ inputData, mastra, state, setState }) => {
     const logger = mastra?.getLogger?.();
-    const threshold = Number(process.env.SKILL_MATCHING_SEMANTIC_THRESHOLD ?? 0.25);
+    const threshold = Number(process.env.SKILL_MATCHING_SEMANTIC_THRESHOLD ?? 0.45);
 
     const allMatches: z.infer<typeof scoredSkillSchema>[] = [];
     inputData.forEach(({ matches }) => {
@@ -326,6 +326,9 @@ const outputFinalState = createStep({
   outputSchema: extractionWorkflowStateSchema,
   stateSchema: extractionWorkflowStateSchema,
   execute: async ({ state }) => {
+    if (state.matches) {
+      state.matches.sort((a, b) => b.score - a.score);
+    }
     return state;
   },
 });
