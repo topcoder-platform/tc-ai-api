@@ -51,6 +51,7 @@ Output requirements:
     storage: new PostgresStore({
       id: 'skills-matching-agent-memory',
       connectionString: process.env.MASTRA_DB_CONNECTION!,
+      schemaName: process.env.MASTRA_DB_SCHEMA || 'ai'
     }),
   }),
 });

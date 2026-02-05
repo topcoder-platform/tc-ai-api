@@ -20,6 +20,7 @@ export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'tc-ai-api-store',
     connectionString: process.env.MASTRA_DB_CONNECTION!,
+    schemaName: process.env.MASTRA_DB_SCHEMA || 'ai'
   }),
   logger: new PinoLogger({
     name: 'TC AI API',
