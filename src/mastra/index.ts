@@ -1,5 +1,4 @@
 import { Mastra } from '@mastra/core';
-import { PinoLogger } from '@mastra/loggers';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { skillExtractionWorkflow } from './workflows/skills/skill-extraction-workflow';
 import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
@@ -8,7 +7,7 @@ import {
   skillDiscoveryAnswerRelevancyScorer,
   skillDiscoveryPromptAlignmentScorer,
 } from './scorers/skills-matching-scorers';
-import { apiAuthLayer } from '../utils';
+import { apiAuthLayer, middlewareConfig, tcAILogger } from '../utils';
 
 export const mastra = new Mastra({
   workflows: { skillExtractionWorkflow },
@@ -22,10 +21,7 @@ export const mastra = new Mastra({
     connectionString: process.env.MASTRA_DB_CONNECTION!,
     schemaName: process.env.MASTRA_DB_SCHEMA || 'ai'
   }),
-  logger: new PinoLogger({
-    name: 'TC AI API',
-    level: 'info',
-  }),
+  logger: tcAILogger,
   observability: new Observability({
     configs: {
       default: {
@@ -42,5 +38,6 @@ export const mastra = new Mastra({
     build: {
       apiReqLogs: true,
     },
+    middleware: middlewareConfig,
   },
 });
