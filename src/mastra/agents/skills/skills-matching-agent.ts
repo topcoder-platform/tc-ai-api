@@ -26,7 +26,7 @@ Output requirements:
 - No prose, no markdown, no extra keys.
 `,
   },
-  model: ollama('qwen3:latest', {
+  model: ollama('mistral:latest', {
     options: {
       temperature: 0.1,
       top_p: 0.5,
