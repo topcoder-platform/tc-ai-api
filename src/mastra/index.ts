@@ -1,17 +1,20 @@
 import { Mastra } from '@mastra/core';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { skillExtractionWorkflow } from './workflows/skills/skill-extraction-workflow';
+import { challengeContextWorkflow } from './workflows/challenge/challenge-context-workflow';
 import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
+import { challengeParserAgent } from './agents/challenge/challenge-parser-agent';
 import { PostgresStore } from '@mastra/pg';
 import {
   skillDiscoveryAnswerRelevancyScorer,
   skillDiscoveryPromptAlignmentScorer,
 } from './scorers/skills-matching-scorers';
 import { apiAuthLayer, middlewareConfig, tcAILogger } from '../utils';
+import { aiWorkspace } from './workspaces';
 
 export const mastra = new Mastra({
-  workflows: { skillExtractionWorkflow },
-  agents: { skillsMatchingAgent },
+  workflows: { skillExtractionWorkflow, challengeContextWorkflow },
+  agents: { skillsMatchingAgent, challengeParserAgent },
   scorers: {
     skillDiscoveryAnswerRelevancyScorer,
     skillDiscoveryPromptAlignmentScorer,
@@ -31,6 +34,7 @@ export const mastra = new Mastra({
       },
     },
   }),
+  workspace: aiWorkspace,
   server: {
     port: Number(process.env.PORT || 3000),
     studioBase: '/studio',
