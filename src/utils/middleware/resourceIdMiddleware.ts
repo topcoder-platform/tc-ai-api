@@ -1,4 +1,5 @@
 import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/request-context";
+import { apiAuthLayer } from '../auth';
 import { tcAILogger } from '../logger';
 
 /**
@@ -20,7 +21,25 @@ export const resourceIdMiddleware = {
     path: '/api/*',
     handler: async (c: any, next: any) => {
         const requestContext = c.get('requestContext');
-        const user = requestContext.get('user');
+        let user = requestContext.get('user');
+
+        if (!user) {
+            const authHeader = c.req.header('authorization') || '';
+            const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+            const apiKeyToken = c.req.query('apiKey') || '';
+            const token = bearerToken || apiKeyToken;
+
+            if (token) {
+                try {
+                    user = await apiAuthLayer.authenticateToken(token, c.req.raw);
+                    if (user) {
+                        requestContext.set('user', user);
+                    }
+                } catch (error) {
+                    tcAILogger.error('Failed to authenticate token in resource middleware', { error });
+                }
+            }
+        }
 
         if (!user) {
             tcAILogger.error('User object missing in context!');
