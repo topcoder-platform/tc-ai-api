@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { ollama } from '../../../utils/providers/ollama';
 import { PostgresStore } from '@mastra/pg';
-import { skillDiscoveryScorers } from '../../scorers/skills-matching-scorers';
+import { instanceScorers } from '../../scorers/instance-scorers';
 
 export const skillsMatchingAgent = new Agent({
   id: 'skillsMatchingAgent',
@@ -36,17 +36,17 @@ Output requirements:
   }),
   scorers: {
     answerRelevancy: {
-      scorer: skillDiscoveryScorers.skillDiscoveryAnswerRelevancyScorer,
+      scorer: instanceScorers.instanceAnswerRelevancyScorer,
       sampling: {
         type: 'ratio',
-        rate: Number(process.env.SKILL_DISCOVERY_EVAL_SAMPLE_RATE ?? 0.5),
+        rate: Number(process.env.EVAL_SAMPLE_RATE ?? 0.5),
       },
     },
     promptAlignment: {
-      scorer: skillDiscoveryScorers.skillDiscoveryPromptAlignmentScorer,
+      scorer: instanceScorers.instancePromptAlignmentScorer,
       sampling: {
         type: 'ratio',
-        rate: Number(process.env.SKILL_DISCOVERY_EVAL_SAMPLE_RATE ?? 0.5),
+        rate: Number(process.env.EVAL_SAMPLE_RATE ?? 0.5),
       },
     },
   },
