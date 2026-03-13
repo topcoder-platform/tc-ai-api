@@ -14,27 +14,21 @@ import { ollama } from '../../../utils';
 export const challengeParserAgent = new Agent({
    id: 'challenge-parser-agent',
    name: 'Challenge Specification Parser',
-   model: ollama('mistral:latest', {
+   model: ollama('qwen3:latest', {
       options: {
          // Sampling — near-deterministic for strict JSON schema compliance
          temperature: 0.1,
          top_k: 40,
          top_p: 0.9,
 
-         // Repetition control — prevent repetitive text across many requirement entries
-         // and avoid echoing skill instruction phrasing into output
-         repeat_penalty: 1.15,
-         repeat_last_n: 192,
-
          // Context window — system prompt (~1.2K tok) + skill activations (~3K tok)
          // + full challenge spec (some specs are very long)
-         num_ctx: 16384,
+         num_ctx: 32768,
 
          // Generation limit — enough for structured JSON with many requirements, groups, tech stack, etc.
          num_predict: 8192,
 
-         // Prompt processing — smaller system prompt with skills loaded progressively
-         num_batch: 256,
+         seed: 42, // Fixed seed for reproducibility during development
       },
    }),
    instructions: {
