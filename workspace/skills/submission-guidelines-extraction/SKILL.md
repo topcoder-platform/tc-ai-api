@@ -21,8 +21,8 @@ Write a concise 1-3 sentence overview of what submitters must deliver and how.
 
 ### 2. `whatToSubmit`
 
-List every deliverable mentioned in the spec. Each item is a separate array
-entry. Common deliverables:
+List ONLY deliverables the specification **explicitly asks the submitter to
+deliver or include**. Each item is a separate array entry. Common deliverables:
 
 - Source code
 - README with setup instructions
@@ -33,6 +33,21 @@ entry. Common deliverables:
 - Deployment guide
 - Environment configuration template
 - Database migration scripts
+
+#### What NOT to include
+
+- Do NOT add deliverables inferred from **evaluation criteria** or **review
+  rubrics**. If the scorecard mentions "code comments" or "security", that
+  does not mean "comments" or "security report" are deliverables.
+- Do NOT add "test cases" or "unit tests" unless the spec explicitly says
+  to **submit** them (e.g. "include unit tests in your submission").
+  Mentioning testing in the evaluation criteria is NOT the same as requiring
+  tests as a deliverable.
+- Do NOT list "documentation" as a separate item when "README" or
+  "README.md" is already listed — the README **is** the documentation.
+- Do NOT infer deliverables from general best practices. Only extract what
+  the challenge author explicitly requested.
+- When in doubt, **leave it out**.
 
 ### 3. `howToSubmit`
 
@@ -114,3 +129,13 @@ Any remaining submission information that doesn't fit the fields above.
 | "Deploy to Heroku and provide the URL"         | `submissionType: "link_to_deployment"`, `submissionStorage: "cloud_deployment"` |
 | "Push your code to the provided repository"    | `submissionType: "link_to_repository"`, `submissionStorage: "git_repository"`   |
 | No submission section found                    | Use defaults: `topcoder_upload`, `file_upload`                                  |
+
+## Common Mistakes to Avoid
+
+| Spec says…                                                 | Wrong whatToSubmit        | Why it's wrong                                                |
+| ---------------------------------------------------------- | ------------------------ | ------------------------------------------------------------- |
+| "submissions must pass SAST scanner"                       | "Test cases"             | SAST is an eligibility condition, not a deliverable           |
+| "We will evaluate on: documentation"                       | "Documentation"          | Evaluation criteria ≠ submission deliverable                  |
+| "Include a README.md"                                      | "README.md", "Documentation" | Redundant — README is the documentation                  |
+| "Your code should include tests" (in evaluation section)   | "Test cases"             | Evaluation guidance, not an explicit submission requirement   |
+| "Security will be reviewed"                                | "Security report"        | Review criteria, not a deliverable                            |

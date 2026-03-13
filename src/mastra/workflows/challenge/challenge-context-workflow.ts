@@ -277,7 +277,7 @@ const unifiedContextSchema = z.object({
 export type UnifiedChallengeContext = z.infer<typeof unifiedContextSchema>;
 
 // Schema for the AI-extracted portion of the context
-const aiExtractedSchema = z.object({
+const _aiExtractedSchema = z.object({
     requirements: z.array(requirementSchema),
     requirement_groups: z.array(requirementGroupSchema),
     tech_stack: z.array(z.string()),
@@ -286,7 +286,7 @@ const aiExtractedSchema = z.object({
     submission_guidelines: submissionGuidelinesSchema,
 });
 
-type AIExtracted = z.infer<typeof aiExtractedSchema>;
+type AIExtracted = z.infer<typeof _aiExtractedSchema>;
 
 // ---------------------------------------------------------------------------
 // Step 1 – Fetch challenge details by challenge ID
@@ -506,27 +506,33 @@ async function fetchScorecard(scorecardId: string): Promise<z.infer<typeof score
 }
 
 // ---------------------------------------------------------------------------
-// AI Extraction Helper
+// AI Extraction — Decomposed & Validated
 // ---------------------------------------------------------------------------
 
-/**
- * Builds a prompt from the challenge data and invokes the challenge-parser-agent
- * with structured output to extract requirements, tech stack, and submission
- * guidelines.  The output is validated against `aiExtractedSchema` by the AI SDK.
- */
-async function extractWithAI(
-    mastra: Parameters<
-        NonNullable<Parameters<typeof createStep>[0]['execute']>
-    > extends [infer P, ...unknown[]]
-        ? P extends { mastra: infer M }
-        ? NonNullable<M>
-        : never
-        : never,
-    data: Record<string, unknown>,
-): Promise<AIExtracted> {
-    const agent = mastra.getAgentById('challenge-parser-agent');
+// Focused sub-schemas for decomposed extraction calls
+const requirementsAndGroupsSchema = z.object({
+    requirements: z.array(requirementSchema),
+    requirement_groups: z.array(requirementGroupSchema),
+});
 
-    // Compose all textual content the agent should analyse
+const techAndRuntimeSchema = z.object({
+    tech_stack: z.array(z.string()),
+    runtime_environment: runtimeEnvironmentSchema,
+});
+
+const codebaseExtractedSchema = z.object({
+    existing_codebase: existingCodebaseSchema,
+});
+
+const guidelinesExtractedSchema = z.object({
+    submission_guidelines: submissionGuidelinesSchema,
+});
+
+/**
+ * Assembles the plain-text challenge specification from the raw API data.
+ * Shared by all focused extraction calls.
+ */
+function buildChallengeText(data: Record<string, unknown>): string {
     const sections: string[] = [];
 
     sections.push(`# Challenge: ${(data.name as string) ?? 'Untitled'}`);
@@ -548,63 +554,450 @@ async function extractWithAI(
         sections.push(`## Tags\n${data.tags.join(', ')}`);
     }
 
+    return sections.join('\n\n');
+}
+
+// -- Focused extraction: Requirements + Grouping ----------------------------
+
+async function extractRequirementsAndGroups(
+    agent: any,
+    challengeText: string,
+): Promise<z.infer<typeof requirementsAndGroupsSchema>> {
     const prompt = [
         'Analyse the following Topcoder challenge specification and extract:',
-        '1. All individual requirements (with IDs, titles, descriptions, priorities, constraints)',
-        '2. Requirement groups — cluster requirements by feature area / story / problem domain they belong to',
-        '3. The full technology stack (languages, frameworks, tools, services, protocols, databases) implied or explicitly mentioned',
-        '4. Runtime environment EXPECTATIONS — there is NO submission yet; extract only what the challenge REQUIRES or IMPLIES:',
-        '   a. Expected target operating system (Linux, Windows, macOS, or any/unknown)',
-        '   b. Whether the challenge expects the solution to run inside a container (Docker, Podman, etc.) and which container tool',
-        '   c. Whether the challenge expects a Dockerfile / docker-compose file to be included',
-        '   d. Expected primary runtime engine (Node.js, Python interpreter, JVM, Go, .NET CLR, browser, etc.)',
-        '   e. Required runtime version if mentioned in the spec',
-        '   f. Programming language(s) required by the challenge (TypeScript, JavaScript, Python, Java, etc.)',
-        '   g. Expected package manager (npm, pnpm, yarn, pip, poetry, maven, etc.)',
-        '   h. Expected build tool (webpack, vite, tsc, gradle, make, etc.)',
-        '   i. Expected deployment target (AWS Lambda, Vercel, Heroku, on-premise, local, etc.)',
-        '   j. Expected server framework or type (Express, NestJS, FastAPI, Spring Boot, etc.)',
-        '   k. Expected primary database engine if applicable',
-        '   l. Expected additional services (Redis, RabbitMQ, Elasticsearch, etc.)',
-        '   m. Any other runtime / environment expectations inferred from the challenge spec',
-        '5. Existing codebase / starting-point status — determine from the challenge spec:',
-        '   a. Is this a GREENFIELD challenge (build from scratch) or does it build upon existing artifacts?',
-        '   b. If existing artifacts are provided, list each one with its type (repository, starter_code,',
-        '      boilerplate, documentation, api_spec, design, dataset, database_dump, config, library, other)',
-        '   c. For each artifact: what it contains, any URL/link, and additional notes',
-        '   d. Primary repository URL and branch/tag if an existing codebase is referenced',
-        '   e. Programming languages and frameworks already present in the existing codebase',
-        '   f. Write a brief summary of the starting-point status',
-        '   g. If no existing artifacts are mentioned, set isGreenfield=true and artifacts=[]',
-        '6. Submission guidelines — extract STRUCTURED information:',
-        '   a. A brief overall summary of the submission requirements (1-3 sentences)',
-        '   b. What to submit — list every deliverable (source code, README, Docker files, tests, demo video, etc.)',
-        '   c. How to submit — packaging format (ZIP archive, Git patch, single commit, etc.)',
-        '   d. Where to submit (Topcoder challenge page, GitHub PR, external URL, etc.)',
-        '   e. Submission type — one of: full_codebase, patch, link_to_repository, link_to_deployment, file_upload, other',
-        '   f. Submission storage — where the artifact lives: topcoder_upload, git_repository, external_file_storage, cloud_deployment, other',
-        '   g. Is this a PATCH of an existing codebase or a standalone full codebase?',
-        '   h. Eligibility conditions (e.g. "must pass SAST scanner", "≥80% test coverage")',
-        '   i. Any additional notes',
+        '1. All individual requirements (with sequential IDs REQ_01, REQ_02, …; concise titles ≤12 words;',
+        '   thorough descriptions preserving technical detail; priority high/medium/low; constraints with IDs CONSTR_01, CONSTR_02, …)',
+        '2. Requirement groups — cluster related requirements by feature area or problem domain',
+        '   (with sequential IDs GRP_01, GRP_02, …). Every requirement must appear in exactly one group.',
+        '',
+        'Follow the spec-requirements-extraction and requirement-grouping parsing protocols from your instructions.',
         '',
         '---BEGIN CHALLENGE SPECIFICATION---',
-        sections.join('\n\n'),
+        challengeText,
         '---END CHALLENGE SPECIFICATION---',
     ].join('\n');
 
-    tcAILogger.info('[challenge-context:extractWithAI] Invoking challenge-parser-agent for structured extraction...');
+    tcAILogger.info('[challenge-context:extractRequirements] Invoking agent for requirements + grouping...');
     const response = await agent.generate(prompt, {
-        structuredOutput: { schema: aiExtractedSchema },
+        structuredOutput: { schema: requirementsAndGroupsSchema },
     });
-
-    if (!response.object) {
-        tcAILogger.error('[challenge-context:extractWithAI] Agent returned no structured output');
-        throw new Error('Challenge parser agent returned no structured output');
-    }
-
-    tcAILogger.info('[challenge-context:extractWithAI] Agent returned structured output successfully');
+    if (!response.object) throw new Error('Agent returned no structured output for requirements');
+    tcAILogger.info(
+        `[challenge-context:extractRequirements] Done — ${response.object.requirements.length} requirements, ${response.object.requirement_groups.length} groups`,
+    );
     return response.object;
 }
+
+// -- Focused extraction: Tech Stack + Runtime Environment -------------------
+
+async function extractTechAndRuntime(
+    agent: any,
+    challengeText: string,
+): Promise<z.infer<typeof techAndRuntimeSchema>> {
+    const prompt = [
+        'Analyse the following Topcoder challenge specification and extract:',
+        '1. The full technology stack as a flat array of canonical-cased names',
+        '   (languages, frameworks, tools, services, protocols, databases — both explicit and implied)',
+        '2. Runtime environment EXPECTATIONS — there is NO submission yet; extract only what the challenge REQUIRES or IMPLIES:',
+        '   - Target OS, containerization expectations (tool, Dockerfile), runtime engine + version',
+        '   - Programming languages, package manager, build tool',
+        '   - Deployment target, server type, database engine, additional services',
+        '   - Any other runtime / environment notes',
+        '',
+        'Follow the tech-stack-extraction parsing protocol from your instructions.',
+        '',
+        '---BEGIN CHALLENGE SPECIFICATION---',
+        challengeText,
+        '---END CHALLENGE SPECIFICATION---',
+    ].join('\n');
+
+    tcAILogger.info('[challenge-context:extractTechRuntime] Invoking agent for tech stack + runtime...');
+    const response = await agent.generate(prompt, {
+        structuredOutput: { schema: techAndRuntimeSchema },
+    });
+    if (!response.object) throw new Error('Agent returned no structured output for tech/runtime');
+    tcAILogger.info(`[challenge-context:extractTechRuntime] Done — ${response.object.tech_stack.length} tech stack items`);
+    return response.object;
+}
+
+// -- Focused extraction: Existing Codebase Detection ------------------------
+
+async function extractExistingCodebase(
+    agent: any,
+    challengeText: string,
+): Promise<z.infer<typeof codebaseExtractedSchema>> {
+    const prompt = [
+        'Analyse the following Topcoder challenge specification and determine:',
+        '1. Whether the challenge is GREENFIELD (build from scratch) or builds upon existing artifacts',
+        '2. List all pre-existing artifacts with type (repository, starter_code, boilerplate, documentation,',
+        '   api_spec, design, dataset, database_dump, config, library, other), description, URL, and notes',
+        '3. Primary repository URL and branch/tag if an existing codebase is referenced',
+        '4. Languages and frameworks already present in any existing codebase',
+        '5. A brief summary of the starting-point status',
+        '',
+        'If no existing artifacts are mentioned, set isGreenfield=true and artifacts=[].',
+        '',
+        'Follow the codebase-detection parsing protocol from your instructions.',
+        '',
+        '---BEGIN CHALLENGE SPECIFICATION---',
+        challengeText,
+        '---END CHALLENGE SPECIFICATION---',
+    ].join('\n');
+
+    tcAILogger.info('[challenge-context:extractCodebase] Invoking agent for codebase detection...');
+    const response = await agent.generate(prompt, {
+        structuredOutput: { schema: codebaseExtractedSchema },
+    });
+    if (!response.object) throw new Error('Agent returned no structured output for codebase');
+    tcAILogger.info(`[challenge-context:extractCodebase] Done — greenfield: ${response.object.existing_codebase.isGreenfield}`);
+    return response.object;
+}
+
+// -- Focused extraction: Submission Guidelines ------------------------------
+
+async function extractSubmissionGuidelines(
+    agent: any,
+    challengeText: string,
+): Promise<z.infer<typeof guidelinesExtractedSchema>> {
+    const prompt = [
+        'Analyse the following Topcoder challenge specification and extract STRUCTURED submission information:',
+        '1. A brief overall summary of the submission requirements (1-3 sentences)',
+        '2. What to submit — list ONLY deliverables EXPLICITLY requested in the specification',
+        '3. How to submit — packaging format (ZIP archive, Git patch, single commit, etc.)',
+        '4. Where to submit (Topcoder challenge page, GitHub PR, external URL, etc.)',
+        '5. Submission type (full_codebase, patch, link_to_repository, link_to_deployment, file_upload, other)',
+        '6. Submission storage (topcoder_upload, git_repository, external_file_storage, cloud_deployment, other)',
+        '7. Whether this is a patch of an existing codebase or standalone',
+        '8. Eligibility conditions (e.g. "must pass SAST scanner")',
+        '9. Any additional notes',
+        '',
+        'CRITICAL RULES for whatToSubmit:',
+        '- Include ONLY deliverables the specification EXPLICITLY asks the submitter to deliver or include.',
+        '- Do NOT add deliverables inferred from evaluation criteria, review processes, or general best practices.',
+        '- Do NOT include "test cases" or "unit tests" unless the spec explicitly says to submit them.',
+        '- Do NOT list "documentation" as a separate item when a README is already listed.',
+        '- If in doubt whether something is a required deliverable, leave it out.',
+        '',
+        'Follow the submission-guidelines-extraction parsing protocol from your instructions.',
+        '',
+        '---BEGIN CHALLENGE SPECIFICATION---',
+        challengeText,
+        '---END CHALLENGE SPECIFICATION---',
+    ].join('\n');
+
+    tcAILogger.info('[challenge-context:extractGuidelines] Invoking agent for submission guidelines...');
+    const response = await agent.generate(prompt, {
+        structuredOutput: { schema: guidelinesExtractedSchema },
+    });
+    if (!response.object) throw new Error('Agent returned no structured output for submission guidelines');
+    tcAILogger.info(`[challenge-context:extractGuidelines] Done — ${response.object.submission_guidelines.whatToSubmit.length} deliverables`);
+    return response.object;
+}
+
+// -- Post-extraction validation: whatToSubmit --------------------------------
+
+const SUBMISSION_CONTEXT_TERMS = [
+    'submit', 'include', 'provide', 'deliver', 'attach', 'upload',
+    'should contain', 'must contain', 'must include', 'should include',
+    'submission should', 'submission must', 'please submit', 'you should include',
+];
+
+const STOP_WORDS = new Set([
+    'a', 'an', 'the', 'and', 'or', 'of', 'for', 'with', 'in', 'to',
+    'is', 'it', 'on', 'at', 'by', 'be', 'as', 'do', 'no', 'not',
+]);
+
+// Canonical deliverable names that are always valid — these are standard
+// submission artifacts that any code challenge implicitly requires.
+const ALWAYS_VALID_DELIVERABLES = new Set([
+    'source code',
+    'code',
+    'readme',
+    'readme.md',
+]);
+
+/**
+ * Validates each whatToSubmit item against the challenge description.
+ * Removes items whose keywords are absent from the spec or appear only
+ * outside a submission context (e.g. evaluation criteria, review rubrics).
+ */
+function validateWhatToSubmit(items: string[], descriptionText: string): string[] {
+    if (!descriptionText) return items;
+
+    const desc = descriptionText.toLowerCase();
+
+    const validated = items.filter(item => {
+        const normalized = item.toLowerCase().trim();
+
+        // Canonical deliverables are always valid
+        if (ALWAYS_VALID_DELIVERABLES.has(normalized)) return true;
+
+        // Direct phrase match — the deliverable name appears verbatim
+        if (desc.includes(normalized)) return true;
+
+        // Extract significant words (skip stop words and short tokens)
+        const words = normalized
+            .split(/\s+/)
+            .filter(w => !STOP_WORDS.has(w) && w.length > 2);
+
+        if (words.length === 0) return true;
+
+        // All significant words must appear somewhere in the description
+        if (!words.every(w => desc.includes(w))) {
+            tcAILogger.warn(
+                `[challenge-context:validate] Removing "${item}" from whatToSubmit — keyword(s) missing from spec`,
+            );
+            return false;
+        }
+
+        // At least one word must appear near a submission-related verb/phrase
+        const inSubmissionContext = words.some(word => {
+            let searchFrom = 0;
+            while (searchFrom < desc.length) {
+                const idx = desc.indexOf(word, searchFrom);
+                if (idx === -1) break;
+                const windowStart = Math.max(0, idx - 200);
+                const windowEnd = Math.min(desc.length, idx + word.length + 200);
+                const window = desc.substring(windowStart, windowEnd);
+                if (SUBMISSION_CONTEXT_TERMS.some(term => window.includes(term))) {
+                    return true;
+                }
+                searchFrom = idx + 1;
+            }
+            return false;
+        });
+
+        if (!inSubmissionContext) {
+            tcAILogger.warn(
+                `[challenge-context:validate] Removing "${item}" from whatToSubmit — not in submission context`,
+            );
+            return false;
+        }
+
+        return true;
+    });
+
+    // Safety net: if everything was filtered out, keep the originals
+    return validated.length > 0 ? validated : items;
+}
+
+// -- Post-extraction validation: tech_stack ---------------------------------
+
+/**
+ * Patterns that indicate a tech_stack item is platform infrastructure,
+ * a review tool, or a generic category rather than a build technology.
+ * Each entry is tested case-insensitively against the item.
+ */
+const TECH_STACK_EXCLUDE_PATTERNS: RegExp[] = [
+    // Review / CI / quality-gate tooling
+    /\bsast\b/i,
+    /\bvulnerability\s*scanner/i,
+    /\bcode\s*quality\s*gate/i,
+    /\bstatic\s*analysis/i,
+    /\breview\s*(bot|tool|workflow|system)/i,
+    // Topcoder platform internals
+    /\bcopilot\b/i,
+    /\bscorecard\b/i,
+    /\btopcoder\b/i,
+    // Generic non-technology categories
+    /^security$/i,
+    /^testing$/i,
+    /^ci\/cd$/i,
+    /^documentation$/i,
+];
+
+/**
+ * Strips tech_stack items that are platform review infrastructure,
+ * Topcoder internal tooling, or generic non-technology categories.
+ */
+function validateTechStack(items: string[]): string[] {
+    const validated = items.filter(item => {
+        if (TECH_STACK_EXCLUDE_PATTERNS.some(pat => pat.test(item))) {
+            tcAILogger.warn(
+                `[challenge-context:validate] Removing "${item}" from tech_stack — platform/review infrastructure`,
+            );
+            return false;
+        }
+        return true;
+    });
+    return validated.length > 0 ? validated : items;
+}
+
+// -- Post-extraction validation: runtime_environment ------------------------
+
+type RuntimeEnvironment = z.infer<typeof runtimeEnvironmentSchema>;
+
+/**
+ * Heuristic signals in the challenge description that indicate the
+ * submission is a CLI / command-line application, not a server.
+ */
+const CLI_INDICATORS: RegExp[] = [
+    /\bcommand[\s-]*line\s*(app|application|tool|utility|program)\b/i,
+    /\bcli\s*(app|application|tool|utility|program)?\b/i,
+    /\bconsole\s*(app|application|tool|utility|program)\b/i,
+    /\bscript\b.*\boutput\b/i,
+];
+
+/**
+ * Patterns that indicate the deployment target was incorrectly set to a
+ * submission/upload destination rather than where the code actually runs.
+ */
+const UPLOAD_NOT_DEPLOY_PATTERNS: RegExp[] = [
+    /\btopcoder[\s_-]*(platform|upload|submission|page)\b/i,
+    /\bsubmission[\s_-]*(platform|portal|page)\b/i,
+];
+
+/**
+ * Applies heuristic corrections to the AI-extracted runtime environment
+ * by cross-referencing against the challenge description text.
+ */
+function validateRuntimeEnvironment(
+    env: RuntimeEnvironment,
+    descriptionText: string,
+): RuntimeEnvironment {
+    if (!descriptionText) return env;
+    const desc = descriptionText.toLowerCase();
+    const corrected = { ...env };
+
+    // If the description signals a CLI app, serverType should not be an API type
+    const isCli = CLI_INDICATORS.some(pat => pat.test(descriptionText));
+    if (isCli) {
+        const serverLower = (corrected.serverType ?? '').toLowerCase();
+        // Only override if the current value looks like a web server/API
+        if (serverLower && !['none', 'cli', 'n/a', ''].includes(serverLower)) {
+            tcAILogger.info(
+                `[challenge-context:validate] Overriding serverType "${corrected.serverType}" → "CLI" (description indicates command-line app)`,
+            );
+            corrected.serverType = 'CLI';
+        }
+    }
+
+    // deploymentTarget should not be a submission upload destination
+    if (corrected.deploymentTarget) {
+        if (UPLOAD_NOT_DEPLOY_PATTERNS.some(pat => pat.test(corrected.deploymentTarget!))) {
+            const replacement = isCli ? 'local' : 'unknown';
+            tcAILogger.info(
+                `[challenge-context:validate] Overriding deploymentTarget "${corrected.deploymentTarget}" → "${replacement}" (was a submission destination, not a runtime target)`,
+            );
+            corrected.deploymentTarget = replacement;
+        }
+    }
+
+    // os: if the description never mentions the OS value, reset to "unknown"
+    if (corrected.os && corrected.os.toLowerCase() !== 'unknown' && corrected.os.toLowerCase() !== 'any') {
+        // Split compound values like "Linux/macOS" and check each part
+        const osParts = corrected.os.split(/[/,\s]+/).filter(Boolean);
+        const anyMentioned = osParts.some(part => {
+            const p = part.toLowerCase();
+            // Check for the OS name in the description, but exclude matches
+            // inside URLs (e.g. "linux-gnu" in a user-agent or URL path)
+            const idx = desc.indexOf(p);
+            if (idx === -1) return false;
+            // Verify it's not embedded in a URL or path-like context
+            const surroundStart = Math.max(0, idx - 30);
+            const surroundEnd = Math.min(desc.length, idx + p.length + 30);
+            const surround = desc.substring(surroundStart, surroundEnd);
+            return !surround.includes('http') && !surround.includes('://');
+        });
+        if (!anyMentioned) {
+            tcAILogger.info(
+                `[challenge-context:validate] Overriding os "${corrected.os}" → "unknown" (not mentioned in spec)`,
+            );
+            corrected.os = 'unknown';
+        }
+    }
+
+    return corrected;
+}
+
+// -- Orchestrator: parallel decomposed extraction + validation --------------
+
+/**
+ * Runs four focused AI extraction calls in parallel (requirements+grouping,
+ * tech+runtime, codebase detection, submission guidelines), then validates
+ * the whatToSubmit field against the source text to prune hallucinations.
+ *
+ * Note: Ollama processes requests sequentially by default.  Set
+ * OLLAMA_NUM_PARALLEL > 1 to benefit from true parallel inference.
+ */
+async function extractWithAI(
+    mastra: Parameters<
+        NonNullable<Parameters<typeof createStep>[0]['execute']>
+    > extends [infer P, ...unknown[]]
+        ? P extends { mastra: infer M }
+        ? NonNullable<M>
+        : never
+        : never,
+    data: Record<string, unknown>,
+): Promise<AIExtracted> {
+    const agent = mastra.getAgentById('challenge-parser-agent');
+    const challengeText = buildChallengeText(data);
+
+    tcAILogger.info('[challenge-context:extractWithAI] Starting decomposed extraction (4 focused calls)...');
+
+    const [reqResult, techResult, codebaseResult, guidelinesResult] = await Promise.all([
+        extractRequirementsAndGroups(agent, challengeText),
+        extractTechAndRuntime(agent, challengeText),
+        extractExistingCodebase(agent, challengeText),
+        extractSubmissionGuidelines(agent, challengeText),
+    ]);
+
+    // -- Post-extraction validations ------------------------------------------
+    const descriptionText = (data.description as string) ?? '';
+
+    // Validate whatToSubmit
+    const rawDeliverables = guidelinesResult.submission_guidelines.whatToSubmit;
+    const validatedDeliverables = validateWhatToSubmit(rawDeliverables, descriptionText);
+    if (validatedDeliverables.length !== rawDeliverables.length) {
+        tcAILogger.info(
+            `[challenge-context:extractWithAI] whatToSubmit pruned from ${rawDeliverables.length} to ${validatedDeliverables.length} items`,
+        );
+    }
+
+    // Validate tech_stack
+    const rawTechStack = techResult.tech_stack;
+    const validatedTechStack = validateTechStack(rawTechStack);
+    if (validatedTechStack.length !== rawTechStack.length) {
+        tcAILogger.info(
+            `[challenge-context:extractWithAI] tech_stack pruned from ${rawTechStack.length} to ${validatedTechStack.length} items`,
+        );
+    }
+
+    // Validate runtime_environment
+    const validatedRuntime = validateRuntimeEnvironment(
+        techResult.runtime_environment,
+        descriptionText,
+    );
+
+    tcAILogger.info('[challenge-context:extractWithAI] All extractions complete — assembling result');
+
+    return {
+        requirements: reqResult.requirements,
+        requirement_groups: reqResult.requirement_groups,
+        tech_stack: validatedTechStack,
+        runtime_environment: validatedRuntime,
+        existing_codebase: codebaseResult.existing_codebase,
+        submission_guidelines: {
+            ...guidelinesResult.submission_guidelines,
+            whatToSubmit: validatedDeliverables,
+        },
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Testing Exports
+// ---------------------------------------------------------------------------
+
+export const _testing = {
+    buildChallengeText,
+    extractRequirementsAndGroups,
+    extractTechAndRuntime,
+    extractExistingCodebase,
+    extractSubmissionGuidelines,
+    validateWhatToSubmit,
+    validateTechStack,
+    validateRuntimeEnvironment,
+};
 
 // ---------------------------------------------------------------------------
 // Workflow Definition
