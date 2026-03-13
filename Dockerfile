@@ -2,7 +2,7 @@
 
 FROM node:24.13.0-alpine
 
-RUN apk add --no-cache bash
+RUN apk add --no-cache bash git
 RUN apk update
 
 WORKDIR /app
