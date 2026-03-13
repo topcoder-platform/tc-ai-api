@@ -1,6 +1,8 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const m2mAuth = require('tc-core-library-js').auth.m2m;
+import { createRequire } from 'node:module';
 import { M2mConfig } from '../../config/m2m.config';
+
+const require = createRequire(import.meta.url);
+const m2mAuth = require('tc-core-library-js').auth.m2m;
 
 /**
  * Service to get M2M token with auth0 configs
