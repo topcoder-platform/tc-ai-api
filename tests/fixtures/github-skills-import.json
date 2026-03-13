@@ -1,0 +1,47 @@
+{
+  "id": "df5c70b7-e016-4a34-8b5d-2be3f94e903b",
+  "name": "Topcoder Skills Github Skills Import",
+  "description": "## Overview\n\nWe are currently expanding and cleaning up the skills associated with members on the Topcoder platform.  To make it easier for members to get verified for specific skills, this challenge will implement a proof-of-concept app that can look at a Github user's profile and recommend specific skills from the Topcoder skills API that should be verified for that user.\n\n## Technology Stack\n* Github\n* Typescript\n\n## Individual Requirements\nThe overall submission should just be a simple command line app, written in Typescript, that can authorize a user and then output the list of recommended verified skills and additional information requested below.\n\n### 1. Authentication / Github API\nWe will need a way to authenticate against the Github API.  Please target the Github OAuth flow:  https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps.  The device authorization flow is probably the easiest.  We will only scrape the authenticated user ('me') using the API and the OAuth token.  We won't focus on public information or users that aren't the authenticated user.  We want to be able to pull as much information as possible.\n\nWhen using the Github API, please ensure that we handle rate limits gracefully and can continue / resume if we run into any limits.\n\n### 2. Standardized skills API\n\nThe Topcoder skills list can be found in our standardized skills API.  All skills that are discovered and recommended by your submission must be from our standardized skills list and referenced by ID as well as the skill name.\n\n* https://github.com/topcoder-platform/standardized-skills-api\n* https://api.topcoder-dev.com/v5/standardized-skills/api-docs \n\nPlease target https://api.topcoder-dev.com/v5 for the CLI app.  Our dev environment has the same list of skills as our prod environment.\n\n### 3. Skills verification\n\nWe do not have a preferred manner of verifying skills for a Github user.  We are open to suggestions here, and the preferred method will be the one that is the most accurate and well documented.\n\nYour submission should output progress information while it's running so we can see what repos and other information is being parsed for a given account.\n\nThe final output should be a list of recommended skills to be verified for a given Github user based on their profile and all the information we scraped. \n\nEach recommendation should include:\n\n* Skill ID from the standardized skills API\n* Skill name from the standardized skills API\n* A score / confidence of the recommended skill (0-100)\n* Information about why this skill is recommended for this user, and why the confidence score was derived.  This could be links to a specific repo, checkin, pull request, etc…   We will use this for validation\n\nFor each run for an individual please, please also output a run summary: repos scanned, contributions inspected, total number of API calls, elapsed time, etc…\n\nThe more complete the parsing and investigation of a user's account, the better.  We can look at individual repos they have contributed to and the percentage of specific techs for those repos.  We can look at individual commits, individual pull requests, etc…\n\nSubmissions that only do a superficial job of finding skills or just do a basic tech scrape of the repos a user has access to won't be acceptable - we want a deep dive into the user's actions on Gtihub.\n\nWe will evaluate on: correctness of skill IDs, quality of evidence links, breadth of analysis, and documentation.\n\n\n#### AI Usage\n\nIf you use AI in your solution for skills matching and verification, that is alright, but the implementation **must** be provider-agnostic.  Our ideal would be Ollama or Open AI API implementations, to more easily plug into our platform\n\n### Submission Guideline\n\nPlease submit the full command line app, written in Typescript.  You should include a README.md including how to install dependencies, configure, and run the app.  The README should also include detailed information on your approach chosen and why it meets the requirements.\n\n#### AI Reviewers\n\nWith the AI reviewers now active in the Topcoder platform, your submission must past the SAST and vulnerability scanners to be considered eligible for review.\n",
+  "descriptionFormat": "markdown",
+  "tags": [],
+  "skills": [
+    {
+      "id": "609d27ae-201c-43bd-a1a9-5c795878ff46",
+      "name": "Github",
+      "category": {
+        "id": "aa495f25-2f2d-4334-9b6f-2ffe11d835d2",
+        "name": "Software Development Lifecycle (SDLC)"
+      }
+    },
+    {
+      "id": "96452335-30c6-41bc-9c7e-cdfe56422d47",
+      "name": "TypeScript",
+      "category": {
+        "id": "481b5ebc-2fe6-45ed-a90c-736936d458d7",
+        "name": "Programming and Development"
+      }
+    },
+    {
+      "id": "266ac85b-2ba0-4338-96a9-61a264cfd546",
+      "name": "REST API Development",
+      "category": {
+        "id": "481b5ebc-2fe6-45ed-a90c-736936d458d7",
+        "name": "Programming and Development"
+      }
+    },
+    {
+      "id": "3167f6ae-a323-4114-a85e-497314753fff",
+      "name": "OAuth",
+      "category": {
+        "id": "221f4e3f-1ac8-438b-9dc1-977e30656789",
+        "name": "Cybersecurity"
+      }
+    }
+  ],
+  "_expectedContext": {
+    "techStackMustIncludeAny": ["TypeScript", "Typescript", "typescript"],
+    "whatToSubmitMustNotInclude": ["Test cases", "Unit tests"],
+    "minRequirements": 3,
+    "maxRequirements": 12
+  }
+}
