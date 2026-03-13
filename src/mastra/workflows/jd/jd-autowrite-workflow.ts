@@ -1,6 +1,7 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { tcAILogger } from '../../../utils/logger';
+import { generateWithStructuredOutputFallback } from '../../../utils/structured-output-wrapper';
 
 // ---------------------------------------------------------------------------
 // Zod Schemas
@@ -69,10 +70,12 @@ const rewriteJobDescription = createStep({
             '---END RAW JOB DESCRIPTION---',
         ].join('\n');
 
-        const response = await agent.generate(
-            [{ role: 'user' as const, content: prompt }],
-            { structuredOutput: { schema: rewrittenJdSchema } },
-        );
+        const { response } = await generateWithStructuredOutputFallback({
+            agent,
+            prompt,
+            schema: rewrittenJdSchema,
+            sectionName: 'rewriteJobDescription',
+        });
 
         if (!response.object) {
             tcAILogger.error('[jd-autowrite:rewrite] Agent returned no structured output');
