@@ -1,6 +1,7 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { tcAILogger } from '../../../utils/logger';
+import { generateWithStructuredOutputFallback } from '../../../utils/structured-output-wrapper';
 import { fetchChallengeTool } from '../../tools/challenge/fetch-challenge-tool';
 
 // ---------------------------------------------------------------------------
@@ -578,8 +579,11 @@ async function extractRequirementsAndGroups(
     ].join('\n');
 
     tcAILogger.info('[challenge-context:extractRequirements] Invoking agent for requirements + grouping...');
-    const response = await agent.generate(prompt, {
-        structuredOutput: { schema: requirementsAndGroupsSchema },
+    const { response } = await generateWithStructuredOutputFallback({
+        agent,
+        prompt,
+        schema: requirementsAndGroupsSchema,
+        sectionName: 'extractRequirements',
     });
     if (!response.object) throw new Error('Agent returned no structured output for requirements');
     tcAILogger.info(
@@ -612,8 +616,11 @@ async function extractTechAndRuntime(
     ].join('\n');
 
     tcAILogger.info('[challenge-context:extractTechRuntime] Invoking agent for tech stack + runtime...');
-    const response = await agent.generate(prompt, {
-        structuredOutput: { schema: techAndRuntimeSchema },
+    const { response } = await generateWithStructuredOutputFallback({
+        agent,
+        prompt,
+        schema: techAndRuntimeSchema,
+        sectionName: 'extractTechRuntime',
     });
     if (!response.object) throw new Error('Agent returned no structured output for tech/runtime');
     tcAILogger.info(`[challenge-context:extractTechRuntime] Done — ${response.object.tech_stack.length} tech stack items`);
@@ -645,8 +652,11 @@ async function extractExistingCodebase(
     ].join('\n');
 
     tcAILogger.info('[challenge-context:extractCodebase] Invoking agent for codebase detection...');
-    const response = await agent.generate(prompt, {
-        structuredOutput: { schema: codebaseExtractedSchema },
+    const { response } = await generateWithStructuredOutputFallback({
+        agent,
+        prompt,
+        schema: codebaseExtractedSchema,
+        sectionName: 'extractCodebase',
     });
     if (!response.object) throw new Error('Agent returned no structured output for codebase');
     tcAILogger.info(`[challenge-context:extractCodebase] Done — greenfield: ${response.object.existing_codebase.isGreenfield}`);
@@ -686,8 +696,11 @@ async function extractSubmissionGuidelines(
     ].join('\n');
 
     tcAILogger.info('[challenge-context:extractGuidelines] Invoking agent for submission guidelines...');
-    const response = await agent.generate(prompt, {
-        structuredOutput: { schema: guidelinesExtractedSchema },
+    const { response } = await generateWithStructuredOutputFallback({
+        agent,
+        prompt,
+        schema: guidelinesExtractedSchema,
+        sectionName: 'extractGuidelines',
     });
     if (!response.object) throw new Error('Agent returned no structured output for submission guidelines');
     tcAILogger.info(`[challenge-context:extractGuidelines] Done — ${response.object.submission_guidelines.whatToSubmit.length} deliverables`);
