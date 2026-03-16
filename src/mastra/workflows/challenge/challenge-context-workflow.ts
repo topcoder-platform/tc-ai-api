@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { tcAILogger } from '../../../utils/logger';
 import { generateWithStructuredOutputFallback } from '../../../utils/structured-output-wrapper';
 import { fetchChallengeTool } from '../../tools/challenge/fetch-challenge-tool';
+import { M2MService } from '../../../utils/auth/m2m.service';
 
 // ---------------------------------------------------------------------------
 // Zod Schemas
@@ -529,6 +530,106 @@ const guidelinesExtractedSchema = z.object({
     submission_guidelines: submissionGuidelinesSchema,
 });
 
+// ---------------------------------------------------------------------------
+// Review API – Challenge Review Context Persistence
+// ---------------------------------------------------------------------------
+
+const REVIEW_API_BASE = process.env.TC_API_BASE_URL ?? 'https://api.topcoder.com/v6';
+const m2mService = new M2MService();
+
+async function upsertChallengeReviewContext(context: UnifiedChallengeContext): Promise<void> {
+    const challengeId = context.challengeId;
+    const token = await m2mService.getM2MToken();
+
+    const commonHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+    };
+
+    const createBody = {
+        challengeId,
+        context,
+        status: 'AI_GENERATED' as const,
+    };
+
+    const createUrl = `${REVIEW_API_BASE}/ai-review/context`;
+
+    try {
+        tcAILogger.info(
+            `[challenge-context:review-api] Creating challenge review context via POST ${createUrl} for challenge ${challengeId}`,
+        );
+        const createRes = await fetch(createUrl, {
+            method: 'POST',
+            headers: commonHeaders,
+            body: JSON.stringify(createBody),
+            signal: AbortSignal.timeout(15_000),
+        });
+
+        if (createRes.ok) {
+            tcAILogger.info(
+                `[challenge-context:review-api] Created challenge review context for challenge ${challengeId} (HTTP ${createRes.status})`,
+            );
+            return;
+        }
+
+        if (createRes.status !== 409) {
+            tcAILogger.error(
+                `[challenge-context:review-api] Failed to create challenge review context for challenge ${challengeId} (HTTP ${createRes.status})`,
+            );
+            return;
+        }
+
+        // Context already exists – fall back to update semantics
+        const updateUrl = `${REVIEW_API_BASE}/ai-review/context/${encodeURIComponent(challengeId)}`;
+        const updateBody = {
+            context,
+            status: 'AI_GENERATED' as const,
+        };
+
+        tcAILogger.info(
+            `[challenge-context:review-api] Context already exists, updating via PUT ${updateUrl} for challenge ${challengeId}`,
+        );
+        const updateRes = await fetch(updateUrl, {
+            method: 'PUT',
+            headers: commonHeaders,
+            body: JSON.stringify(updateBody),
+            signal: AbortSignal.timeout(15_000),
+        });
+
+        if (!updateRes.ok) {
+            tcAILogger.error(
+                `[challenge-context:review-api] Failed to update challenge review context for challenge ${challengeId} (HTTP ${updateRes.status})`,
+            );
+            return;
+        }
+
+        tcAILogger.info(
+            `[challenge-context:review-api] Updated challenge review context for challenge ${challengeId} (HTTP ${updateRes.status})`,
+        );
+    } catch (err) {
+        tcAILogger.error(
+            `[challenge-context:review-api] Error while upserting challenge review context for challenge ${challengeId}: ${err}`,
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Persistence Step – Save Unified Context into Review API
+// ---------------------------------------------------------------------------
+
+const persistChallengeContext = createStep({
+    id: 'persist-challenge-review-context',
+    description:
+        'Persists the unified challenge review context into the Topcoder Review API using M2M authentication. '
+        + 'Creates a new context if none exists, otherwise updates the existing record.',
+    inputSchema: unifiedContextSchema,
+    outputSchema: unifiedContextSchema,
+    execute: async ({ inputData }) => {
+        await upsertChallengeReviewContext(inputData);
+        return inputData;
+    },
+});
+
 /**
  * Assembles the plain-text challenge specification from the raw API data.
  * Shared by all focused extraction calls.
@@ -1025,4 +1126,5 @@ export const challengeContextWorkflow = createWorkflow({
 })
     .then(fetchChallengeDetails)
     .then(parseChallengeContext)
+    .then(persistChallengeContext)
     .commit();
