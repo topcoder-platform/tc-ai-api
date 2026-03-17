@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 
-const { authenticateTokenMock, loggerErrorMock } = vi.hoisted(() => ({
+const { authenticateTokenMock, loggerErrorMock, loggerDebugMock } = vi.hoisted(() => ({
     authenticateTokenMock: vi.fn(),
     loggerErrorMock: vi.fn(),
+    loggerDebugMock: vi.fn(),
 }));
 
 vi.mock('../auth', () => ({
@@ -15,6 +16,7 @@ vi.mock('../auth', () => ({
 vi.mock('../logger', () => ({
     tcAILogger: {
         error: loggerErrorMock,
+        debug: loggerDebugMock,
     },
 }));
 
