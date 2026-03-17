@@ -72,7 +72,7 @@ export const resourceIdMiddleware = {
         // Force all API operations to use this user's ID
         // This takes precedence over any client-provided resourceId
         requestContext.set(MASTRA_RESOURCE_ID_KEY, userId || sub);
-
+        tcAILogger.debug(`after set MASTRA_RESOURCE_ID_KEY requestContext=${requestContext}`);
         return next();
     },
 };
