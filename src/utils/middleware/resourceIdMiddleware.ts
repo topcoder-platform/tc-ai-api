@@ -22,16 +22,17 @@ export const resourceIdMiddleware = {
     handler: async (c: any, next: any) => {
         const requestContext = c.get('requestContext');
         let user = requestContext.get('user');
-
+        tcAILogger.debug(`user=${user}`);
         if (!user) {
             const authHeader = c.req.header('authorization') || '';
             const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
             const apiKeyToken = c.req.query('apiKey') || '';
             const token = bearerToken || apiKeyToken;
-
+            tcAILogger.debug(`token=${token}`);
             if (token) {
                 try {
                     user = await apiAuthLayer.authenticateToken(token, c.req.raw);
+                    tcAILogger.debug(`after authenticateToken user=${user}`);
                     if (user) {
                         requestContext.set('user', user);
                     }
@@ -62,6 +63,7 @@ export const resourceIdMiddleware = {
         const userId = user[userIdKey];
         const sub = user['sub']; // M2M user
 
+        tcAILogger.debug(`userId=${userId}, sub=${sub}`);
         if (!userId && !sub) {
             tcAILogger.error('Failed to identify userId/sub', { user });
             return c.json({ error: 'Failed to extract userId/sub from user object' }, 401);
