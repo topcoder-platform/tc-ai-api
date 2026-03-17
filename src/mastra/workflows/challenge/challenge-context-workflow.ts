@@ -534,7 +534,7 @@ const guidelinesExtractedSchema = z.object({
 // Review API – Challenge Review Context Persistence
 // ---------------------------------------------------------------------------
 
-const REVIEW_API_BASE = process.env.TC_API_BASE_URL ?? 'https://api.topcoder.com/v6';
+const REVIEW_API_BASE = process.env.TC_API_BASE ? `${process.env.TC_API_BASE}/v6` : 'https://api.topcoder.com/v6';
 const m2mService = new M2MService();
 
 async function upsertChallengeReviewContext(context: UnifiedChallengeContext): Promise<void> {
