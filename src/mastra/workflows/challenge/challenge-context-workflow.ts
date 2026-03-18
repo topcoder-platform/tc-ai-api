@@ -611,7 +611,10 @@ async function upsertChallengeReviewContext(context: UnifiedChallengeContext): P
         tcAILogger.error(
             `[challenge-context:review-api] Error while upserting challenge review context for challenge ${challengeId}: ${err}`,
         );
-        throw new Error(`[challenge-context:review-api] Error while persisting challenge review context for challenge ${challengeId}: ${err}`);
+        throw new Error(
+            `Error while persisting challenge review context for challenge ${challengeId}: ${err}`,
+            { cause: err },
+        );
     }
 }
 
