@@ -573,8 +573,9 @@ async function upsertChallengeReviewContext(context: UnifiedChallengeContext): P
         }
 
         if (createRes.status !== 409) {
+            const createErrorBody = await createRes.text().catch(() => '<failed to read body>');
             tcAILogger.error(
-                `[challenge-context:review-api] Failed to create challenge review context for challenge ${challengeId} (HTTP ${createRes.status})`,
+                `[challenge-context:review-api] Failed to create challenge review context for challenge ${challengeId} (HTTP ${createRes.status}) — body: ${createErrorBody}`,
             );
             return;
         }
