@@ -9,7 +9,7 @@ export const apiAuthLayer = new CompositeAuth([
   }),
   // TC M2M Auth0 JWTs
   new MastraAuthAuth0({
-    domain: process.env.AUTH0_M2M_DOMAIN,
-    audience: process.env.AUTH0_M2M_AUDIENCE,
+    domain: process.env.AUTH0_M2M_DOMAIN ?? 'topcoder-dev.auth0.com',
+    audience: process.env.AUTH0_M2M_AUDIENCE ?? 'https://m2m.topcoder-dev.com/',
   }),
 ]);

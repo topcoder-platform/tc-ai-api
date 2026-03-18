@@ -6,5 +6,6 @@ export const M2mConfig = {
     proxyUrl: process.env.M2M_AUTH_PROXY_SERVER_URL ?? 'https://auth0proxy.topcoder-dev.com/token',
     clientId: process.env.M2M_AUTH_CLIENT_ID,
     clientSecret: process.env.M2M_AUTH_CLIENT_SECRET,
+    AUTH0_M2M_DOMAIN: process.env.AUTH0_M2M_DOMAIN ?? 'topcoder-dev.auth0.com',
   },
 };
