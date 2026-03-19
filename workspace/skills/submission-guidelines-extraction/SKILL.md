@@ -98,11 +98,33 @@ Where the final artifact lives:
 
 ### 7. `isPatchOfExisting`
 
-Set to `true` when the challenge explicitly asks for a patch, diff, or
-incremental change to an existing codebase.
+Set to `true` ONLY when ALL of the following are true:
+1. The challenge explicitly asks for a patch, diff, or incremental change
+2. An existing codebase is provided (repository URL, starter code, etc.)
+3. The existing_codebase.isGreenfield is `false`
 
-Set to `false` when the full codebase should be submitted or when it is
-a greenfield project.
+Set to `false` when:
+- The full codebase should be submitted
+- It is a greenfield project (no existing code to patch)
+- No concrete repository URL or code artifacts are referenced
+
+**CRITICAL CONSISTENCY CHECK:** 
+`isPatchOfExisting` can ONLY be `true` when there is actual code to patch.
+If `existing_codebase.isGreenfield` is `true` (no existing codebase), then
+`isPatchOfExisting` MUST be `false` — you cannot create a patch against
+code that doesn't exist.
+
+| existing_codebase.isGreenfield | isPatchOfExisting | Valid? |
+|-------------------------------|-------------------|--------|
+| `true`                        | `false`           | YES    |
+| `true`                        | `true`            | NO - contradiction! |
+| `false`                       | `false`           | YES (full code submission) |
+| `false`                       | `true`            | YES (patch of existing) |
+
+**Common mistake:** Challenge mentions "enhance", "update", or "extend"
+existing functionality but does NOT provide an actual repository URL or
+starter code. This is still a greenfield project — the submitter must
+build everything from scratch. Do NOT set `isPatchOfExisting: true`.
 
 ### 8. `eligibilityConditions`
 
@@ -139,3 +161,12 @@ Any remaining submission information that doesn't fit the fields above.
 | "Include a README.md"                                      | "README.md", "Documentation" | Redundant — README is the documentation                  |
 | "Your code should include tests" (in evaluation section)   | "Test cases"             | Evaluation guidance, not an explicit submission requirement   |
 | "Security will be reviewed"                                | "Security report"        | Review criteria, not a deliverable                            |
+
+## isPatchOfExisting Mistakes to Avoid
+
+| Spec says…                                                 | Wrong isPatchOfExisting | Why it's wrong                                                |
+| ---------------------------------------------------------- | ---------------------- | ------------------------------------------------------------- |
+| "Enhance the existing processor" (no repo URL provided)    | `true`                 | No actual repo/code to patch — this is greenfield             |
+| "Update the Lambda to handle X" (describes current system) | `true`                 | Description of current state ≠ existing codebase to patch     |
+| "We did a POC challenge previously"                        | `true`                 | Past work ≠ code artifact provided for this challenge         |
+| isGreenfield=true in existing_codebase                     | `true`                 | **CONTRADICTION** — cannot patch non-existent code            |
