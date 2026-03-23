@@ -1,20 +1,14 @@
 import { Agent } from '@mastra/core/agent';
-import { ollama } from '../../../utils';
+import { wipro } from '../../../utils';
 
 export const jdRewriterAgent = new Agent({
     id: 'jd-rewriter-agent',
     name: 'Job Description Rewriter',
-    model: ollama('mistral:latest', {
-        options: {
-            temperature: 0.3,
-            top_k: 40,
-            top_p: 0.9,
-            repeat_penalty: 1.1,
-            repeat_last_n: 128,
-            num_ctx: 16384,
-            num_predict: 8192,
-            num_batch: 256,
-        },
+    model: wipro.chatModel('gpt-5-chat', {
+        temperature: 0.3,
+        topK: 40,
+        topP: 0.9,
+        maxOutputTokens: 16384,
     }),
     instructions: {
         role: 'system',

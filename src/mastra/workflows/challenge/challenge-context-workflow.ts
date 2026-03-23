@@ -468,7 +468,7 @@ const parseChallengeContext = createStep({
 // Scorecard Fetch Helper
 // ---------------------------------------------------------------------------
 
-const SCORECARD_API_BASE = process.env.TC_API_BASE_URL ?? 'https://api.topcoder.com/v6';
+const SCORECARD_API_BASE = process.env.TC_API_BASE ?? 'https://api.topcoder.com/v6';
 
 /**
  * Fetches the full scorecard (with groups → sections → questions) from the

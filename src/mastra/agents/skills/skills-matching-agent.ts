@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { ollama } from '../../../utils/providers/ollama';
+import { wipro } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
 import { instanceScorers } from '../../scorers/instance-scorers';
 
@@ -26,13 +26,9 @@ Output requirements:
 - No prose, no markdown, no extra keys.
 `,
   },
-  model: ollama('mistral:latest', {
-    options: {
-      temperature: 0.1,
-      top_p: 0.5,
-      repeat_penalty: 1.1,
-      num_predict: 2048,
-    },
+  model: wipro.chatModel('gpt-5-chat', {
+    temperature: 0.1,
+    topP: 0.5,
   }),
   scorers: {
     answerRelevancy: {
