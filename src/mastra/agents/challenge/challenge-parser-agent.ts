@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { ollama } from '../../../utils';
+import { wipro } from '../../../utils';
 
 /**
  * Master agent responsible for parsing Topcoder challenge specifications.
@@ -14,28 +14,11 @@ import { ollama } from '../../../utils';
 export const challengeParserAgent = new Agent({
    id: 'challenge-parser-agent',
    name: 'Challenge Specification Parser',
-   model: ollama('mistral:latest', {
-      options: {
-         // Sampling — near-deterministic for strict JSON schema compliance
-         temperature: 0.1,
-         top_k: 40,
-         top_p: 0.9,
-
-         // Repetition control — prevent repetitive text across many requirement entries
-         // and avoid echoing skill instruction phrasing into output
-         repeat_penalty: 1.15,
-         repeat_last_n: 192,
-
-         // Context window — system prompt (~1.2K tok) + skill activations (~3K tok)
-         // + full challenge spec (some specs are very long)
-         num_ctx: 16384,
-
-         // Generation limit — enough for structured JSON with many requirements, groups, tech stack, etc.
-         num_predict: 8192,
-
-         // Prompt processing — smaller system prompt with skills loaded progressively
-         num_batch: 256,
-      },
+   model: wipro.chatModel('gpt-5-chat', {
+      temperature: 0.1,
+      topK: 40,
+      topP: 0.9,
+      maxOutputTokens: 16384,
    }),
    instructions: {
       role: 'system',

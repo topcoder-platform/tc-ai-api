@@ -53,6 +53,31 @@ Sometimes technologies are implied but not named. Look for:
 - "JWT tokens" → JWT, possibly OAuth
 - Database connection strings → specific database technology
 
+## What NOT to Include
+
+The tech stack should only contain technologies the **submitter builds with**.
+Do NOT include:
+
+- **Platform review / CI infrastructure** that the submission is evaluated
+  against but does not use at build time. Examples: SAST scanners,
+  vulnerability scanners, code quality gates, review bots.
+- **Topcoder platform tooling**: copilot tools, scorecard systems,
+  challenge submission portals, review workflows.
+- **Conditional / optional technologies** unless the spec makes them
+  mandatory. If the spec says *"if you use AI…"* or *"optionally…"*,
+  do NOT include those technologies as definite stack items.
+- **Generic categories** that aren't specific technologies:
+  "Security", "Testing", "CI/CD" (unless a specific tool is named).
+
+### Examples of Incorrect Tech Stack Items
+
+| Spec says…                                         | Wrong item               | Why                                    |
+| -------------------------------------------------- | ------------------------ | -------------------------------------- |
+| "must pass SAST and vulnerability scanners"         | "SAST Scanner"           | Platform infra, not submitter tech     |
+| "AI reviewers are active on the platform"           | "AI Reviewer"            | Topcoder tooling                       |
+| "If you use AI, implement with Ollama or OpenAI"    | "OpenAI API"             | Conditional — not required             |
+| "We will evaluate on documentation quality"         | "Documentation"          | Not a technology                       |
+
 ## Output Format
 
 Flat array of strings, each a technology name in canonical casing:

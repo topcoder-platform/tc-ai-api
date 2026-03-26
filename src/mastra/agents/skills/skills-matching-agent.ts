@@ -1,8 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { ollama } from '../../../utils/providers/ollama';
+import { wipro } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
-import { skillDiscoveryScorers } from '../../scorers/skills-matching-scorers';
+import { instanceScorers } from '../../scorers/instance-scorers';
 
 export const skillsMatchingAgent = new Agent({
   id: 'skillsMatchingAgent',
@@ -26,27 +26,23 @@ Output requirements:
 - No prose, no markdown, no extra keys.
 `,
   },
-  model: ollama('mistral:latest', {
-    options: {
-      temperature: 0.1,
-      top_p: 0.5,
-      repeat_penalty: 1.1,
-      num_predict: 2048,
-    },
+  model: wipro.chatModel('gpt-5-chat', {
+    temperature: 0.1,
+    topP: 0.5,
   }),
   scorers: {
     answerRelevancy: {
-      scorer: skillDiscoveryScorers.skillDiscoveryAnswerRelevancyScorer,
+      scorer: instanceScorers.instanceAnswerRelevancyScorer,
       sampling: {
         type: 'ratio',
-        rate: Number(process.env.SKILL_DISCOVERY_EVAL_SAMPLE_RATE ?? 0.5),
+        rate: Number(process.env.EVAL_SAMPLE_RATE ?? 0.5),
       },
     },
     promptAlignment: {
-      scorer: skillDiscoveryScorers.skillDiscoveryPromptAlignmentScorer,
+      scorer: instanceScorers.instancePromptAlignmentScorer,
       sampling: {
         type: 'ratio',
-        rate: Number(process.env.SKILL_DISCOVERY_EVAL_SAMPLE_RATE ?? 0.5),
+        rate: Number(process.env.EVAL_SAMPLE_RATE ?? 0.5),
       },
     },
   },

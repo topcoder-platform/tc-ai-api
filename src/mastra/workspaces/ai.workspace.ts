@@ -6,8 +6,8 @@ export const aiWorkspace = new Workspace({
         readOnly: true
     }),
     bm25: true,
-    autoIndexPaths: ['/'],
-    skills: ['/skills'],
+    autoIndexPaths: [''],
+    skills: ['skills'],
 });
 
 await aiWorkspace.init();
