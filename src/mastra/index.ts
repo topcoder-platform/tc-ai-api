@@ -40,7 +40,7 @@ export const mastra = new Mastra({
   server: {
     host: process.env.MASTRA_HOST || process.env.HOST || '0.0.0.0',
     port: Number(process.env.PORT || 3000),
-    studioBase: '/v6/studio',
+    studioBase: '/v6/ai-studio',
     auth: process.env.DISABLE_AUTH === 'true' ? undefined : apiAuthLayer,
     build: {
       apiReqLogs: true,
