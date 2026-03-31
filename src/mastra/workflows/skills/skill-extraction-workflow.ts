@@ -114,7 +114,7 @@ const fuzzyMatchTermSkills = createStep({
         matches: toolResult.matches,
       };
     } catch (error) {
-      logger?.warn('Skill fuzzymatch failed for term {term}', {
+      logger?.error('Skill fuzzymatch failed for term {term}', {
         term: searchTerm,
         error,
       });
