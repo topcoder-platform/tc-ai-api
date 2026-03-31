@@ -31,10 +31,12 @@ describe('StudioBypassAuth', () => {
     it('marks Studio routes as public', () => {
         const auth = new StudioBypassAuth([new FakeAuthProvider({})]);
 
-        expect(auth.public).toHaveLength(1);
+        expect(auth.public).toHaveLength(2);
         expect(auth.public?.[0]).toBeInstanceOf(RegExp);
         expect((auth.public?.[0] as RegExp).test('/studio')).toBe(true);
         expect((auth.public?.[0] as RegExp).test('/studio/assets/main.js')).toBe(true);
+        expect((auth.public?.[1] as RegExp).test('/v6/ai-studio')).toBe(true);
+        expect((auth.public?.[1] as RegExp).test('/v6/ai-studio/settings')).toBe(true);
         expect((auth.public?.[0] as RegExp).test('/api/agents')).toBe(false);
     });
 

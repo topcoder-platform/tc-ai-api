@@ -4,6 +4,7 @@ import type { HonoRequest } from 'hono';
 
 const STUDIO_PUBLIC_PATHS = [
   /^\/studio(?:\/.*)?$/,
+  /^\/v6\/ai-studio(?:\/.*)?$/,
 ];
 
 const REQUEST_CONTEXT_TOKEN_KEYS = [
