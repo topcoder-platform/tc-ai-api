@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
+
+// Prevent module-level MastraAuthAuth0 instantiation from failing without env vars
+vi.mock('@mastra/auth-auth0', () => ({
+    MastraAuthAuth0: vi.fn().mockImplementation(() => ({
+        name: 'mock-auth0',
+        authenticateToken: vi.fn().mockResolvedValue(null),
+        authorizeUser: vi.fn().mockResolvedValue(false),
+    })),
+}));
 
 import { StudioBypassAuth } from './index';
 
