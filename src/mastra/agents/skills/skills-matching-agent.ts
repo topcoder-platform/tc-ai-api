@@ -35,14 +35,14 @@ Output requirements:
       scorer: instanceScorers.instanceAnswerRelevancyScorer,
       sampling: {
         type: 'ratio',
-        rate: Number(process.env.EVAL_SAMPLE_RATE),
+        rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
       },
     },
     promptAlignment: {
       scorer: instanceScorers.instancePromptAlignmentScorer,
       sampling: {
         type: 'ratio',
-        rate: Number(process.env.EVAL_SAMPLE_RATE),
+        rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
       },
     },
   },

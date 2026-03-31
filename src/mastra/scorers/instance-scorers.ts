@@ -2,9 +2,9 @@ import {
   createAnswerRelevancyScorer,
   createPromptAlignmentScorerLLM,
 } from '@mastra/evals/scorers/prebuilt';
-import { ollama } from '@/utils/providers/ollama';
+import { ollama } from '../../utils';
 
-const ollamaBaseUrl = process.env.OLLAMA_API_URL || 'http://ollama.topcoder-dev.com:11434';
+const ollamaBaseUrl = process.env.OLLAMA_API_URL;
 const evalModelName = process.env.MASTRA_EVAL_MODEL ?? 'mistral:latest';
 
 console.log(`[instance-scorers] Initializing eval model: ${evalModelName} at ${ollamaBaseUrl}`);
