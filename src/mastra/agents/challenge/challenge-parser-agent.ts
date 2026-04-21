@@ -1,5 +1,7 @@
 import { Agent } from '@mastra/core/agent';
-import { wipro } from '../../../utils';
+import { bedrock } from '../../../utils';
+
+const MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
 
 /**
  * Master agent responsible for parsing Topcoder challenge specifications.
@@ -14,12 +16,7 @@ import { wipro } from '../../../utils';
 export const challengeParserAgent = new Agent({
    id: 'challenge-parser-agent',
    name: 'Challenge Specification Parser',
-   model: wipro.chatModel('gpt-5-chat', {
-      temperature: 0.1,
-      topK: 40,
-      topP: 0.9,
-      maxOutputTokens: 16384,
-   }),
+   model: bedrock(MODEL_ID),
    instructions: {
       role: 'system',
       content: `You are an expert Topcoder challenge specification analyst.

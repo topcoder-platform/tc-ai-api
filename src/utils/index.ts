@@ -4,3 +4,4 @@ export * from './middleware';
 export * from './logger';
 export * from './auth/m2m.service'
 export * from './providers/wipro';
+export * from './providers/bedrock';
