@@ -7,13 +7,49 @@ import { generateWithStructuredOutputFallback } from '../../../utils/structured-
 // Zod Schemas
 // ---------------------------------------------------------------------------
 
+function normalizeListField(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => String(item).trim())
+            .filter(Boolean);
+    }
+
+    if (typeof value !== 'string') {
+        return value;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return [];
+    }
+
+    const byLine = trimmed
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
+        .filter(Boolean);
+
+    if (byLine.length > 1) {
+        return byLine;
+    }
+
+    return trimmed
+        .split(/\s*[;,]\s*/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+}
+
+const normalizedStringArrayField = z.preprocess(
+    normalizeListField,
+    z.array(z.string().min(1)),
+);
+
 const rewrittenJdSchema = z.object({
     title: z.string().describe('Concise, descriptive job title'),
     overview: z.string().describe('2-4 sentence summary of the opportunity'),
-    responsibilities: z.array(z.string()).describe('Action-oriented bullet list of tasks and deliverables'),
-    requirements: z.array(z.string()).describe('Mandatory qualifications, skills, and experience'),
-    niceToHaves: z.array(z.string()).describe('Preferred but non-mandatory qualifications'),
-    skills: z.array(z.string()).describe('Key technical and soft skill keywords'),
+    responsibilities: normalizedStringArrayField.describe('Action-oriented bullet list of tasks and deliverables'),
+    requirements: normalizedStringArrayField.describe('Mandatory qualifications, skills, and experience'),
+    niceToHaves: normalizedStringArrayField.describe('Preferred but non-mandatory qualifications'),
+    skills: normalizedStringArrayField.describe('Key technical and soft skill keywords'),
     formattedDescription: z.string().describe('Full markdown-formatted job description ready to post'),
 });
 

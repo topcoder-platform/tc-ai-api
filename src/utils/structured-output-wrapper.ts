@@ -229,6 +229,11 @@ export function isStructuredOutputCompatibilityError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
     const message = error.message.toLowerCase();
 
+    // Schema-shape failures are content issues, not provider compatibility issues.
+    if (message.includes('validation failed') || message.includes('invalid input: expected')) {
+        return false;
+    }
+
     return (
         message.includes('response_format')
         || message.includes('structured output')
