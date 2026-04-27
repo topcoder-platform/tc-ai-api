@@ -1,0 +1,206 @@
+April 23, 2026, 10:11
+[GIN] 2026/04/23 - 07:11:49 | 200 | 4.368292455s | 10.10.12.235 | POST "/api/chat"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:11
+[GIN] 2026/04/23 - 07:11:44 | 200 | 4.393276522s | 10.10.12.235 | POST "/api/chat"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:11
+[GIN] 2026/04/23 - 07:11:40 | 200 | 49.02500396s | 10.10.12.235 | POST "/api/chat"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:11
+time=2026-04-23T07:11:35.847Z level=INFO source=server.go:1402 msg="llama runner started in 43.79 seconds"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.976Z level=INFO source=server.go:1398 msg="waiting for server to become available" status="llm server loading model"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.973Z level=INFO source=runner.go:1290 msg=load request="{Operation:commit LoraPath:[] Parallel:1 BatchSize:512 FlashAttention:Enabled KvSize:32000 KvCacheType: NumThreads:4 GPULayers:25[ID:GPU-e81a00ca-95c7-d118-ec14-a985b1a6894d Layers:25(0..24)] MultiUserCache:false ProjectorPath: MainGPU:0 UseMmap:false}"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=ggml.go:482 msg="offloading 24 repeating layers to GPU"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=ggml.go:489 msg="offloading output layer to GPU"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=ggml.go:494 msg="offloaded 25/25 layers to GPU"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=device.go:240 msg="model weights" device=CUDA0 size="11.8 GiB"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=device.go:245 msg="model weights" device=CPU size="1.1 GiB"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=device.go:251 msg="kv cache" device=CUDA0 size="858.0 MiB"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=device.go:262 msg="compute graph" device=CUDA0 size="222.8 MiB"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=device.go:267 msg="compute graph" device=CPU size="5.6 MiB"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=device.go:272 msg="total memory" size="13.9 GiB"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=sched.go:561 msg="loaded runners" count=1
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.974Z level=INFO source=server.go:1364 msg="waiting for llama runner to start responding"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.724Z level=INFO source=runner.go:1290 msg=load request="{Operation:alloc LoraPath:[] Parallel:1 BatchSize:512 FlashAttention:Enabled KvSize:32000 KvCacheType: NumThreads:4 GPULayers:25[ID:GPU-e81a00ca-95c7-d118-ec14-a985b1a6894d Layers:25(0..24)] MultiUserCache:false ProjectorPath: MainGPU:0 UseMmap:false}"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+load_backend: loaded CUDA backend from /usr/lib/ollama/cuda_v12/libggml-cuda.so
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.340Z level=INFO source=ggml.go:104 msg=system CPU.0.SSE3=1 CPU.0.SSSE3=1 CPU.0.AVX=1 CPU.0.AVX2=1 CPU.0.F16C=1 CPU.0.FMA=1 CPU.0.BMI2=1 CPU.0.AVX512=1 CPU.0.LLAMAFILE=1 CPU.1.LLAMAFILE=1 CUDA.0.ARCHS=500,520,600,610,700,750,800,860,890,900,1200 CUDA.0.USE_GRAPHS=1 CUDA.0.PEER_MAX_BATCH_SIZE=128 compiler=cgo(gcc)
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+Device 0: Tesla T4, compute capability 7.5, VMM: yes, ID: GPU-e81a00ca-95c7-d118-ec14-a985b1a6894d
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ: no
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+ggml_cuda_init: found 1 CUDA devices:
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+load_backend: loaded CPU backend from /usr/lib/ollama/libggml-cpu-skylakex.so
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.157Z level=INFO source=ggml.go:136 msg="" architecture=gptoss file_type=MXFP4 name="" description="" num_tensors=459 num_key_values=32
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.081Z level=INFO source=runner.go:1290 msg=load request="{Operation:fit LoraPath:[] Parallel:1 BatchSize:512 FlashAttention:Enabled KvSize:32000 KvCacheType: NumThreads:4 GPULayers:25[ID:GPU-e81a00ca-95c7-d118-ec14-a985b1a6894d Layers:25(0..24)] MultiUserCache:false ProjectorPath: MainGPU:0 UseMmap:false}"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.073Z level=INFO source=runner.go:1417 msg="starting ollama engine"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.073Z level=INFO source=runner.go:1452 msg="Server listening on 127.0.0.1:38031"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.059Z level=INFO source=server.go:444 msg="starting runner" cmd="/usr/bin/ollama runner --ollama-engine --model /root/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb --port 38031"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.059Z level=INFO source=sched.go:484 msg="system memory" total="31.0 GiB" free="30.8 GiB" free_swap="0 B"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.059Z level=INFO source=sched.go:491 msg="gpu memory" id=GPU-e81a00ca-95c7-d118-ec14-a985b1a6894d library=CUDA available="14.1 GiB" free="14.6 GiB" minimum="457.0 MiB" overhead="0 B"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.059Z level=INFO source=server.go:771 msg="loading model" "model layers"=25 requested=-1
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:52.058Z level=INFO source=server.go:259 msg="enabling flash attention"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:51.850Z level=WARN source=cpu_linux.go:130 msg="failed to parse CPU allowed micro secs" error="strconv.ParseInt: parsing \"max\": invalid syntax"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+time=2026-04-23T07:10:51.625Z level=INFO source=server.go:444 msg="starting runner" cmd="/usr/bin/ollama runner --ollama-engine --port 42659"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:10
+[GIN] 2026/04/23 - 07:10:14 | 200 | 337.858634ms | 10.10.12.235 | POST "/api/pull"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:46.566Z level=INFO source=types.go:42 msg="inference compute" id=GPU-e81a00ca-95c7-d118-ec14-a985b1a6894d filter_id="" library=CUDA compute=7.5 name=CUDA0 description="Tesla T4" libdirs=ollama,cuda_v12 driver=12.8 pci_id=0000:00:1e.0 type=discrete total="15.0 GiB" available="14.6 GiB"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:46.566Z level=INFO source=routes.go:1860 msg="vram-based default context" total_vram="15.0 GiB" default_num_ctx=4096
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:46.335Z level=INFO source=server.go:444 msg="starting runner" cmd="/usr/bin/ollama runner --ollama-engine --port 43603"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.940Z level=INFO source=runner.go:106 msg="experimental Vulkan support disabled. To enable, set OLLAMA_VULKAN=1"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.940Z level=INFO source=server.go:444 msg="starting runner" cmd="/usr/bin/ollama runner --ollama-engine --port 33813"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.837Z level=INFO source=server.go:444 msg="starting runner" cmd="/usr/bin/ollama runner --ollama-engine --port 45247"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.836Z level=INFO source=routes.go:1810 msg="Listening on [::]:11434 (version 0.21.1)"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.836Z level=INFO source=runner.go:67 msg="discovering available GPUs..."
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.828Z level=INFO source=images.go:524 msg="total unused blobs removed: 0"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.814Z level=INFO source=images.go:517 msg="total blobs: 23"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+Your new public key is:
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAqVS93lq9sUH3jmR4AD4IXso6ooP0UhZKWLJzZlqYmc
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.747Z level=INFO source=routes.go:1752 msg="server config" env="map[CUDA_VISIBLE_DEVICES: GGML_VK_VISIBLE_DEVICES: GPU_DEVICE_ORDINAL: HIP_VISIBLE_DEVICES: HSA_OVERRIDE_GFX_VERSION: HTTPS_PROXY: HTTP_PROXY: NO_PROXY: OLLAMA_CONTEXT_LENGTH:0 OLLAMA_DEBUG:INFO OLLAMA_DEBUG_LOG_REQUESTS:false OLLAMA_EDITOR: OLLAMA_FLASH_ATTENTION:false OLLAMA_GPU_OVERHEAD:0 OLLAMA_HOST:http://0.0.0.0:11434 OLLAMA_KEEP_ALIVE:5m0s OLLAMA_KV_CACHE_TYPE: OLLAMA_LLM_LIBRARY: OLLAMA_LOAD_TIMEOUT:5m0s OLLAMA_MAX_LOADED_MODELS:0 OLLAMA_MAX_QUEUE:512 OLLAMA_MODELS:/root/.ollama/models OLLAMA_MULTIUSER_CACHE:false OLLAMA_NEW_ENGINE:false OLLAMA_NOHISTORY:false OLLAMA_NOPRUNE:false OLLAMA_NO_CLOUD:false OLLAMA_NUM_PARALLEL:1 OLLAMA_ORIGINS:[http://localhost https://localhost http://localhost:* https://localhost:* http://127.0.0.1 https://127.0.0.1 http://127.0.0.1:* https://127.0.0.1:* http://0.0.0.0 https://0.0.0.0 http://0.0.0.0:* https://0.0.0.0:* app://* file://* tauri://* vscode-webview://* vscode-file://*] OLLAMA_REMOTES:[ollama.com] OLLAMA_SCHED_SPREAD:false OLLAMA_VULKAN:false ROCR_VISIBLE_DEVICES: http_proxy: https_proxy: no_proxy:]"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+time=2026-04-23T07:08:45.747Z level=INFO source=routes.go:1754 msg="Ollama cloud disabled: false"
+98d277dd701343898bd4e60fa38ede74
+tc-ollama
+April 23, 2026, 10:08
+Couldn't find '/root/.ollama/id_ed25519'. Generating new private key.

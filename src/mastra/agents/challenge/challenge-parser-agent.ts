@@ -1,7 +1,9 @@
 import { Agent } from '@mastra/core/agent';
-import { bedrock } from '../../../utils';
+import { ollama } from '../../../utils';
 
-const MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
+// qwen3:14b - Good structured output with default settings (~62 tok/s, 12GB VRAM)
+// Note: Custom temp/penalties HURT this model's extraction quality - use defaults
+const MODEL_ID = 'qwen3:14b';
 
 /**
  * Master agent responsible for parsing Topcoder challenge specifications.
@@ -16,7 +18,11 @@ const MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
 export const challengeParserAgent = new Agent({
    id: 'challenge-parser-agent',
    name: 'Challenge Specification Parser',
-   model: bedrock(MODEL_ID),
+   model: ollama(MODEL_ID, {
+      options: {
+         num_ctx: 32768,  // Large context for lengthy challenge specs
+      },
+   }),
    instructions: {
       role: 'system',
       content: `You are an expert Topcoder challenge specification analyst.

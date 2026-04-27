@@ -318,18 +318,73 @@ const skillSelectionAndRefinementWorkflow = createWorkflow({
   .parallel([mapDirectMatchesToState, semanticSearchWorkflow])
   .commit();
 
-// Final step to output results from the working state
+// Final step to deduplicate, filter, and output results from the working state
 const outputFinalState = createStep({
   id: 'output-final-state',
-  description: 'Output the final workflow state',
+  description: 'Deduplicate, filter low-confidence matches, and output the final workflow state',
   inputSchema: skillRefinementOutputSchema,
   outputSchema: extractionWorkflowStateSchema,
   stateSchema: extractionWorkflowStateSchema,
-  execute: async ({ state }) => {
-    if (state.matches) {
-      state.matches.sort((a, b) => b.score - a.score);
+  execute: async ({ state, mastra }) => {
+    const logger = mastra?.getLogger?.();
+    const minScore = Number(process.env.SKILL_MATCHING_MIN_SCORE ?? 0.15);
+
+    if (!state.matches) {
+      return state;
     }
-    return state;
+
+    // Build set of normalized candidate terms for validation
+    const candidateTermsSet = new Set(
+      (state.skillCandidateTerms || []).map(normalizeTerm)
+    );
+
+    // Deduplicate by skill ID, keeping highest score for each
+    const skillMap = new Map<string, z.infer<typeof scoredSkillSchema>>();
+    for (const match of state.matches) {
+      const existing = skillMap.get(match.id);
+      if (!existing || match.score > existing.score) {
+        skillMap.set(match.id, match);
+      }
+    }
+
+    // Filter out low-confidence matches and validate relevance
+    const dedupedMatches = Array.from(skillMap.values())
+      .filter((match) => {
+        // Always keep high-confidence matches
+        if (match.score >= minScore) {
+          return true;
+        }
+        return false;
+      })
+      // For score=1 matches (direct), verify they relate to a candidate term
+      .filter((match) => {
+        if (match.score === 1) {
+          const matchNameNorm = normalizeTerm(match.name);
+          // Check if any candidate term matches or contains this skill name
+          const isRelevant = Array.from(candidateTermsSet).some(
+            (term) => term === matchNameNorm || 
+                      term.includes(matchNameNorm) || 
+                      matchNameNorm.includes(term)
+          );
+          if (!isRelevant) {
+            logger?.debug('Filtering irrelevant direct match: {name}', { name: match.name });
+          }
+          return isRelevant;
+        }
+        return true;
+      })
+      .sort((a, b) => b.score - a.score);
+
+    logger?.info('Deduplicated and filtered skill matches', {
+      before: state.matches.length,
+      after: dedupedMatches.length,
+      filtered: state.matches.length - dedupedMatches.length,
+    });
+
+    return {
+      ...state,
+      matches: dedupedMatches,
+    };
   },
 });
 

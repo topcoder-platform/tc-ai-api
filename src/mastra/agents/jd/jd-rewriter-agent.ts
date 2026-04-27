@@ -1,12 +1,18 @@
 import { Agent } from '@mastra/core/agent';
-import { bedrock } from '../../../utils';
+import { ollama } from '../../../utils';
 
-const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+// qwen3:14b - Good writing quality with structured output (~62 tok/s, 12GB VRAM)
+const MODEL_ID = 'qwen3:14b';
 
 export const jdRewriterAgent = new Agent({
     id: 'jd-rewriter-agent',
     name: 'Job Description Rewriter',
-    model: bedrock(MODEL_ID),
+    model: ollama(MODEL_ID, {
+        options: {
+            temperature: 0.4,         // Moderate: creative rewriting but consistent structure
+            num_ctx: 16384,           // Sufficient for JD input + formatted output
+        },
+    }),
     instructions: {
         role: 'system',
         content: `You are an expert technical recruiter and job description writer for Topcoder.

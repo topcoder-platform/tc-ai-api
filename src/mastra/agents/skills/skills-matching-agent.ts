@@ -1,14 +1,22 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { bedrock } from '../../../utils';
+import { ollama } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
 import { instanceScorers } from '../../scorers/instance-scorers';
 
-const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+// qwen3:14b - Fast extraction, strict JSON output (~62 tok/s, 12GB VRAM)
+// Note: Tested with/without penalties - identical output. Defaults work fine.
+const MODEL_ID = 'qwen3:14b';
 
 export const skillsMatchingAgent = new Agent({
   id: 'skillsMatchingAgent',
   name: 'Skill terms matching agent for Topcoder standardized skills from a given text',
+  model: ollama(MODEL_ID, {
+    options: {
+      temperature: 0.1,         // Low: deterministic extraction, consistent results
+      num_ctx: 8192,            // Sufficient context for job descriptions
+    },
+  }),
   instructions: {
     role: 'system',
     content: `You are a Topcoder skills term extraction assistant. Given any user-provided text (job description, developer summary, resume bullets), extract possible skill search terms.
@@ -26,9 +34,8 @@ Output requirements:
 - Output STRICT JSON only.
 - Format: ["Term 1", "Term 2", ...]
 - No prose, no markdown, no extra keys.
-`,
+/no_think`,
   },
-  model: bedrock(MODEL_ID),
   scorers: {
     answerRelevancy: {
       scorer: instanceScorers.instanceAnswerRelevancyScorer,

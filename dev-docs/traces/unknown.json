@@ -1,0 +1,2151 @@
+{
+  "challengeId": "unknown",
+  "challengeTitle": "Admin Challenge Curation UI Prototype Challenge Overview Thi",
+  "workflowId": "scorecard-architect",
+  "startedAt": "2026-04-22T09:16:43.035Z",
+  "completedAt": "2026-04-22T09:21:40.616Z",
+  "steps": [
+    {
+      "stepId": "parse-challenge-requirements",
+      "timestamp": "2026-04-22T09:16:43.035Z",
+      "input": {
+        "challengeId": "unknown",
+        "rawSpecLength": 12000
+      },
+      "output": {
+        "requirementCount": 12,
+        "requirementIds": [
+          "REQ_01",
+          "REQ_02",
+          "REQ_03",
+          "REQ_04",
+          "REQ_05",
+          "REQ_06",
+          "REQ_07",
+          "REQ_08",
+          "REQ_09",
+          "REQ_10",
+          "REQ_11",
+          "REQ_12"
+        ],
+        "challengeTrack": "Development",
+        "challengeType": "Frontend UI Implementation"
+      }
+    },
+    {
+      "stepId": "categorize-requirements",
+      "timestamp": "2026-04-22T09:16:43.035Z",
+      "input": {
+        "requirementCount": 12
+      },
+      "output": {
+        "categorizedRequirements": [
+          {
+            "id": "REQ_01",
+            "title": "Enable Admin Tab with Role-Based Access Control",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_02",
+            "title": "Add Development Mode for Admin Role Simulation",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_03",
+            "title": "Create Admin Sidebar with Curation Filter Buttons",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_04",
+            "title": "Implement Sort and Filter Panel in Content Window",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_05",
+            "title": "Display Paginated Challenge List with Scrollable Area",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_06",
+            "title": "Develop Challenge Card to Show Metadata and Curation Annotations",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_07",
+            "title": "Implement Mock Challenge Service with Stubbed API Calls",
+            "priority": "high",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_08",
+            "title": "Define TypeScript Interfaces for Challenge and Annotation Models",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_09",
+            "title": "Implement SWR Hook for Challenge List Data Fetching",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_10",
+            "title": "Implement Admin Role Check Hook",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_11",
+            "title": "Structure Components and Files in rfp-tool Module",
+            "priority": "high",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_12",
+            "title": "Update Constants with Admin-Specific Values",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          }
+        ]
+      }
+    },
+    {
+      "stepId": "generate-scorecard-draft",
+      "timestamp": "2026-04-22T09:16:43.035Z",
+      "input": {
+        "categorizedRequirements": [
+          {
+            "id": "REQ_01",
+            "title": "Enable Admin Tab with Role-Based Access Control",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_02",
+            "title": "Add Development Mode for Admin Role Simulation",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_03",
+            "title": "Create Admin Sidebar with Curation Filter Buttons",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_04",
+            "title": "Implement Sort and Filter Panel in Content Window",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_05",
+            "title": "Display Paginated Challenge List with Scrollable Area",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_06",
+            "title": "Develop Challenge Card to Show Metadata and Curation Annotations",
+            "priority": "high",
+            "category": "UI/UX"
+          },
+          {
+            "id": "REQ_07",
+            "title": "Implement Mock Challenge Service with Stubbed API Calls",
+            "priority": "high",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_08",
+            "title": "Define TypeScript Interfaces for Challenge and Annotation Models",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_09",
+            "title": "Implement SWR Hook for Challenge List Data Fetching",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_10",
+            "title": "Implement Admin Role Check Hook",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_11",
+            "title": "Structure Components and Files in rfp-tool Module",
+            "priority": "high",
+            "category": "Technical Deliverables"
+          },
+          {
+            "id": "REQ_12",
+            "title": "Update Constants with Admin-Specific Values",
+            "priority": "medium",
+            "category": "Technical Deliverables"
+          }
+        ]
+      },
+      "output": {
+        "scorecardGroups": 1,
+        "totalSections": 1,
+        "totalQuestions": 2
+      }
+    },
+    {
+      "stepId": "critique-scorecard",
+      "timestamp": "2026-04-22T09:16:43.035Z",
+      "input": {
+        "scorecardName": "Revised Scorecard for Admin UI Implementation",
+        "totalQuestions": 2
+      },
+      "output": {
+        "initialVerdict": {
+          "verdict": "NEEDS_REVISION",
+          "overallQuality": 0.65,
+          "issues": [
+            {
+              "questionId": "Q_01_01_01",
+              "issueType": "missing_requirement",
+              "description": "Requirement REQ_01 is not covered by any question in the scorecard.",
+              "suggestedFix": "Add a question that directly evaluates the Admin Tab with Role-Based Access Control as specified in REQ_01."
+            },
+            {
+              "questionId": "Q_01_01_02",
+              "issueType": "missing_requirement",
+              "description": "Requirement REQ_02 (Development Mode for Admin Role Simulation) is not covered by any question in the scorecard.",
+              "suggestedFix": "Add a question that evaluates the presence and functionality of the development mode for admin role simulation as specified in REQ_02."
+            },
+            {
+              "questionId": "Q_02_01_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_01 has a question with only 50 weight, while medium-priority REQ_02 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_02_01_02",
+              "issueType": "weight_misalignment",
+              "description": "High-p룁ity requirement REQ_03 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_02_03_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_04 has a question with only 50 weight, while medium-priority REQ_09 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_02_03_02",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_05 has a question with only 50 weight, while medium-priority REQ_10 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_02_04_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_06 has a question with only 50 weight, while medium-priority REQ_11 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_03_01_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_07 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_03_02_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_08 has a question with only 50 weight, while medium-priority REQ_09 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_03_03_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_09 has a question with only 50 weight, while medium-priority REQ_10 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_03_04_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_10 has a question with only 50 weight, while medium-priority REQ_11 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_03_05_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_11 has a question with only 50 weight, while medium-priority REQ_12 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            },
+            {
+              "questionId": "Q_03_06_01",
+              "issueType": "weight_misalignment",
+              "description": "High-priority requirement REQ_12 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+              "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+            }
+          ],
+          "summary": "The scorecard fails to cover all requirements, particularly missing coverage for REQ_02, REQ_08, REQ_09, REQ_10, REQ_11, and REQ_12. High-priority requirements are underweighted and not fully aligned with their priority levels. All section and group weights sum correctly, but the lack of requirement coverage and misalignment with priority levels renders the scorecard incomplete and unbalanced."
+        }
+      }
+    },
+    {
+      "stepId": "revise-if-needed",
+      "timestamp": "2026-04-22T09:16:43.035Z",
+      "input": {
+        "initialVerdict": "NEEDS_REVISION",
+        "initialQuality": 0.65,
+        "initialIssueCount": 13
+      },
+      "output": {
+        "revisionCount": 2,
+        "finalVerdict": "NEEDS_REVISION",
+        "finalQuality": 0.45,
+        "revisionCycles": [
+          {
+            "cycle": 1,
+            "reviewFeedback": {
+              "verdict": "NEEDS_REVISION",
+              "overallQuality": 0.65,
+              "issues": [
+                {
+                  "questionId": "Q_01_01_01",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_01 is not covered by any question in the scorecard.",
+                  "suggestedFix": "Add a question that directly evaluates the Admin Tab with Role-Based Access Control as specified in REQ_01."
+                },
+                {
+                  "questionId": "Q_01_01_02",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_02 (Development Mode for Admin Role Simulation) is not covered by any question in the scorecard.",
+                  "suggestedFix": "Add a question that evaluates the presence and functionality of the development mode for admin role simulation as specified in REQ_02."
+                },
+                {
+                  "questionId": "Q_02_01_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_01 has a question with only 50 weight, while medium-priority REQ_02 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_02_01_02",
+                  "issueType": "weight_misalignment",
+                  "description": "High-p룁ity requirement REQ_03 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_02_03_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_04 has a question with only 50 weight, while medium-priority REQ_09 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_02_03_02",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_05 has a question with only 50 weight, while medium-priority REQ_10 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_02_04_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_06 has a question with only 50 weight, while medium-priority REQ_11 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_03_01_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_07 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_03_02_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_08 has a question with only 50 weight, while medium-priority REQ_09 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_03_03_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_09 has a question with only 50 weight, while medium-priority REQ_10 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_03_04_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_10 has a question with only 50 weight, while medium-priority REQ_11 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_03_05_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_11 has a question with only 50 weight, while medium-priority REQ_12 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                },
+                {
+                  "questionId": "Q_03_06_01",
+                  "issueType": "weight_misalignment",
+                  "description": "High-priority requirement REQ_12 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+                  "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+                }
+              ],
+              "summary": "The scorecard fails to cover all requirements, particularly missing coverage for REQ_02, REQ_08, REQ_09, REQ_10, REQ_11, and REQ_12. High-priority requirements are underweighted and not fully aligned with their priority levels. All section and group weights sum correctly, but the lack of requirement coverage and misalignment with priority levels renders the scorecard incomplete and unbalanced."
+            },
+            "revisedScorecardDiff": {
+              "questionsAdded": [
+                "Q_02_02_03"
+              ],
+              "questionsModified": [
+                "Q_01_01_01",
+                "Q_01_01_02",
+                "Q_02_01_01",
+                "Q_02_01_02",
+                "Q_02_02_01",
+                "Q_02_02_02",
+                "Q_02_03_01",
+                "Q_02_03_02",
+                "Q_02_04_01",
+                "Q_02_04_02",
+                "Q_03_01_01",
+                "Q_03_02_01",
+                "Q_03_03_01",
+                "Q_03_04_01",
+                "Q_03_05_01",
+                "Q_03_06_01"
+              ],
+              "questionsRemoved": [
+                "Q_02_03_03",
+                "Q_02_05_01",
+                "Q_02_05_02"
+              ],
+              "weightChanges": [
+                {
+                  "id": "Q_01_01_01",
+                  "oldWeight": 50,
+                  "newWeight": 5
+                },
+                {
+                  "id": "Q_01_01_02",
+                  "oldWeight": 50,
+                  "newWeight": 5
+                },
+                {
+                  "id": "Q_02_01_01",
+                  "oldWeight": 50,
+                  "newWeight": 10
+                },
+                {
+                  "id": "Q_02_01_02",
+                  "oldWeight": 50,
+                  "newWeight": 10
+                },
+                {
+                  "id": "Q_02_02_01",
+                  "oldWeight": 50,
+                  "newWeight": 7.5
+                },
+                {
+                  "id": "Q_02_02_02",
+                  "oldWeight": 50,
+                  "newWeight": 7.5
+                },
+                {
+                  "id": "Q_02_03_01",
+                  "oldWeight": 50,
+                  "newWeight": 5
+                },
+                {
+                  "id": "Q_02_03_02",
+                  "oldWeight": 50,
+                  "newWeight": 5
+                },
+                {
+                  "id": "Q_02_04_01",
+                  "oldWeight": 50,
+                  "newWeight": 7.5
+                },
+                {
+                  "id": "Q_02_04_02",
+                  "oldWeight": 50,
+                  "newWeight": 7.5
+                },
+                {
+                  "id": "Q_03_01_01",
+                  "oldWeight": 50,
+                  "newWeight": 5
+                },
+                {
+                  "id": "Q_03_02_01",
+                  "oldWeight": 50,
+                  "newWeight": 5
+                },
+                {
+                  "id": "Q_03_03_01",
+                  "oldWeight": 50,
+                  "newWeight": 2.5
+                },
+                {
+                  "id": "Q_03_04_01",
+                  "oldWeight": 50,
+                  "newWeight": 2.5
+                },
+                {
+                  "id": "Q_03_05_01",
+                  "oldWeight": 50,
+                  "newWeight": 2.5
+                },
+                {
+                  "id": "Q_03_06_01",
+                  "oldWeight": 50,
+                  "newWeight": 2.5
+                }
+              ]
+            },
+            "revisedScorecard": {
+              "id": "rev1",
+              "name": "Revised Scorecard for Admin UI Implementation",
+              "version": "1.1",
+              "status": "ACTIVE",
+              "type": "REVIEW",
+              "challengeTrack": "RFP-Tool",
+              "challengeType": "Admin UI",
+              "minScore": 80,
+              "minimumPassingScore": 70,
+              "maxScore": 100,
+              "scorecardGroups": [
+                {
+                  "id": "G_01",
+                  "name": "Build & Setup",
+                  "weight": 10,
+                  "sortOrder": 1,
+                  "sections": [
+                    {
+                      "id": "S_01_01",
+                      "name": "Project Structure & Setup",
+                      "weight": 10,
+                      "sortOrder": 1,
+                      "questions": [
+                        {
+                          "id": "Q_01_01_01",
+                          "type": "YES_NO",
+                          "description": "Does the project have a proper directory structure with src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories, each containing an index.ts file for importability?",
+                          "guidelines": "Yes: All directories exist with index.ts files. No: Missing or incorrect structure.",
+                          "weight": 5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_11"
+                        },
+                        {
+                          "id": "Q_01_01_02",
+                          "type": "YES_NO",
+                          "description": "Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?",
+                          "guidelines": "Yes: Constants are defined and used correctly. No: Missing or unused constants.",
+                          "weight": 5,
+                          "sortOrder": 2,
+                          "sourceRequirement": "REQ_12"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "G_02",
+                  "name": "Core Admin Features",
+                  "weight": 60,
+                  "sortOrder": 2,
+                  "sections": [
+                    {
+                      "id": "S_02_01",
+                      "name": "Admin Tab with Role-Based Access Control",
+                      "weight": 20,
+                      "sortOrder": 1,
+                      "questions": [
+                        {
+                          "id": "Q_02_01_01",
+                          "type": "YES_NO",
+                          "description": "Does the Admin Tab display only when the user has administrator role, as determined by the useAdminRole.ts hook and profileContext?",
+                          "guidelines": "Yes: Tab is conditionally rendered based on admin role. No: Tab is always visible or not conditionally rendered.",
+                          "weight": 10,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_01"
+                        },
+                        {
+                          "id": "Q_02_01_02",
+                          "type": "YES_NO",
+                          "description": "Does the Admin Tab include a clear 'Admin Mode' toggle that allows switching between admin and standard user views?",
+                          "guidelines": "Yes: Toggle exists and changes view behavior. No: Toggle is missing or non-functional.",
+                          "weight": 10,
+                          "sortOrder": 2,
+                          "sourceRequirement": "REQ_02"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "S_02_02",
+                      "name": "Filter & Sort Controls",
+                      "weight": 15,
+                      "sortOrder": 2,
+                      "questions": [
+                        {
+                          "id": "Q_02_02_01",
+                          "type": "YES_NO",
+                          "description": "Does the collapsible filter/sort panel include controls for track (Design/Dev/QA), prize range, status (All/Completed/Active), and date range?",
+                          "guidelines": "Yes: All controls are present and functional. No: One or more controls are missing.",
+                          "weight": 7.5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_04"
+                        },
+                        {
+                          "id": "Q_02_02_02",
+                          "type": "YES_NO",
+                          "description": "Do sort options (Track, Prize, Start Date) include ascending/descending toggles and update the list immediately?",
+                          "guidelines": "Yes: Sort options are present with toggle and list updates instantly. No: Missing toggles or no immediate update.",
+                          "weight": 7.5,
+                          "sortOrder": 2,
+                          "sourceRequirement": "REQ_04"
+                        },
+                        {
+                          "id": "Q_02_02_03",
+                          "type": "YES_NO",
+                          "description": "Does clearing all filters reset the view to default curation type?",
+                          "guidelines": "Yes: Clearing all filters returns to the default curation type view. No: View remains in a filtered state.",
+                          "weight": 7.5,
+                          "sortOrder": 3,
+                          "sourceRequirement": "REQ_04"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "S_02_03",
+                      "name": "Paginated Challenge List",
+                      "weight": 10,
+                      "sortOrder": 3,
+                      "questions": [
+                        {
+                          "id": "Q_02_03_01",
+                          "type": "YES_NO",
+                          "description": "Does the challenge list display a scrollable, paginated list with current page, total pages, and navigation controls (Previous/Next/page numbers)?",
+                          "guidelines": "Yes: All pagination elements are present and functional. No: Missing pagination or navigation controls.",
+                          "weight": 5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_05"
+                        },
+                        {
+                          "id": "Q_02_03_02",
+                          "type": "YES_NO",
+                          "description": "Does the UI show an empty state message when no challenges match filters and a loading spinner during data fetch?",
+                          "guidelines": "Yes: Empty state and loading spinner are displayed correctly. No: Missing either or both states.",
+                          "weight": 5,
+                          "sortOrder": 2,
+                          "sourceRequirement": "REQ_05"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "S_02_04",
+                      "name": "Challenge Card Display",
+                      "weight": 15,
+                      "sortOrder": 4,
+                      "questions": [
+                        {
+                          "id": "Q_02_04_01",
+                          "type": "YES_NO",
+                          "description": "Does the ChallengeCard component display challenge metadata (name, status, track, start date, prize, tags, description) and curation annotations (category, story points)?",
+                          "guidelines": "Yes: All metadata and annotations are displayed correctly. No: Missing any required field.",
+                          "weight": 7.5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_06"
+                        },
+                        {
+                          "id": "Q_02_04_02",
+                          "type": "YES_NO",
+                          "description": "Does the description field truncate content with 'show more' if longer than 3 lines?",
+                          "guidelines": "Yes: Description is truncated and 'show more' link appears. No: Description is not truncated or link is missing.",
+                          "weight": 7.5,
+                          "sortOrder": 2,
+                          "sourceRequirement": "REQ_06"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "G_03",
+                  "name": "Technical Implementation",
+                  "weight": 30,
+                  "sortOrder": 3,
+                  "sections": [
+                    {
+                      "id": "S_03_01",
+                      "name": "Mock Challenge Service",
+                      "weight": 10,
+                      "sortOrder": 1,
+                      "questions": [
+                        {
+                          "id": "Q_03_01_01",
+                          "type": "YES_NO",
+                          "description": "Does the mock challenges.service.ts file provide stubbed API responses with challenges including curation categories and story points?",
+                          "guidelines": "Yes: Mock service returns data with curation and story points. No: Missing or incorrect data structure.",
+                          "weight": 5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_07"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "S_03_02",
+                      "name": "TypeScript Interfaces",
+                      "weight": 10,
+                      "sortOrder": 2,
+                      "questions": [
+                        {
+                          "id": "Q_03_02_01",
+                          "type": "YES_NO",
+                          "description": "Does Challenge.model.ts define TypeScript interfaces for Challenge and Curation Annotation data matching Topcoder v6 API model?",
+                          "guidelines": "Yes: Interfaces include name, status, track, prize, startDate, tags, description, and curation properties (category, storyPoints). No: Missing or mismatched fields.",
+                          "weight": 5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_08"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "S_03_03",
+                      "name": "SWR Hook for Challenge List",
+                      "weight": 5,
+                      "sortOrder": 3,
+                      "questions": [
+                        {
+                          "id": "Q_03_03_01",
+                          "type": "YES_NO",
+                          "description": "Does the useChallenges.ts hook use SWR to fetch and manage challenge list data, handling loading, error, and revalidation states?",
+                          "guidelines": "Yes: Hook correctly manages loading, error, and revalidation. No: Missing state handling or incorrect implementation.",
+                          "weight": 2.5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_09"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "S_03_04",
+                      "name": "Admin Role Check Hook",
+                      "weight": 5,
+                      "sortOrder": 4,
+                      "questions": [
+                        {
+                          "id": "Q_03_04_01",
+                          "type": "YES_NO",
+                          "description": "Does the useAdminRole.ts hook check if the user has administrator role and integrate with profileContext?",
+                          "guidelines": "Yes: Hook returns boolean based on profileContext and administrator role. No: Hook is missing or does not use profileContext.",
+                          "weight": 2.5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_10"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "S_03_05",
+                      "name": "Component & File Structure",
+                      "weight": 5,
+                      "sortOrder": 5,
+                      "questions": [
+                        {
+                          "id": "Q_03_05_01",
+                          "type": "YES_NO",
+                          "description": "Are new components organized under src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories with index.ts files for importability?",
+                          "guidelines": "Yes: Correct directory structure with index.ts files. No: Missing or incorrect structure.",
+                          "weight": 2.5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_11"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "S_03_06",
+                      "name": "Admin Constants Definition",
+                      "weight": 5,
+                      "sortOrder": 6,
+                      "questions": [
+                        {
+                          "id": "Q_03_06_01",
+                          "type": "YES_NO",
+                          "description": "Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?",
+                          "guidelines": "Yes: Constants are defined and used correctly. No: Missing or unused constants.",
+                          "weight": 2.5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_12"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "timestamp": "2026-04-22T09:20:47.427Z"
+          },
+          {
+            "cycle": 2,
+            "reviewFeedback": {
+              "verdict": "NEEDS_REVISION",
+              "overallQuality": 0.65,
+              "issues": [
+                {
+                  "questionId": "Q_02_02_01",
+                  "issueType": "weight_misalignment",
+                  "description": "Section 'Filter & Sort Controls' has a total weight of 22.5 (7.5 + 7.5 + 7.5), which exceeds the 15% maximum allowed for medium-priority requirements. This violates weight alignment with priority.",
+                  "suggestedFix": "Reduce the weight of each question in this section to maintain a total of 15. For example, reduce each to 5, or reassign weights to reflect actual effort and priority."
+                },
+                {
+                  "questionId": "Q_02_02_02",
+                  "issueType": "weight_misalignment",
+                  "description": "The weight of 7.5 for this question exceeds the 10% cap for medium-priority requirements. This creates an imbalance with high-priority requirements.",
+                  "suggestedFix": "Adjust the weight to 5 or lower to maintain alignment with the priority-based weight distribution."
+                },
+                {
+                  "questionId": "Q_02_02_03",
+                  "issueType": "weight_misalignment",
+                  "description": "The weight of 7.5 for this question exceeds the 10% cap for medium-priority requirements. This creates an imbalance with high-priority requirements.",
+                  "suggestedFix": "Adjust the weight to 5 or lower to maintain alignment with the priority-based weight distribution."
+                },
+                {
+                  "questionId": "Q_03_03_01",
+                  "issueType": "weight_misalignment",
+                  "description": "The weight of 2.5 for this question is too low for a medium-priority requirement (REQ_09). It does not reflect the importance of implementing a core data-fetching hook.",
+                  "suggestedFix": "Increase the weight to 5 to match the importance of the SWR hook implementation."
+                },
+                {
+                  "questionId": "Q_03_04_01",
+                  "issueType": "weight_misalignment",
+                  "description": "The weight of 2.5 for this question is too low for a medium-priority requirement (REQ_10). It does not reflect the importance of implementing a role-check hook.",
+                  "suggestedFix": "Increase the weight to 5 to match the importance of the admin role check implementation."
+                },
+                {
+                  "questionId": "Q_03_05_01",
+                  "issueType": "weight_misalignment",
+                  "description": "The weight of 2.5 for this question is redundant and duplicates Q_01_01_01 and Q_02_01_01. This creates unnecessary duplication and misaligns with the priority of the requirement.",
+                  "suggestedFix": "Remove the duplicate question or merge it with an existing one to avoid redundancy and ensure proper weight distribution."
+                },
+                {
+                  "questionId": "Q_03_06_01",
+                  "issueType": "weight_misalignment",
+                  "description": "The weight of 2.5 for this question duplicates Q_01_01_02 and Q_02_01_02, creating redundancy and misaligning with the priority of the requirement.",
+                  "suggestedFix": "Remove the duplicate question or merge it with an existing one to avoid redundancy and ensure proper weight distribution."
+                },
+                {
+                  "questionId": "Q_02_04_01",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_06 (Develop Challenge Card to Show Metadata and Curation Annotations) is not fully covered. The question only checks metadata and annotations, but does not verify the curation annotations are properly rendered or styled.",
+                  "suggestedFix": "Add a follow-up question to verify the visual presentation and styling of curation annotations in the ChallengeCard component."
+                },
+                {
+                  "questionId": "Q_02_04_02",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_06 does not include a requirement for responsive behavior or accessibility of the description field. This gap must be addressed.",
+                  "suggestedFix": "Add a question to verify that the description field is accessible and responsive across device sizes."
+                },
+                {
+                  "questionId": "Q_01_01_01",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_11 (Structure Components and Files in rfp-tool Module) is not fully covered. The question only checks directory structure, but does not verify that components are properly imported and used.",
+                  "suggestedFix": "Add a question to verify that components are correctly imported and used in the admin UI."
+                },
+                {
+                  "questionId": "Q_01_01_02",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_12 (Update Constants with Admin-Specific Values) is not fully covered. The question only checks definition and usage, but does not verify that constants are updated with admin-specific values.",
+                  "suggestedFix": "Add a question to verify that constants are updated with admin-specific values such as curation types or pagination defaults."
+                },
+                {
+                  "questionId": "Q_02_03_01",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_05 (Display Paginated Challenge List with Scrollable Area) is not fully covered. The question only checks pagination controls, but does not verify scrollable area or infinite scroll behavior.",
+                  "suggestedFix": "Add a question to verify that the list is scrollable and supports infinite scroll or virtualization for large datasets."
+                },
+                {
+                  "questionId": "Q_02_03_02",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_05 does not include a requirement for loading states or error handling during data fetch. This gap must be addressed.",
+                  "suggestedFix": "Add a question to verify that loading and error states are properly displayed during data fetch."
+                },
+                {
+                  "questionId": "Q_02_01_01",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_01 (Enable Admin Tab with Role-Based Access Control) is not fully covered. The question only checks conditional rendering, but does not verify that the tab is properly secured or that access is restricted to admin roles.",
+                  "suggestedFix": "Add a question to verify that the admin tab is properly secured and that non-admin users are denied access."
+                },
+                {
+                  "questionId": "Q_02_01_02",
+                  "issueType": "missing_requirement",
+                  "description": "Requirement REQ_02 (Add Development Mode for Admin Role Simulation) is not fully covered. The question only checks the existence of a toggle, but does not verify that switching between admin and standard views changes behavior.",
+                  "suggestedFix": "Add a question to verify that the toggle changes the view behavior and that standard users see different content."
+                }
+              ],
+              "summary": "The scorecard fails to meet weight alignment, coverage completeness, and testability standards. Multiple high-priority requirements are underrepresented, while medium-priority requirements are overweighted. Key requirements are missing critical validation points. The scorecard must be revised to ensure proper weight distribution, full requirement coverage, and clear, testable questions."
+            },
+            "revisedScorecardDiff": {
+              "questionsAdded": [
+                "Q01_01_01",
+                "Q01_01_02"
+              ],
+              "questionsModified": [],
+              "questionsRemoved": [
+                "Q_01_01_01",
+                "Q_01_01_02",
+                "Q_02_01_01",
+                "Q_02_01_02",
+                "Q_02_02_01",
+                "Q_02_02_02",
+                "Q_02_02_03",
+                "Q_02_03_01",
+                "Q_02_03_02",
+                "Q_02_04_01",
+                "Q_02_04_02",
+                "Q_03_01_01",
+                "Q_03_02_01",
+                "Q_03_03_01",
+                "Q_03_04_01",
+                "Q_03_05_01",
+                "Q_03_06_01"
+              ],
+              "weightChanges": []
+            },
+            "revisedScorecard": {
+              "id": "rev-1",
+              "name": "Revised Scorecard for Admin UI Implementation",
+              "version": "1.1",
+              "status": "ACTIVE",
+              "type": "REVIEW",
+              "challengeTrack": "admin-ui-implementation",
+              "challengeType": "frontend",
+              "minScore": 0.8,
+              "minimumPassingScore": 0.8,
+              "maxScore": 1,
+              "scorecardGroups": [
+                {
+                  "id": "G01",
+                  "name": "Project Setup & Structure",
+                  "weight": 10,
+                  "sortOrder": 1,
+                  "sections": [
+                    {
+                      "id": "S01_01",
+                      "name": "Component & File Structure",
+                      "weight": 5,
+                      "sortOrder": 1,
+                      "questions": [
+                        {
+                          "id": "Q01_01_01",
+                          "type": "YES_NO",
+                          "description": "Are new components organized under src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories with index.ts files for importability?",
+                          "guidelines": "Yes: Correct directory structure with index.ts files. No: Missing or incorrect structure.",
+                          "weight": 5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_11"
+                        },
+                        {
+                          "id": "Q01_01_02",
+                          "type": "YES_NO",
+                          "description": "Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?",
+                          "guidelines": "Yes: Constants are defined and used correctly. No: Missing or unused constants.",
+                          "weight": 5,
+                          "sortOrder": 1,
+                          "sourceRequirement": "REQ_12"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "timestamp": "2026-04-22T09:21:40.589Z"
+          }
+        ]
+      }
+    },
+    {
+      "stepId": "validate-and-finalize",
+      "timestamp": "2026-04-22T09:21:40.616Z",
+      "input": {
+        "scorecardName": "Revised Scorecard for Admin UI Implementation"
+      },
+      "output": {
+        "coverageScore": 0.16666666666666666,
+        "mappedRequirements": [
+          "REQ_11",
+          "REQ_12"
+        ],
+        "unmappedRequirements": [
+          "REQ_01",
+          "REQ_02",
+          "REQ_03",
+          "REQ_04",
+          "REQ_05",
+          "REQ_06",
+          "REQ_07",
+          "REQ_08",
+          "REQ_09",
+          "REQ_10"
+        ],
+        "totalRequirements": 12,
+        "totalQuestions": 2
+      }
+    }
+  ],
+  "revisionCycles": [
+    {
+      "cycle": 1,
+      "reviewFeedback": {
+        "verdict": "NEEDS_REVISION",
+        "overallQuality": 0.65,
+        "issues": [
+          {
+            "questionId": "Q_01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_01 is not covered by any question in the scorecard.",
+            "suggestedFix": "Add a question that directly evaluates the Admin Tab with Role-Based Access Control as specified in REQ_01."
+          },
+          {
+            "questionId": "Q_01_01_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_02 (Development Mode for Admin Role Simulation) is not covered by any question in the scorecard.",
+            "suggestedFix": "Add a question that evaluates the presence and functionality of the development mode for admin role simulation as specified in REQ_02."
+          },
+          {
+            "questionId": "Q_02_01_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_01 has a question with only 50 weight, while medium-priority REQ_02 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_02_01_02",
+            "issueType": "weight_misalignment",
+            "description": "High-p룁ity requirement REQ_03 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_02_03_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_04 has a question with only 50 weight, while medium-priority REQ_09 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_02_03_02",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_05 has a question with only 50 weight, while medium-priority REQ_10 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_02_04_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_06 has a question with only 50 weight, while medium-priority REQ_11 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_01_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_07 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_02_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_08 has a question with only 50 weight, while medium-priority REQ_09 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_03_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_09 has a question with only 50 weight, while medium-priority REQ_10 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_04_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_10 has a question with only 50 weight, while medium-priority REQ_11 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_05_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_11 has a question with only 50 weight, while medium-priority REQ_12 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_06_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_12 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          }
+        ],
+        "summary": "The scorecard fails to cover all requirements, particularly missing coverage for REQ_02, REQ_08, REQ_09, REQ_10, REQ_11, and REQ_12. High-priority requirements are underweighted and not fully aligned with their priority levels. All section and group weights sum correctly, but the lack of requirement coverage and misalignment with priority levels renders the scorecard incomplete and unbalanced."
+      },
+      "revisedScorecardDiff": {
+        "questionsAdded": [
+          "Q_02_02_03"
+        ],
+        "questionsModified": [
+          "Q_01_01_01",
+          "Q_01_01_02",
+          "Q_02_01_01",
+          "Q_02_01_02",
+          "Q_02_02_01",
+          "Q_02_02_02",
+          "Q_02_03_01",
+          "Q_02_03_02",
+          "Q_02_04_01",
+          "Q_02_04_02",
+          "Q_03_01_01",
+          "Q_03_02_01",
+          "Q_03_03_01",
+          "Q_03_04_01",
+          "Q_03_05_01",
+          "Q_03_06_01"
+        ],
+        "questionsRemoved": [
+          "Q_02_03_03",
+          "Q_02_05_01",
+          "Q_02_05_02"
+        ],
+        "weightChanges": [
+          {
+            "id": "Q_01_01_01",
+            "oldWeight": 50,
+            "newWeight": 5
+          },
+          {
+            "id": "Q_01_01_02",
+            "oldWeight": 50,
+            "newWeight": 5
+          },
+          {
+            "id": "Q_02_01_01",
+            "oldWeight": 50,
+            "newWeight": 10
+          },
+          {
+            "id": "Q_02_01_02",
+            "oldWeight": 50,
+            "newWeight": 10
+          },
+          {
+            "id": "Q_02_02_01",
+            "oldWeight": 50,
+            "newWeight": 7.5
+          },
+          {
+            "id": "Q_02_02_02",
+            "oldWeight": 50,
+            "newWeight": 7.5
+          },
+          {
+            "id": "Q_02_03_01",
+            "oldWeight": 50,
+            "newWeight": 5
+          },
+          {
+            "id": "Q_02_03_02",
+            "oldWeight": 50,
+            "newWeight": 5
+          },
+          {
+            "id": "Q_02_04_01",
+            "oldWeight": 50,
+            "newWeight": 7.5
+          },
+          {
+            "id": "Q_02_04_02",
+            "oldWeight": 50,
+            "newWeight": 7.5
+          },
+          {
+            "id": "Q_03_01_01",
+            "oldWeight": 50,
+            "newWeight": 5
+          },
+          {
+            "id": "Q_03_02_01",
+            "oldWeight": 50,
+            "newWeight": 5
+          },
+          {
+            "id": "Q_03_03_01",
+            "oldWeight": 50,
+            "newWeight": 2.5
+          },
+          {
+            "id": "Q_03_04_01",
+            "oldWeight": 50,
+            "newWeight": 2.5
+          },
+          {
+            "id": "Q_03_05_01",
+            "oldWeight": 50,
+            "newWeight": 2.5
+          },
+          {
+            "id": "Q_03_06_01",
+            "oldWeight": 50,
+            "newWeight": 2.5
+          }
+        ]
+      },
+      "revisedScorecard": {
+        "id": "rev1",
+        "name": "Revised Scorecard for Admin UI Implementation",
+        "version": "1.1",
+        "status": "ACTIVE",
+        "type": "REVIEW",
+        "challengeTrack": "RFP-Tool",
+        "challengeType": "Admin UI",
+        "minScore": 80,
+        "minimumPassingScore": 70,
+        "maxScore": 100,
+        "scorecardGroups": [
+          {
+            "id": "G_01",
+            "name": "Build & Setup",
+            "weight": 10,
+            "sortOrder": 1,
+            "sections": [
+              {
+                "id": "S_01_01",
+                "name": "Project Structure & Setup",
+                "weight": 10,
+                "sortOrder": 1,
+                "questions": [
+                  {
+                    "id": "Q_01_01_01",
+                    "type": "YES_NO",
+                    "description": "Does the project have a proper directory structure with src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories, each containing an index.ts file for importability?",
+                    "guidelines": "Yes: All directories exist with index.ts files. No: Missing or incorrect structure.",
+                    "weight": 5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_11"
+                  },
+                  {
+                    "id": "Q_01_01_02",
+                    "type": "YES_NO",
+                    "description": "Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?",
+                    "guidelines": "Yes: Constants are defined and used correctly. No: Missing or unused constants.",
+                    "weight": 5,
+                    "sortOrder": 2,
+                    "sourceRequirement": "REQ_12"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "G_02",
+            "name": "Core Admin Features",
+            "weight": 60,
+            "sortOrder": 2,
+            "sections": [
+              {
+                "id": "S_02_01",
+                "name": "Admin Tab with Role-Based Access Control",
+                "weight": 20,
+                "sortOrder": 1,
+                "questions": [
+                  {
+                    "id": "Q_02_01_01",
+                    "type": "YES_NO",
+                    "description": "Does the Admin Tab display only when the user has administrator role, as determined by the useAdminRole.ts hook and profileContext?",
+                    "guidelines": "Yes: Tab is conditionally rendered based on admin role. No: Tab is always visible or not conditionally rendered.",
+                    "weight": 10,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_01"
+                  },
+                  {
+                    "id": "Q_02_01_02",
+                    "type": "YES_NO",
+                    "description": "Does the Admin Tab include a clear 'Admin Mode' toggle that allows switching between admin and standard user views?",
+                    "guidelines": "Yes: Toggle exists and changes view behavior. No: Toggle is missing or non-functional.",
+                    "weight": 10,
+                    "sortOrder": 2,
+                    "sourceRequirement": "REQ_02"
+                  }
+                ]
+              },
+              {
+                "id": "S_02_02",
+                "name": "Filter & Sort Controls",
+                "weight": 15,
+                "sortOrder": 2,
+                "questions": [
+                  {
+                    "id": "Q_02_02_01",
+                    "type": "YES_NO",
+                    "description": "Does the collapsible filter/sort panel include controls for track (Design/Dev/QA), prize range, status (All/Completed/Active), and date range?",
+                    "guidelines": "Yes: All controls are present and functional. No: One or more controls are missing.",
+                    "weight": 7.5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_04"
+                  },
+                  {
+                    "id": "Q_02_02_02",
+                    "type": "YES_NO",
+                    "description": "Do sort options (Track, Prize, Start Date) include ascending/descending toggles and update the list immediately?",
+                    "guidelines": "Yes: Sort options are present with toggle and list updates instantly. No: Missing toggles or no immediate update.",
+                    "weight": 7.5,
+                    "sortOrder": 2,
+                    "sourceRequirement": "REQ_04"
+                  },
+                  {
+                    "id": "Q_02_02_03",
+                    "type": "YES_NO",
+                    "description": "Does clearing all filters reset the view to default curation type?",
+                    "guidelines": "Yes: Clearing all filters returns to the default curation type view. No: View remains in a filtered state.",
+                    "weight": 7.5,
+                    "sortOrder": 3,
+                    "sourceRequirement": "REQ_04"
+                  }
+                ]
+              },
+              {
+                "id": "S_02_03",
+                "name": "Paginated Challenge List",
+                "weight": 10,
+                "sortOrder": 3,
+                "questions": [
+                  {
+                    "id": "Q_02_03_01",
+                    "type": "YES_NO",
+                    "description": "Does the challenge list display a scrollable, paginated list with current page, total pages, and navigation controls (Previous/Next/page numbers)?",
+                    "guidelines": "Yes: All pagination elements are present and functional. No: Missing pagination or navigation controls.",
+                    "weight": 5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_05"
+                  },
+                  {
+                    "id": "Q_02_03_02",
+                    "type": "YES_NO",
+                    "description": "Does the UI show an empty state message when no challenges match filters and a loading spinner during data fetch?",
+                    "guidelines": "Yes: Empty state and loading spinner are displayed correctly. No: Missing either or both states.",
+                    "weight": 5,
+                    "sortOrder": 2,
+                    "sourceRequirement": "REQ_05"
+                  }
+                ]
+              },
+              {
+                "id": "S_02_04",
+                "name": "Challenge Card Display",
+                "weight": 15,
+                "sortOrder": 4,
+                "questions": [
+                  {
+                    "id": "Q_02_04_01",
+                    "type": "YES_NO",
+                    "description": "Does the ChallengeCard component display challenge metadata (name, status, track, start date, prize, tags, description) and curation annotations (category, story points)?",
+                    "guidelines": "Yes: All metadata and annotations are displayed correctly. No: Missing any required field.",
+                    "weight": 7.5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_06"
+                  },
+                  {
+                    "id": "Q_02_04_02",
+                    "type": "YES_NO",
+                    "description": "Does the description field truncate content with 'show more' if longer than 3 lines?",
+                    "guidelines": "Yes: Description is truncated and 'show more' link appears. No: Description is not truncated or link is missing.",
+                    "weight": 7.5,
+                    "sortOrder": 2,
+                    "sourceRequirement": "REQ_06"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "G_03",
+            "name": "Technical Implementation",
+            "weight": 30,
+            "sortOrder": 3,
+            "sections": [
+              {
+                "id": "S_03_01",
+                "name": "Mock Challenge Service",
+                "weight": 10,
+                "sortOrder": 1,
+                "questions": [
+                  {
+                    "id": "Q_03_01_01",
+                    "type": "YES_NO",
+                    "description": "Does the mock challenges.service.ts file provide stubbed API responses with challenges including curation categories and story points?",
+                    "guidelines": "Yes: Mock service returns data with curation and story points. No: Missing or incorrect data structure.",
+                    "weight": 5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_07"
+                  }
+                ]
+              },
+              {
+                "id": "S_03_02",
+                "name": "TypeScript Interfaces",
+                "weight": 10,
+                "sortOrder": 2,
+                "questions": [
+                  {
+                    "id": "Q_03_02_01",
+                    "type": "YES_NO",
+                    "description": "Does Challenge.model.ts define TypeScript interfaces for Challenge and Curation Annotation data matching Topcoder v6 API model?",
+                    "guidelines": "Yes: Interfaces include name, status, track, prize, startDate, tags, description, and curation properties (category, storyPoints). No: Missing or mismatched fields.",
+                    "weight": 5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_08"
+                  }
+                ]
+              },
+              {
+                "id": "S_03_03",
+                "name": "SWR Hook for Challenge List",
+                "weight": 5,
+                "sortOrder": 3,
+                "questions": [
+                  {
+                    "id": "Q_03_03_01",
+                    "type": "YES_NO",
+                    "description": "Does the useChallenges.ts hook use SWR to fetch and manage challenge list data, handling loading, error, and revalidation states?",
+                    "guidelines": "Yes: Hook correctly manages loading, error, and revalidation. No: Missing state handling or incorrect implementation.",
+                    "weight": 2.5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_09"
+                  }
+                ]
+              },
+              {
+                "id": "S_03_04",
+                "name": "Admin Role Check Hook",
+                "weight": 5,
+                "sortOrder": 4,
+                "questions": [
+                  {
+                    "id": "Q_03_04_01",
+                    "type": "YES_NO",
+                    "description": "Does the useAdminRole.ts hook check if the user has administrator role and integrate with profileContext?",
+                    "guidelines": "Yes: Hook returns boolean based on profileContext and administrator role. No: Hook is missing or does not use profileContext.",
+                    "weight": 2.5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_10"
+                  }
+                ]
+              },
+              {
+                "id": "S_03_05",
+                "name": "Component & File Structure",
+                "weight": 5,
+                "sortOrder": 5,
+                "questions": [
+                  {
+                    "id": "Q_03_05_01",
+                    "type": "YES_NO",
+                    "description": "Are new components organized under src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories with index.ts files for importability?",
+                    "guidelines": "Yes: Correct directory structure with index.ts files. No: Missing or incorrect structure.",
+                    "weight": 2.5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_11"
+                  }
+                ]
+              },
+              {
+                "id": "S_03_06",
+                "name": "Admin Constants Definition",
+                "weight": 5,
+                "sortOrder": 6,
+                "questions": [
+                  {
+                    "id": "Q_03_06_01",
+                    "type": "YES_NO",
+                    "description": "Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?",
+                    "guidelines": "Yes: Constants are defined and used correctly. No: Missing or unused constants.",
+                    "weight": 2.5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_12"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "timestamp": "2026-04-22T09:20:47.427Z"
+    },
+    {
+      "cycle": 2,
+      "reviewFeedback": {
+        "verdict": "NEEDS_REVISION",
+        "overallQuality": 0.65,
+        "issues": [
+          {
+            "questionId": "Q_02_02_01",
+            "issueType": "weight_misalignment",
+            "description": "Section 'Filter & Sort Controls' has a total weight of 22.5 (7.5 + 7.5 + 7.5), which exceeds the 15% maximum allowed for medium-priority requirements. This violates weight alignment with priority.",
+            "suggestedFix": "Reduce the weight of each question in this section to maintain a total of 15. For example, reduce each to 5, or reassign weights to reflect actual effort and priority."
+          },
+          {
+            "questionId": "Q_02_02_02",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 7.5 for this question exceeds the 10% cap for medium-priority requirements. This creates an imbalance with high-priority requirements.",
+            "suggestedFix": "Adjust the weight to 5 or lower to maintain alignment with the priority-based weight distribution."
+          },
+          {
+            "questionId": "Q_02_02_03",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 7.5 for this question exceeds the 10% cap for medium-priority requirements. This creates an imbalance with high-priority requirements.",
+            "suggestedFix": "Adjust the weight to 5 or lower to maintain alignment with the priority-based weight distribution."
+          },
+          {
+            "questionId": "Q_03_03_01",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 2.5 for this question is too low for a medium-priority requirement (REQ_09). It does not reflect the importance of implementing a core data-fetching hook.",
+            "suggestedFix": "Increase the weight to 5 to match the importance of the SWR hook implementation."
+          },
+          {
+            "questionId": "Q_03_04_01",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 2.5 for this question is too low for a medium-priority requirement (REQ_10). It does not reflect the importance of implementing a role-check hook.",
+            "suggestedFix": "Increase the weight to 5 to match the importance of the admin role check implementation."
+          },
+          {
+            "questionId": "Q_03_05_01",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 2.5 for this question is redundant and duplicates Q_01_01_01 and Q_02_01_01. This creates unnecessary duplication and misaligns with the priority of the requirement.",
+            "suggestedFix": "Remove the duplicate question or merge it with an existing one to avoid redundancy and ensure proper weight distribution."
+          },
+          {
+            "questionId": "Q_03_06_01",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 2.5 for this question duplicates Q_01_01_02 and Q_02_01_02, creating redundancy and misaligning with the priority of the requirement.",
+            "suggestedFix": "Remove the duplicate question or merge it with an existing one to avoid redundancy and ensure proper weight distribution."
+          },
+          {
+            "questionId": "Q_02_04_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_06 (Develop Challenge Card to Show Metadata and Curation Annotations) is not fully covered. The question only checks metadata and annotations, but does not verify the curation annotations are properly rendered or styled.",
+            "suggestedFix": "Add a follow-up question to verify the visual presentation and styling of curation annotations in the ChallengeCard component."
+          },
+          {
+            "questionId": "Q_02_04_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_06 does not include a requirement for responsive behavior or accessibility of the description field. This gap must be addressed.",
+            "suggestedFix": "Add a question to verify that the description field is accessible and responsive across device sizes."
+          },
+          {
+            "questionId": "Q_01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_11 (Structure Components and Files in rfp-tool Module) is not fully covered. The question only checks directory structure, but does not verify that components are properly imported and used.",
+            "suggestedFix": "Add a question to verify that components are correctly imported and used in the admin UI."
+          },
+          {
+            "questionId": "Q_01_01_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_12 (Update Constants with Admin-Specific Values) is not fully covered. The question only checks definition and usage, but does not verify that constants are updated with admin-specific values.",
+            "suggestedFix": "Add a question to verify that constants are updated with admin-specific values such as curation types or pagination defaults."
+          },
+          {
+            "questionId": "Q_02_03_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_05 (Display Paginated Challenge List with Scrollable Area) is not fully covered. The question only checks pagination controls, but does not verify scrollable area or infinite scroll behavior.",
+            "suggestedFix": "Add a question to verify that the list is scrollable and supports infinite scroll or virtualization for large datasets."
+          },
+          {
+            "questionId": "Q_02_03_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_05 does not include a requirement for loading states or error handling during data fetch. This gap must be addressed.",
+            "suggestedFix": "Add a question to verify that loading and error states are properly displayed during data fetch."
+          },
+          {
+            "questionId": "Q_02_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_01 (Enable Admin Tab with Role-Based Access Control) is not fully covered. The question only checks conditional rendering, but does not verify that the tab is properly secured or that access is restricted to admin roles.",
+            "suggestedFix": "Add a question to verify that the admin tab is properly secured and that non-admin users are denied access."
+          },
+          {
+            "questionId": "Q_02_01_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_02 (Add Development Mode for Admin Role Simulation) is not fully covered. The question only checks the existence of a toggle, but does not verify that switching between admin and standard views changes behavior.",
+            "suggestedFix": "Add a question to verify that the toggle changes the view behavior and that standard users see different content."
+          }
+        ],
+        "summary": "The scorecard fails to meet weight alignment, coverage completeness, and testability standards. Multiple high-priority requirements are underrepresented, while medium-priority requirements are overweighted. Key requirements are missing critical validation points. The scorecard must be revised to ensure proper weight distribution, full requirement coverage, and clear, testable questions."
+      },
+      "revisedScorecardDiff": {
+        "questionsAdded": [
+          "Q01_01_01",
+          "Q01_01_02"
+        ],
+        "questionsModified": [],
+        "questionsRemoved": [
+          "Q_01_01_01",
+          "Q_01_01_02",
+          "Q_02_01_01",
+          "Q_02_01_02",
+          "Q_02_02_01",
+          "Q_02_02_02",
+          "Q_02_02_03",
+          "Q_02_03_01",
+          "Q_02_03_02",
+          "Q_02_04_01",
+          "Q_02_04_02",
+          "Q_03_01_01",
+          "Q_03_02_01",
+          "Q_03_03_01",
+          "Q_03_04_01",
+          "Q_03_05_01",
+          "Q_03_06_01"
+        ],
+        "weightChanges": []
+      },
+      "revisedScorecard": {
+        "id": "rev-1",
+        "name": "Revised Scorecard for Admin UI Implementation",
+        "version": "1.1",
+        "status": "ACTIVE",
+        "type": "REVIEW",
+        "challengeTrack": "admin-ui-implementation",
+        "challengeType": "frontend",
+        "minScore": 0.8,
+        "minimumPassingScore": 0.8,
+        "maxScore": 1,
+        "scorecardGroups": [
+          {
+            "id": "G01",
+            "name": "Project Setup & Structure",
+            "weight": 10,
+            "sortOrder": 1,
+            "sections": [
+              {
+                "id": "S01_01",
+                "name": "Component & File Structure",
+                "weight": 5,
+                "sortOrder": 1,
+                "questions": [
+                  {
+                    "id": "Q01_01_01",
+                    "type": "YES_NO",
+                    "description": "Are new components organized under src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories with index.ts files for importability?",
+                    "guidelines": "Yes: Correct directory structure with index.ts files. No: Missing or incorrect structure.",
+                    "weight": 5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_11"
+                  },
+                  {
+                    "id": "Q01_01_02",
+                    "type": "YES_NO",
+                    "description": "Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?",
+                    "guidelines": "Yes: Constants are defined and used correctly. No: Missing or unused constants.",
+                    "weight": 5,
+                    "sortOrder": 1,
+                    "sourceRequirement": "REQ_12"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "timestamp": "2026-04-22T09:21:40.589Z"
+    }
+  ],
+  "finalOutput": {
+    "scorecard": {
+      "id": "rev-1",
+      "name": "Revised Scorecard for Admin UI Implementation",
+      "version": "1.1",
+      "status": "ACTIVE",
+      "type": "REVIEW",
+      "challengeTrack": "admin-ui-implementation",
+      "challengeType": "frontend",
+      "minScore": 0.8,
+      "minimumPassingScore": 0.8,
+      "maxScore": 1,
+      "scorecardGroups": [
+        {
+          "id": "G01",
+          "name": "Project Setup & Structure",
+          "weight": 10,
+          "sortOrder": 1,
+          "sections": [
+            {
+              "id": "S01_01",
+              "name": "Component & File Structure",
+              "weight": 5,
+              "sortOrder": 1,
+              "questions": [
+                {
+                  "id": "Q01_01_01",
+                  "type": "YES_NO",
+                  "description": "Are new components organized under src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories with index.ts files for importability?",
+                  "guidelines": "Yes: Correct directory structure with index.ts files. No: Missing or incorrect structure.",
+                  "weight": 5,
+                  "sortOrder": 1,
+                  "sourceRequirement": "REQ_11"
+                },
+                {
+                  "id": "Q01_01_02",
+                  "type": "YES_NO",
+                  "description": "Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?",
+                  "guidelines": "Yes: Constants are defined and used correctly. No: Missing or unused constants.",
+                  "weight": 5,
+                  "sortOrder": 1,
+                  "sourceRequirement": "REQ_12"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "traceability": {
+      "coverageScore": 0.16666666666666666,
+      "mappedRequirements": [
+        "REQ_11",
+        "REQ_12"
+      ],
+      "unmappedRequirements": [
+        "REQ_01",
+        "REQ_02",
+        "REQ_03",
+        "REQ_04",
+        "REQ_05",
+        "REQ_06",
+        "REQ_07",
+        "REQ_08",
+        "REQ_09",
+        "REQ_10"
+      ],
+      "totalRequirements": 12,
+      "totalQuestions": 2
+    },
+    "reviewHistory": [
+      {
+        "verdict": "NEEDS_REVISION",
+        "overallQuality": 0.65,
+        "issues": [
+          {
+            "questionId": "Q_01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_01 is not covered by any question in the scorecard.",
+            "suggestedFix": "Add a question that directly evaluates the Admin Tab with Role-Based Access Control as specified in REQ_01."
+          },
+          {
+            "questionId": "Q_01_01_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_02 (Development Mode for Admin Role Simulation) is not covered by any question in the scorecard.",
+            "suggestedFix": "Add a question that evaluates the presence and functionality of the development mode for admin role simulation as specified in REQ_02."
+          },
+          {
+            "questionId": "Q_02_01_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_01 has a question with only 50 weight, while medium-priority REQ_02 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_02_01_02",
+            "issueType": "weight_misalignment",
+            "description": "High-p룁ity requirement REQ_03 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_02_03_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_04 has a question with only 50 weight, while medium-priority REQ_09 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_02_03_02",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_05 has a question with only 50 weight, while medium-priority REQ_10 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_02_04_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_06 has a question with only 50 weight, while medium-priority REQ_11 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_01_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_07 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_02_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_08 has a question with only 50 weight, while medium-priority REQ_09 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_03_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_09 has a question with only 50 weight, while medium-priority REQ_10 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_04_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_10 has a question with only 50 weight, while medium-priority REQ_11 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_05_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_11 has a question with only 50 weight, while medium-priority REQ_12 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          },
+          {
+            "questionId": "Q_03_06_01",
+            "issueType": "weight_misalignment",
+            "description": "High-priority requirement REQ_12 has a question with only 50 weight, while medium-priority REQ_08 is completely missing.",
+            "suggestedFix": "Ensure high-priority requirements have sufficient weight and cover all requirements with proper alignment to priority levels."
+          }
+        ],
+        "summary": "The scorecard fails to cover all requirements, particularly missing coverage for REQ_02, REQ_08, REQ_09, REQ_10, REQ_11, and REQ_12. High-priority requirements are underweighted and not fully aligned with their priority levels. All section and group weights sum correctly, but the lack of requirement coverage and misalignment with priority levels renders the scorecard incomplete and unbalanced."
+      },
+      {
+        "verdict": "NEEDS_REVISION",
+        "overallQuality": 0.65,
+        "issues": [
+          {
+            "questionId": "Q_02_02_01",
+            "issueType": "weight_misalignment",
+            "description": "Section 'Filter & Sort Controls' has a total weight of 22.5 (7.5 + 7.5 + 7.5), which exceeds the 15% maximum allowed for medium-priority requirements. This violates weight alignment with priority.",
+            "suggestedFix": "Reduce the weight of each question in this section to maintain a total of 15. For example, reduce each to 5, or reassign weights to reflect actual effort and priority."
+          },
+          {
+            "questionId": "Q_02_02_02",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 7.5 for this question exceeds the 10% cap for medium-priority requirements. This creates an imbalance with high-priority requirements.",
+            "suggestedFix": "Adjust the weight to 5 or lower to maintain alignment with the priority-based weight distribution."
+          },
+          {
+            "questionId": "Q_02_02_03",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 7.5 for this question exceeds the 10% cap for medium-priority requirements. This creates an imbalance with high-priority requirements.",
+            "suggestedFix": "Adjust the weight to 5 or lower to maintain alignment with the priority-based weight distribution."
+          },
+          {
+            "questionId": "Q_03_03_01",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 2.5 for this question is too low for a medium-priority requirement (REQ_09). It does not reflect the importance of implementing a core data-fetching hook.",
+            "suggestedFix": "Increase the weight to 5 to match the importance of the SWR hook implementation."
+          },
+          {
+            "questionId": "Q_03_04_01",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 2.5 for this question is too low for a medium-priority requirement (REQ_10). It does not reflect the importance of implementing a role-check hook.",
+            "suggestedFix": "Increase the weight to 5 to match the importance of the admin role check implementation."
+          },
+          {
+            "questionId": "Q_03_05_01",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 2.5 for this question is redundant and duplicates Q_01_01_01 and Q_02_01_01. This creates unnecessary duplication and misaligns with the priority of the requirement.",
+            "suggestedFix": "Remove the duplicate question or merge it with an existing one to avoid redundancy and ensure proper weight distribution."
+          },
+          {
+            "questionId": "Q_03_06_01",
+            "issueType": "weight_misalignment",
+            "description": "The weight of 2.5 for this question duplicates Q_01_01_02 and Q_02_01_02, creating redundancy and misaligning with the priority of the requirement.",
+            "suggestedFix": "Remove the duplicate question or merge it with an existing one to avoid redundancy and ensure proper weight distribution."
+          },
+          {
+            "questionId": "Q_02_04_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_06 (Develop Challenge Card to Show Metadata and Curation Annotations) is not fully covered. The question only checks metadata and annotations, but does not verify the curation annotations are properly rendered or styled.",
+            "suggestedFix": "Add a follow-up question to verify the visual presentation and styling of curation annotations in the ChallengeCard component."
+          },
+          {
+            "questionId": "Q_02_04_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_06 does not include a requirement for responsive behavior or accessibility of the description field. This gap must be addressed.",
+            "suggestedFix": "Add a question to verify that the description field is accessible and responsive across device sizes."
+          },
+          {
+            "questionId": "Q_01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_11 (Structure Components and Files in rfp-tool Module) is not fully covered. The question only checks directory structure, but does not verify that components are properly imported and used.",
+            "suggestedFix": "Add a question to verify that components are correctly imported and used in the admin UI."
+          },
+          {
+            "questionId": "Q_01_01_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_12 (Update Constants with Admin-Specific Values) is not fully covered. The question only checks definition and usage, but does not verify that constants are updated with admin-specific values.",
+            "suggestedFix": "Add a question to verify that constants are updated with admin-specific values such as curation types or pagination defaults."
+          },
+          {
+            "questionId": "Q_02_03_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_05 (Display Paginated Challenge List with Scrollable Area) is not fully covered. The question only checks pagination controls, but does not verify scrollable area or infinite scroll behavior.",
+            "suggestedFix": "Add a question to verify that the list is scrollable and supports infinite scroll or virtualization for large datasets."
+          },
+          {
+            "questionId": "Q_02_03_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_05 does not include a requirement for loading states or error handling during data fetch. This gap must be addressed.",
+            "suggestedFix": "Add a question to verify that loading and error states are properly displayed during data fetch."
+          },
+          {
+            "questionId": "Q_02_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_01 (Enable Admin Tab with Role-Based Access Control) is not fully covered. The question only checks conditional rendering, but does not verify that the tab is properly secured or that access is restricted to admin roles.",
+            "suggestedFix": "Add a question to verify that the admin tab is properly secured and that non-admin users are denied access."
+          },
+          {
+            "questionId": "Q_02_01_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_02 (Add Development Mode for Admin Role Simulation) is not fully covered. The question only checks the existence of a toggle, but does not verify that switching between admin and standard views changes behavior.",
+            "suggestedFix": "Add a question to verify that the toggle changes the view behavior and that standard users see different content."
+          }
+        ],
+        "summary": "The scorecard fails to meet weight alignment, coverage completeness, and testability standards. Multiple high-priority requirements are underrepresented, while medium-priority requirements are overweighted. Key requirements are missing critical validation points. The scorecard must be revised to ensure proper weight distribution, full requirement coverage, and clear, testable questions."
+      },
+      {
+        "verdict": "NEEDS_REVISION",
+        "overallQuality": 0.45,
+        "issues": [
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_01 (Enable Admin Tab with Role-Based Access Control) is not covered by any question.",
+            "suggestedFix": "Add a question assessing the implementation of role-based access control for the admin tab, e.g., checking if the admin tab is only accessible to admin roles and if access is enforced via a hook or guard."
+          },
+          {
+            "questionId": "Q01_01_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_02 (Add Development Mode for Admin Role Simulation) is not covered by any question.",
+            "suggestedFix": "Add a question to verify the presence and functionality of a development mode that allows simulating admin role access for testing purposes."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_03 (Create Admin Sidebar with Curation Filter Buttons) is not covered by any question.",
+            "suggestedFix": "Add a question assessing the existence and functionality of the admin sidebar with curation filter buttons, including their visual design and interactivity."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_04 (Implement Sort and Filter Panel in Content Window) is not covered by any question.",
+            "suggestedFix": "Add a question to verify the implementation of a sort and filter panel in the content window, including functionality and UI elements."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_05 (Display Paginated Challenge List with Scrollable Area) is not covered by any question.",
+            "suggestedFix": "Add a question to assess the paginated challenge list with scrollable area, including pagination controls and scroll behavior."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_06 (Develop Challenge Card to Show Metadata and Curation Annotations) is not covered by any question.",
+            "suggestedFix": "Add a question to verify the challenge card displays metadata and curation annotations correctly."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_07 (Implement Mock Challenge Service with Stubbed API Calls) is not covered by any question.",
+            "suggestedFix": "Add a question to confirm the implementation of a mock service with stubbed API calls for challenge data."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_08 (Define TypeScript Interfaces for Challenge and Annotation Models) is not covered by any question.",
+            "suggestedFix": "Add a question to verify the existence and correctness of TypeScript interfaces for challenge and annotation models."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_09 (Implement SWR Hook for Challenge List Data Fetching) is not covered by any question.",
+            "suggestedFix": "Add a question to assess the implementation of the SWR hook for fetching challenge list data."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_10 (Implement Admin Role Check Hook) is not covered by any question.",
+            "suggestedFix": "Add a question to verify the implementation of the admin role check hook that enforces role-based access."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_11 (Structure Components and Files in rfp-tool Module) is partially covered but not fully — only the component structure is assessed, not the full file structure or module organization.",
+            "suggestedFix": "Expand the question to cover all aspects of component and file structure as required by REQ_11."
+          },
+          {
+            "questionId": "Q01_01_02",
+            "issueType": "missing_requirement",
+            "description": "Requirement REQ_12 (Update Constants with Admin-Specific Values) is only partially covered — it assesses constants but not their update or usage in admin-specific contexts.",
+            "suggestedFix": "Clarify and expand the question to ensure constants are updated with admin-specific values and used correctly in admin UI components."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "weight_misalignment",
+            "description": "Group G01 has a total weight of 10, which is far below the required 100. This violates the weight sum rule.",
+            "suggestedFix": "The entire scorecard must have a total group weight of 100. The current group weight of 10 is a critical misalignment."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "weight_misalignment",
+            "description": "Section S01_01 has a total weight of 10, which is not 100. This violates the section weight sum rule.",
+            "suggestedFix": "Each section must sum to exactly 100. The current section weight is 10, which is incorrect."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "weight_misalignment",
+            "description": "Question Q01_01_01 has a weight of 5, and Q01_01_02 has a weight of 5. Total question weight is 10, not 100. This violates the question weight sum rule.",
+            "suggestedFix": "Each question must be part of a section that sums to 100. The current total is 10, not 100."
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "untestable_question",
+            "description": "The question 'Are new components organized under src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories with index.ts files for importability?' uses subjective terms like 'organized' and 'importability' which are not objectively measurable.",
+            "suggestedFix": "Rewrite to a clear, testable criterion such as 'All components are placed in the correct directories and each directory contains an index.ts file that exports the components.'"
+          },
+          {
+            "questionId": "Q01_01_02",
+            "issueType": "untestable_question",
+            "description": "The question 'Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?' uses the vague term 'used throughout' which is not objectively verifiable.",
+            "suggestedFix": "Rewrite to a specific, testable criterion such as 'The constants are defined in constants.ts and referenced in at least three admin UI components (e.g., Sidebar, ChallengeList, FilterPanel).'}"
+          },
+          {
+            "questionId": "Q01_01_01",
+            "issueType": "vague_guidelines",
+            "description": "The guidelines for Q01_01_01 state 'Yes: Correct directory structure with index.ts files. No: Missing or incorrect structure.' This is vague and does not define what constitutes a 'correct' structure or how to verify it.",
+            "suggestedFix": "Define specific criteria such as 'Each directory must have an index.ts file that exports all components, models, services, hooks, and mocks in that directory.'"
+          },
+          {
+            "questionId": "Q01_01_02",
+            "issueType": "vague_guidelines",
+            "description": "The guidelines for Q01_01_02 state 'Yes: Constants are defined and used correctly. No: Missing or unused constants.' This is vague and does not define what 'correctly used' means.",
+            "suggestedFix": "Define specific criteria such as 'Constants are defined in constants.ts and referenced in at least three admin UI components with correct values.'"
+          }
+        ],
+        "summary": "The scorecard fails to cover all requirements, has severe weight misalignments (total group weight is 10 instead of 100), and contains untestable and vague questions. It is not aligned with the challenge requirements and must be revised."
+      }
+    ],
+    "revisionCount": 2,
+    "finalVerdict": {
+      "verdict": "NEEDS_REVISION",
+      "overallQuality": 0.45,
+      "issues": [
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_01 (Enable Admin Tab with Role-Based Access Control) is not covered by any question.",
+          "suggestedFix": "Add a question assessing the implementation of role-based access control for the admin tab, e.g., checking if the admin tab is only accessible to admin roles and if access is enforced via a hook or guard."
+        },
+        {
+          "questionId": "Q01_01_02",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_02 (Add Development Mode for Admin Role Simulation) is not covered by any question.",
+          "suggestedFix": "Add a question to verify the presence and functionality of a development mode that allows simulating admin role access for testing purposes."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_03 (Create Admin Sidebar with Curation Filter Buttons) is not covered by any question.",
+          "suggestedFix": "Add a question assessing the existence and functionality of the admin sidebar with curation filter buttons, including their visual design and interactivity."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_04 (Implement Sort and Filter Panel in Content Window) is not covered by any question.",
+          "suggestedFix": "Add a question to verify the implementation of a sort and filter panel in the content window, including functionality and UI elements."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_05 (Display Paginated Challenge List with Scrollable Area) is not covered by any question.",
+          "suggestedFix": "Add a question to assess the paginated challenge list with scrollable area, including pagination controls and scroll behavior."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_06 (Develop Challenge Card to Show Metadata and Curation Annotations) is not covered by any question.",
+          "suggestedFix": "Add a question to verify the challenge card displays metadata and curation annotations correctly."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_07 (Implement Mock Challenge Service with Stubbed API Calls) is not covered by any question.",
+          "suggestedFix": "Add a question to confirm the implementation of a mock service with stubbed API calls for challenge data."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_08 (Define TypeScript Interfaces for Challenge and Annotation Models) is not covered by any question.",
+          "suggestedFix": "Add a question to verify the existence and correctness of TypeScript interfaces for challenge and annotation models."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_09 (Implement SWR Hook for Challenge List Data Fetching) is not covered by any question.",
+          "suggestedFix": "Add a question to assess the implementation of the SWR hook for fetching challenge list data."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_10 (Implement Admin Role Check Hook) is not covered by any question.",
+          "suggestedFix": "Add a question to verify the implementation of the admin role check hook that enforces role-based access."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_11 (Structure Components and Files in rfp-tool Module) is partially covered but not fully — only the component structure is assessed, not the full file structure or module organization.",
+          "suggestedFix": "Expand the question to cover all aspects of component and file structure as required by REQ_11."
+        },
+        {
+          "questionId": "Q01_01_02",
+          "issueType": "missing_requirement",
+          "description": "Requirement REQ_12 (Update Constants with Admin-Specific Values) is only partially covered — it assesses constants but not their update or usage in admin-specific contexts.",
+          "suggestedFix": "Clarify and expand the question to ensure constants are updated with admin-specific values and used correctly in admin UI components."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "weight_misalignment",
+          "description": "Group G01 has a total weight of 10, which is far below the required 100. This violates the weight sum rule.",
+          "suggestedFix": "The entire scorecard must have a total group weight of 100. The current group weight of 10 is a critical misalignment."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "weight_misalignment",
+          "description": "Section S01_01 has a total weight of 10, which is not 100. This violates the section weight sum rule.",
+          "suggestedFix": "Each section must sum to exactly 100. The current section weight is 10, which is incorrect."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "weight_misalignment",
+          "description": "Question Q01_01_01 has a weight of 5, and Q01_01_02 has a weight of 5. Total question weight is 10, not 100. This violates the question weight sum rule.",
+          "suggestedFix": "Each question must be part of a section that sums to 100. The current total is 10, not 100."
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "untestable_question",
+          "description": "The question 'Are new components organized under src/apps/rfp-tool/lib/components, models, services, hooks, and mock directories with index.ts files for importability?' uses subjective terms like 'organized' and 'importability' which are not objectively measurable.",
+          "suggestedFix": "Rewrite to a clear, testable criterion such as 'All components are placed in the correct directories and each directory contains an index.ts file that exports the components.'"
+        },
+        {
+          "questionId": "Q01_01_02",
+          "issueType": "untestable_question",
+          "description": "The question 'Are admin-related constants (curation types, track options, pagination defaults) defined in src/apps/rfp-tool/src/config/constants.ts and used throughout the admin UI?' uses the vague term 'used throughout' which is not objectively verifiable.",
+          "suggestedFix": "Rewrite to a specific, testable criterion such as 'The constants are defined in constants.ts and referenced in at least three admin UI components (e.g., Sidebar, ChallengeList, FilterPanel).'}"
+        },
+        {
+          "questionId": "Q01_01_01",
+          "issueType": "vague_guidelines",
+          "description": "The guidelines for Q01_01_01 state 'Yes: Correct directory structure with index.ts files. No: Missing or incorrect structure.' This is vague and does not define what constitutes a 'correct' structure or how to verify it.",
+          "suggestedFix": "Define specific criteria such as 'Each directory must have an index.ts file that exports all components, models, services, hooks, and mocks in that directory.'"
+        },
+        {
+          "questionId": "Q01_01_02",
+          "issueType": "vague_guidelines",
+          "description": "The guidelines for Q01_01_02 state 'Yes: Constants are defined and used correctly. No: Missing or unused constants.' This is vague and does not define what 'correctly used' means.",
+          "suggestedFix": "Define specific criteria such as 'Constants are defined in constants.ts and referenced in at least three admin UI components with correct values.'"
+        }
+      ],
+      "summary": "The scorecard fails to cover all requirements, has severe weight misalignments (total group weight is 10 instead of 100), and contains untestable and vague questions. It is not aligned with the challenge requirements and must be revised."
+    }
+  }
+}
