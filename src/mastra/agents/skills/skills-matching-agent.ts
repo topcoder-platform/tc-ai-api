@@ -1,8 +1,10 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { wipro } from '../../../utils';
+import { bedrock } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
 import { instanceScorers } from '../../scorers/instance-scorers';
+
+const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 export const skillsMatchingAgent = new Agent({
   id: 'skillsMatchingAgent',
@@ -26,23 +28,20 @@ Output requirements:
 - No prose, no markdown, no extra keys.
 `,
   },
-  model: wipro.chatModel('gpt-5-chat', {
-    temperature: 0.1,
-    topP: 0.5,
-  }),
+  model: bedrock(MODEL_ID),
   scorers: {
     answerRelevancy: {
       scorer: instanceScorers.instanceAnswerRelevancyScorer,
       sampling: {
         type: 'ratio',
-        rate: Number(process.env.EVAL_SAMPLE_RATE ?? 0.5),
+        rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
       },
     },
     promptAlignment: {
       scorer: instanceScorers.instancePromptAlignmentScorer,
       sampling: {
         type: 'ratio',
-        rate: Number(process.env.EVAL_SAMPLE_RATE ?? 0.5),
+        rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
       },
     },
   },

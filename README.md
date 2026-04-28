@@ -117,7 +117,7 @@ tc-ai-api/
 | `SKILL_MATCHING_FUZZY_MATCH_SIZE`   | No       | `3`                                    | Number of candidates returned per fuzzy-match query              |
 | `SKILL_MATCHING_CONCURRENCY`        | No       | `5`                                    | Concurrency limit for parallel skill-matching requests           |
 | `SKILL_MATCHING_SEMANTIC_THRESHOLD` | No       | `0.45`                                 | Max cosine distance for semantic matches (lower = stricter)      |
-| `SKILL_DISCOVERY_EVAL_SAMPLE_RATE`  | No       | `0.5`                                  | Fraction of agent interactions sampled for evaluation scoring    |
+| `SKILL_DISCOVERY_EVAL_SAMPLE_RATE`  | No       | -                                      | Fraction of agent interactions sampled for evaluation scoring    |
 
 > \* Auth0 variables are required unless `DISABLE_AUTH=true`.
 

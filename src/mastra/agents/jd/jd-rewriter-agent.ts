@@ -1,15 +1,12 @@
 import { Agent } from '@mastra/core/agent';
-import { wipro } from '../../../utils';
+import { bedrock } from '../../../utils';
+
+const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 export const jdRewriterAgent = new Agent({
     id: 'jd-rewriter-agent',
     name: 'Job Description Rewriter',
-    model: wipro.chatModel('gpt-5-chat', {
-        temperature: 0.3,
-        topK: 40,
-        topP: 0.9,
-        maxOutputTokens: 16384,
-    }),
+    model: bedrock(MODEL_ID),
     instructions: {
         role: 'system',
         content: `You are an expert technical recruiter and job description writer for Topcoder.

@@ -8,3 +8,4 @@ dist
 *.db-*
 .vscode
 test-data
+.env.sh
