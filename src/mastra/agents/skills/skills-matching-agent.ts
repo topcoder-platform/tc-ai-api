@@ -4,7 +4,7 @@ import { bedrock } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
 import { instanceScorers } from '../../scorers/instance-scorers';
 
-const MODEL_ID = 'anthropic.claude-haiku-4-5-20251001-v1:0';
+const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 export const skillsMatchingAgent = new Agent({
   id: 'skillsMatchingAgent',
