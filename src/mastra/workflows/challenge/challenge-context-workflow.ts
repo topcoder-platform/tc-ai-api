@@ -48,18 +48,18 @@ const reviewerInfoSchema = z.object({
 const runtimeEnvironmentSchema = z.object({
     os: z.string().describe('Expected target operating system (e.g. "Linux", "Windows", "macOS", "any", "unknown")'),
     containerized: z.boolean().describe('Whether the challenge expects the solution to run inside a container (Docker, Podman, etc.)'),
-    containerTool: z.string().optional().describe('Expected container tool if containerized (e.g. "Docker", "Docker Compose", "Podman", "Kubernetes")'),
-    dockerfileExpected: z.boolean().optional().describe('Whether the challenge expects a Dockerfile / docker-compose file to be included in the submission'),
+    containerTool: z.string().nullable().optional().describe('Expected container tool if containerized (e.g. "Docker", "Docker Compose", "Podman", "Kubernetes")'),
+    dockerfileExpected: z.boolean().nullable().optional().describe('Whether the challenge expects a Dockerfile / docker-compose file to be included in the submission'),
     runtimeEngine: z.string().describe('Expected primary runtime engine (e.g. "Node.js", "Python", "JVM", "Go", ".NET CLR", "browser", "unknown")'),
-    runtimeVersion: z.string().optional().describe('Required runtime version if specified in the challenge (e.g. ">=18", "3.11", "21 LTS")'),
+    runtimeVersion: z.string().nullable().optional().describe('Required runtime version if specified in the challenge (e.g. ">=18", "3.11", "21 LTS")'),
     programmingLanguages: z.array(z.string()).describe('Programming languages required by the challenge (e.g. ["TypeScript", "Python"])'),
-    packageManager: z.string().optional().describe('Expected package manager if mentioned in the challenge (e.g. "npm", "pnpm", "yarn", "pip", "poetry", "maven")'),
-    buildTool: z.string().optional().describe('Expected build tool if mentioned in the challenge (e.g. "webpack", "vite", "tsc", "gradle", "make")'),
-    deploymentTarget: z.string().optional().describe('Expected deployment target if specified (e.g. "AWS Lambda", "Vercel", "Heroku", "on-premise", "local")'),
-    serverType: z.string().optional().describe('Expected server framework or type if specified (e.g. "Express", "NestJS", "FastAPI", "Spring Boot")'),
-    databaseEngine: z.string().optional().describe('Expected primary database if mentioned in the challenge (e.g. "PostgreSQL", "MongoDB", "DynamoDB")'),
-    additionalServices: z.array(z.string()).optional().describe('Additional services expected by the challenge (e.g. ["Redis", "RabbitMQ", "Elasticsearch"])'),
-    notes: z.string().optional().describe('Any other runtime / environment expectations inferred from the challenge spec'),
+    packageManager: z.string().nullable().optional().describe('Expected package manager if mentioned in the challenge (e.g. "npm", "pnpm", "yarn", "pip", "poetry", "maven")'),
+    buildTool: z.string().nullable().optional().describe('Expected build tool if mentioned in the challenge (e.g. "webpack", "vite", "tsc", "gradle", "make")'),
+    deploymentTarget: z.string().nullable().optional().describe('Expected deployment target if specified (e.g. "AWS Lambda", "Vercel", "Heroku", "on-premise", "local")'),
+    serverType: z.string().nullable().optional().describe('Expected server framework or type if specified (e.g. "Express", "NestJS", "FastAPI", "Spring Boot")'),
+    databaseEngine: z.string().nullable().optional().describe('Expected primary database if mentioned in the challenge (e.g. "PostgreSQL", "MongoDB", "DynamoDB")'),
+    additionalServices: z.array(z.string()).nullable().optional().describe('Additional services expected by the challenge (e.g. ["Redis", "RabbitMQ", "Elasticsearch"])'),
+    notes: z.string().nullable().optional().describe('Any other runtime / environment expectations inferred from the challenge spec'),
 });
 
 /**
@@ -92,10 +92,10 @@ const existingCodebaseSchema = z.object({
         'List of pre-existing artifacts referenced by the challenge (repos, starter code, docs, designs, etc.). '
         + 'Empty array if greenfield.',
     ),
-    repositoryUrl: z.string().optional().describe(
+    repositoryUrl: z.string().nullable().optional().describe(
         'Primary Git repository URL if an existing codebase is provided',
     ),
-    branchOrTag: z.string().optional().describe(
+    branchOrTag: z.string().nullable().optional().describe(
         'Branch, tag, or commit reference to use if specified',
     ),
     languages: z.array(z.string()).optional().describe(
