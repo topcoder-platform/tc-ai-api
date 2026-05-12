@@ -7,7 +7,7 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "dev": "mastra dev",
-    "build": "mastra build --studio",
+    "build": "mastra build",
     "start": "mastra start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
