@@ -1,15 +1,17 @@
 import { Agent } from '@mastra/core/agent';
-import { bedrock } from '../../../utils';
+import { createModel } from '../../../utils';
 
+const PROVIDER_NAME = 'AWSBedrock';
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const AGENT_ID = 'jd-rewriter-agent';
 
 export const jdRewriterAgent = new Agent({
-    id: 'jd-rewriter-agent',
-    name: 'Job Description Rewriter',
-    model: bedrock(MODEL_ID),
-    instructions: {
-        role: 'system',
-        content: `You are an expert technical recruiter and job description writer for Topcoder.
+   id: AGENT_ID,
+   name: 'Job Description Rewriter',
+   model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
+   instructions: {
+      role: 'system',
+      content: `You are an expert technical recruiter and job description writer for Topcoder.
 Your sole job is to take a raw, rough, or vague job description and rewrite it
 into a clear, professional, well-structured format suitable for posting as a
 Topcoder opportunity.
@@ -44,7 +46,6 @@ STRICT OUTPUT CONTRACT
 ────────────────────────────────────────────────────────
 Return ONLY the JSON object matching the provided schema.
 Do NOT add commentary, markdown fences, or extra keys.
-Every field is mandatory per the schema — never omit a key.
-/no_think`,
-    },
+Every field is mandatory per the schema — never omit a key.`,
+   },
 });

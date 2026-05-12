@@ -25,30 +25,31 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^4.0.96",
-    "@aws-sdk/credential-providers": "^3.1033.0",
+    "@ai-sdk/amazon-bedrock": "^4.0.104",
+    "@ai-sdk/openai": "^3.0.63",
+    "@aws-sdk/credential-providers": "^3.1045.0",
     "@mastra/auth-auth0": "^1.0.1",
-    "@mastra/core": "^1.25.0",
-    "@mastra/evals": "^1.2.1",
-    "@mastra/libsql": "^1.8.1",
+    "@mastra/core": "^1.32.1",
+    "@mastra/evals": "^1.2.2",
+    "@mastra/libsql": "^1.10.0",
     "@mastra/loggers": "^1.1.1",
-    "@mastra/memory": "^1.15.1",
-    "@mastra/observability": "^1.9.1",
-    "@mastra/pg": "^1.9.1",
+    "@mastra/memory": "^1.17.5",
+    "@mastra/observability": "^1.11.1",
+    "@mastra/pg": "^1.10.0",
     "@topcoder/wipro-ai-sdk-provider": "git+https://git.topcoder.com/Topcoder-Platform/Wipro-Provider-AI-SDK.git",
-    "ai": "^6.0.168",
-    "ai-sdk-ollama": "^3.8.3",
+    "ai": "^6.0.177",
+    "ai-sdk-ollama": "^3.8.4",
     "tc-core-library-js": "^2.4.1",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^25.6.0",
-    "eslint": "^10.2.1",
-    "mastra": "^1.6.0",
+    "@types/node": "^25.7.0",
+    "eslint": "^10.3.0",
+    "mastra": "^1.8.1",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.0",
-    "vitest": "^4.1.4"
+    "typescript-eslint": "^8.59.3",
+    "vitest": "^4.1.6"
   }
 }

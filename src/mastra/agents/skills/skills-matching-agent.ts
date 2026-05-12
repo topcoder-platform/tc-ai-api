@@ -1,13 +1,16 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { bedrock } from '../../../utils';
+import { createModel } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
 import { instanceScorers } from '../../scorers/instance-scorers';
 
+
+const PROVIDER_NAME = 'AWSBedrock';
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const AGENT_ID = 'skillsMatchingAgent';
 
 export const skillsMatchingAgent = new Agent({
-  id: 'skillsMatchingAgent',
+  id: AGENT_ID,
   name: 'Skill terms matching agent for Topcoder standardized skills from a given text',
   instructions: {
     role: 'system',
@@ -28,7 +31,7 @@ Output requirements:
 - No prose, no markdown, no extra keys.
 `,
   },
-  model: bedrock(MODEL_ID),
+  model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
   scorers: {
     answerRelevancy: {
       scorer: instanceScorers.instanceAnswerRelevancyScorer,

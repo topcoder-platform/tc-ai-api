@@ -1,7 +1,9 @@
 import { Agent } from '@mastra/core/agent';
-import { bedrock } from '../../../utils';
+import { createModel } from '../../../utils';
 
+const PROVIDER_NAME = 'AWSBedrock';
 const MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
+const AGENT_ID = 'challenge-parser-agent';
 
 /**
  * Master agent responsible for parsing Topcoder challenge specifications.
@@ -14,9 +16,9 @@ const MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
  * codebase-detection, and submission-guidelines-extraction.
  */
 export const challengeParserAgent = new Agent({
-   id: 'challenge-parser-agent',
+   id: AGENT_ID,
    name: 'Challenge Specification Parser',
-   model: bedrock(MODEL_ID),
+   model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
    instructions: {
       role: 'system',
       content: `You are an expert Topcoder challenge specification analyst.
@@ -66,7 +68,6 @@ STRICT OUTPUT CONTRACT
 ────────────────────────────────────────────────────────
 Return ONLY the JSON object matching the provided schema.
 Do NOT add commentary, markdown fences, or extra keys.
-Every field is mandatory per the schema — never omit a key.
-/no_think`,
+Every field is mandatory per the schema — never omit a key.`,
    },
 });
