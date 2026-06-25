@@ -1,8 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { createModel } from '../../../utils';
 
-const PROVIDER_NAME = 'AWSBedrock';
-const MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
+const PROVIDER_NAME = process.env.CHALLENGE_PARSER_AI_PROVIDER || 'TC-Ollama';
+const MODEL_ID = process.env.CHALLENGE_PARSER_AI_MODEL_ID || 'qwen3.5:4b';
 const AGENT_ID = 'challenge-parser-agent';
 
 /**

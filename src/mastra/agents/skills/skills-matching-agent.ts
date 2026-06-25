@@ -4,9 +4,11 @@ import { createModel } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
 import { instanceScorers } from '../../scorers/instance-scorers';
 
+// Feature flag: Enable scorers only in local dev
+const IS_LOCAL_DEV = process.env.LOCAL_DEV === 'true';
 
-const PROVIDER_NAME = 'AWSBedrock';
-const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const PROVIDER_NAME = process.env.SKILLS_EXTRACTOR_AI_PROVIDER || 'TC-Ollama';
+const MODEL_ID = process.env.SKILLS_EXTRACTOR_AI_MODEL_ID || 'qwen3.5:4b';
 const AGENT_ID = 'skillsMatchingAgent';
 
 export const skillsMatchingAgent = new Agent({
@@ -32,22 +34,23 @@ Output requirements:
 `,
   },
   model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
-  scorers: {
-    answerRelevancy: {
-      scorer: instanceScorers.instanceAnswerRelevancyScorer,
-      sampling: {
-        type: 'ratio',
-        rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
+  scorers: IS_LOCAL_DEV
+    ? {
+      answerRelevancy: {
+        scorer: instanceScorers.instanceAnswerRelevancyScorer,
+        sampling: {
+          type: 'ratio',
+          rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
+        },
       },
-    },
-    promptAlignment: {
-      scorer: instanceScorers.instancePromptAlignmentScorer,
-      sampling: {
-        type: 'ratio',
-        rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
+      promptAlignment: {
+        scorer: instanceScorers.instancePromptAlignmentScorer,
+        sampling: {
+          type: 'ratio',
+          rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
+        },
       },
-    },
-  },
+    } : undefined,
   memory: new Memory({
     storage: new PostgresStore({
       id: 'skills-matching-agent-memory',

@@ -1,8 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { createModel } from '../../../utils';
 
-const PROVIDER_NAME = 'AWSBedrock';
-const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const PROVIDER_NAME = process.env.JD_REWRITER_AI_PROVIDER || 'TC-Ollama';
+const MODEL_ID = process.env.JD_REWRITER_AI_MODEL_ID || 'qwen3.5:4b';
 const AGENT_ID = 'jd-rewriter-agent';
 
 export const jdRewriterAgent = new Agent({

@@ -11,7 +11,13 @@ export function createModel(providerName: string, modelName: string, agentId?: s
 
     switch (providerName) {
         case 'TC-Ollama':
-            return ollama(modelName);
+            return ollama(modelName, {
+                // options: {
+                //     temperature: Number(process.env.OLLAMA_TEMPERATURE || 0.1),
+                //     num_batch: Number(process.env.OLLAMA_NUM_BATCH || 1024),
+                //     num_predict: Number(process.env.OLLAMA_NUM_PREDICT || 2048),
+                // }
+            });
 
         case 'WiproAI':
             return wipro.chatModel(modelName);
