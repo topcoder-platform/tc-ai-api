@@ -46,6 +46,20 @@ export const mastra = new Mastra({
       apiReqLogs: true,
     },
     middleware: middlewareConfig,
+    cors: {
+      origin: '*',
+      allowMethods: ['POST', 'GET', 'OPTIONS', 'HEAD', 'PUT', 'PATCH', 'DELETE'],
+      exposeHeaders: [
+        "X-Prev-Page",
+        "X-Next-Page",
+        "X-Page",
+        "X-Per-Page",
+        "X-Total",
+        "X-Total-Pages",
+        "Link",
+      ],
+      maxAge: 3600
+    }
   },
   bundler: {
     externals: ["tc-core-library-js"],
