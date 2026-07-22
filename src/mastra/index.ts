@@ -41,11 +41,26 @@ export const mastra = new Mastra({
     host: process.env.MASTRA_HOST || process.env.HOST || '0.0.0.0',
     port: Number(process.env.PORT || 3000),
     studioBase: '/studio',
+    apiPrefix: '/v6/ai',
     auth: process.env.DISABLE_AUTH === 'true' ? undefined : apiAuthLayer,
     build: {
       apiReqLogs: true,
     },
     middleware: middlewareConfig,
+    cors: {
+      origin: '*',
+      allowMethods: ['POST', 'GET', 'OPTIONS', 'HEAD', 'PUT', 'PATCH', 'DELETE'],
+      exposeHeaders: [
+        "X-Prev-Page",
+        "X-Next-Page",
+        "X-Page",
+        "X-Per-Page",
+        "X-Total",
+        "X-Total-Pages",
+        "Link",
+      ],
+      maxAge: 3600
+    }
   },
   bundler: {
     externals: ["tc-core-library-js"],

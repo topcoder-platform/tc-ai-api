@@ -946,14 +946,36 @@ async function extractWithAI(
     const agent = mastra.getAgentById('challenge-parser-agent');
     const challengeText = buildChallengeText(data);
 
-    tcAILogger.info('[challenge-context:extractWithAI] Starting decomposed extraction (4 focused calls)...');
+    tcAILogger.info('[challenge-context:extractWithAI] Starting decomposed extraction...');
 
-    const [reqResult, techResult, codebaseResult, guidelinesResult] = await Promise.all([
-        extractRequirementsAndGroups(agent, challengeText),
-        extractTechAndRuntime(agent, challengeText),
-        extractExistingCodebase(agent, challengeText),
-        extractSubmissionGuidelines(agent, challengeText),
+    // Run requirements extraction first (sequential) to avoid orphaned promises on early failure
+    tcAILogger.debug('[challenge-context:extractWithAI] Step 1/4: extractRequirementsAndGroups');
+    let reqResult;
+    try {
+        reqResult = await extractRequirementsAndGroups(agent, challengeText);
+        tcAILogger.debug('[challenge-context:extractWithAI] Step 1/4: extractRequirementsAndGroups completed');
+    } catch (err) {
+        tcAILogger.error(`[challenge-context:extractWithAI] Step 1/4: extractRequirementsAndGroups FAILED: ${err}`);
+        throw err;
+    }
+
+    // Run remaining extractions in parallel with individual error tracking
+    tcAILogger.debug('[challenge-context:extractWithAI] Steps 2-4: Starting parallel extractions (tech, codebase, guidelines)');
+    const [techResult, codebaseResult, guidelinesResult] = await Promise.all([
+        extractTechAndRuntime(agent, challengeText).catch(err => {
+            tcAILogger.error(`[challenge-context:extractWithAI] Step 2/4: extractTechAndRuntime FAILED: ${err}`);
+            throw err;
+        }),
+        extractExistingCodebase(agent, challengeText).catch(err => {
+            tcAILogger.error(`[challenge-context:extractWithAI] Step 3/4: extractExistingCodebase FAILED: ${err}`);
+            throw err;
+        }),
+        extractSubmissionGuidelines(agent, challengeText).catch(err => {
+            tcAILogger.error(`[challenge-context:extractWithAI] Step 4/4: extractSubmissionGuidelines FAILED: ${err}`);
+            throw err;
+        }),
     ]);
+    tcAILogger.debug('[challenge-context:extractWithAI] Steps 2-4: All parallel extractions completed');
 
     // -- Post-extraction validations ------------------------------------------
     const descriptionText = (data.description as string) ?? '';

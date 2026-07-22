@@ -1,13 +1,18 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { bedrock } from '../../../utils';
+import { createModel } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
 import { instanceScorers } from '../../scorers/instance-scorers';
 
-const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+// Feature flag: Enable scorers only in local dev
+const IS_LOCAL_DEV = process.env.LOCAL_DEV === 'true';
+
+const PROVIDER_NAME = process.env.SKILLS_EXTRACTOR_AI_PROVIDER || 'TC-Ollama';
+const MODEL_ID = process.env.SKILLS_EXTRACTOR_AI_MODEL_ID || 'qwen3.5:4b';
+const AGENT_ID = 'skillsMatchingAgent';
 
 export const skillsMatchingAgent = new Agent({
-  id: 'skillsMatchingAgent',
+  id: AGENT_ID,
   name: 'Skill terms matching agent for Topcoder standardized skills from a given text',
   instructions: {
     role: 'system',
@@ -28,23 +33,24 @@ Output requirements:
 - No prose, no markdown, no extra keys.
 `,
   },
-  model: bedrock(MODEL_ID),
-  scorers: {
-    answerRelevancy: {
-      scorer: instanceScorers.instanceAnswerRelevancyScorer,
-      sampling: {
-        type: 'ratio',
-        rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
+  model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
+  scorers: IS_LOCAL_DEV
+    ? {
+      answerRelevancy: {
+        scorer: instanceScorers.instanceAnswerRelevancyScorer,
+        sampling: {
+          type: 'ratio',
+          rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
+        },
       },
-    },
-    promptAlignment: {
-      scorer: instanceScorers.instancePromptAlignmentScorer,
-      sampling: {
-        type: 'ratio',
-        rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
+      promptAlignment: {
+        scorer: instanceScorers.instancePromptAlignmentScorer,
+        sampling: {
+          type: 'ratio',
+          rate: Number(process.env.EVAL_SAMPLE_RATE || 0),
+        },
       },
-    },
-  },
+    } : undefined,
   memory: new Memory({
     storage: new PostgresStore({
       id: 'skills-matching-agent-memory',
