@@ -7,8 +7,8 @@ import { instanceScorers } from '../../scorers/instance-scorers';
 // Feature flag: Enable scorers only in local dev
 const IS_LOCAL_DEV = process.env.LOCAL_DEV === 'true';
 
-const PROVIDER_NAME = process.env.SKILLS_EXTRACTOR_AI_PROVIDER || 'TC-Ollama';
-const MODEL_ID = process.env.SKILLS_EXTRACTOR_AI_MODEL_ID || 'qwen3.5:4b';
+const PROVIDER_NAME = process.env.SKILLS_EXTRACTOR_AI_PROVIDER || 'AWSBedrock';
+const MODEL_ID = process.env.SKILLS_EXTRACTOR_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const AGENT_ID = 'skillsMatchingAgent';
 
 export const skillsMatchingAgent = new Agent({
