@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { Observability, SensitiveDataFilter } from '@mastra/observability';
 import { skillExtractionWorkflow } from './workflows/skills/skill-extraction-workflow';
 import { challengeContextWorkflow } from './workflows/challenge/challenge-context-workflow';
 import { jdAutowriteWorkflow } from './workflows/jd/jd-autowrite-workflow';
@@ -7,6 +7,7 @@ import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
 import { challengeParserAgent } from './agents/challenge/challenge-parser-agent';
 import { jdRewriterAgent } from './agents/jd/jd-rewriter-agent';
 import { PostgresStore } from '@mastra/pg';
+import { OtelExporter } from '@mastra/otel-exporter'
 import {
   instanceAnswerRelevancyScorer,
   instancePromptAlignmentScorer,
@@ -31,7 +32,31 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'tc-ai-api',
-        exporters: [new DefaultExporter()],
+        exporters: [
+          new OtelExporter({
+            provider: {
+              custom: {
+                endpoint: process.env.CLOUD_WATCH_OTEL_ENDPOINT || 'https://monitoring.us-east-1.amazonaws.com',
+                protocol: 'http/protobuf',
+                headers: {
+                  'x-api-key': process.env.CLOUD_WATCH_OTEL_TOKEN || '',
+                  'Authorization': `Bearer ${process.env.CLOUD_WATCH_OTEL_TOKEN || ''}`
+                },
+              },
+            },
+            signals: {
+              traces: true,
+              logs: true,
+            },
+            timeout: 30000,
+            batchSize: 100,
+            logLevel: 'info',
+            resourceAttributes: {
+              'service.name': 'tc-ai-api',
+              'department': 'tc-ai-api',
+            },
+          })
+        ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
