@@ -36,11 +36,12 @@ export const mastra = new Mastra({
           new OtelExporter({
             provider: {
               custom: {
-                endpoint: process.env.CLOUD_WATCH_OTEL_ENDPOINT || 'https://monitoring.us-east-1.amazonaws.com',
+                endpoint: process.env.CLOUD_WATCH_OTEL_ENDPOINT || 'https://logs.us-east-1.amazonaws.com/v1/logs',
                 protocol: 'http/protobuf',
                 headers: {
-                  'x-api-key': process.env.CLOUD_WATCH_OTEL_TOKEN || '',
-                  'Authorization': `Bearer ${process.env.CLOUD_WATCH_OTEL_TOKEN || ''}`
+                  'Authorization': `Bearer ${process.env.CLOUD_WATCH_OTEL_TOKEN || ''}`,
+                  'x-aws-log-group': process.env.CLOUDWATCH_LOG_GROUP || '/aws/ecs/ai-api',
+                  'x-aws-log-stream': process.env.CLOUDWATCH_LOG_STREAM || 'mastra-app-stream',
                 },
               },
             },
@@ -51,10 +52,6 @@ export const mastra = new Mastra({
             timeout: 30000,
             batchSize: 100,
             logLevel: 'info',
-            resourceAttributes: {
-              'service.name': 'tc-ai-api',
-              'department': 'tc-ai-api',
-            },
           })
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
