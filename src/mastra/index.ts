@@ -1,5 +1,4 @@
 import { Mastra } from '@mastra/core';
-import { Observability, SensitiveDataFilter } from '@mastra/observability';
 import { skillExtractionWorkflow } from './workflows/skills/skill-extraction-workflow';
 import { challengeContextWorkflow } from './workflows/challenge/challenge-context-workflow';
 import { jdAutowriteWorkflow } from './workflows/jd/jd-autowrite-workflow';
@@ -7,7 +6,6 @@ import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
 import { challengeParserAgent } from './agents/challenge/challenge-parser-agent';
 import { jdRewriterAgent } from './agents/jd/jd-rewriter-agent';
 import { PostgresStore } from '@mastra/pg';
-import { OtelExporter } from '@mastra/otel-exporter'
 import {
   instanceAnswerRelevancyScorer,
   instancePromptAlignmentScorer,
@@ -28,36 +26,6 @@ export const mastra = new Mastra({
     schemaName: process.env.MASTRA_DB_SCHEMA || 'ai'
   }),
   logger: tcAILogger,
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'tc-ai-api',
-        exporters: [
-          new OtelExporter({
-            provider: {
-              custom: {
-                endpoint: process.env.CLOUD_WATCH_OTEL_ENDPOINT || 'https://logs.us-east-1.amazonaws.com/v1/logs',
-                protocol: 'http/protobuf',
-                headers: {
-                  'Authorization': `Bearer ${process.env.CLOUD_WATCH_OTEL_TOKEN || ''}`,
-                  'x-aws-log-group': process.env.CLOUDWATCH_LOG_GROUP || '/aws/ecs/ai-api',
-                  'x-aws-log-stream': process.env.CLOUDWATCH_LOG_STREAM || 'mastra-app-stream',
-                },
-              },
-            },
-            signals: {
-              traces: true,
-              logs: true,
-            },
-            timeout: 30000,
-            batchSize: 100,
-            logLevel: 'info',
-          })
-        ],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
   workspace: aiWorkspace,
   server: {
     host: process.env.MASTRA_HOST || process.env.HOST || '0.0.0.0',
