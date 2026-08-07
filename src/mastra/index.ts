@@ -1,5 +1,4 @@
 import { Mastra } from '@mastra/core';
-import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { skillExtractionWorkflow } from './workflows/skills/skill-extraction-workflow';
 import { challengeContextWorkflow } from './workflows/challenge/challenge-context-workflow';
 import { jdAutowriteWorkflow } from './workflows/jd/jd-autowrite-workflow';
@@ -27,21 +26,12 @@ export const mastra = new Mastra({
     schemaName: process.env.MASTRA_DB_SCHEMA || 'ai'
   }),
   logger: tcAILogger,
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'tc-ai-api',
-        exporters: [new DefaultExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
   workspace: aiWorkspace,
   server: {
     host: process.env.MASTRA_HOST || process.env.HOST || '0.0.0.0',
     port: Number(process.env.PORT || 3000),
     studioBase: '/studio',
-    // apiPrefix: '/v6/ai',
+    apiPrefix: '/v6/ai',
     auth: process.env.DISABLE_AUTH === 'true' ? undefined : apiAuthLayer,
     build: {
       apiReqLogs: true,
