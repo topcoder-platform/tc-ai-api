@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core';
 import { skillExtractionWorkflow } from './workflows/skills/skill-extraction-workflow';
 import { challengeContextWorkflow } from './workflows/challenge/challenge-context-workflow';
 import { challengeIngestionWorkflow } from './workflows/challenge/challenge-ingestion-workflow';
+import { challengeBulkIngestionWorkflow } from './workflows/challenge/challenge-bulk-ingestion-workflow';
 import { jdAutowriteWorkflow } from './workflows/jd/jd-autowrite-workflow';
 import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
 import { challengeParserAgent } from './agents/challenge/challenge-parser-agent';
@@ -19,6 +20,7 @@ export const mastra = new Mastra({
     skillExtractionWorkflow,
     challengeContextWorkflow,
     challengeIngestionWorkflow,
+    challengeBulkIngestionWorkflow,
     jdAutowriteWorkflow,
   },
   agents: { skillsMatchingAgent, challengeParserAgent, jdRewriterAgent },

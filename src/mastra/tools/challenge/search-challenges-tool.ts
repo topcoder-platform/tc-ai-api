@@ -77,6 +77,19 @@ interface SearchChallengesInput {
 }
 
 /**
+ * The v6 endpoint validates `types`/`tracks`/`tags`/`groups` as arrays: both a
+ * comma-joined value and a single bare `key=value` are rejected with
+ * `"criteria.<field>" must be an array` (HTTP 400). Bracket notation
+ * (`key[]=a&key[]=b`) is the form the query parser accepts for one or more
+ * values.
+ */
+function appendArrayParam(params: URLSearchParams, key: string, values: string[]): void {
+    for (const value of values) {
+        params.append(`${key}[]`, value);
+    }
+}
+
+/**
  * Builds URLSearchParams from the tool input filters.
  * Always sets isLightweight=false — the lightweight response omits `description`,
  * which is the field being indexed.
@@ -89,12 +102,14 @@ function buildQueryParams(input: SearchChallengesInput): URLSearchParams {
 
     if (input.projectId) params.set('projectId', input.projectId);
     if (input.projectIds?.length) params.set('projectIds', input.projectIds.join(','));
+    // `status` is a scalar enum in the v6 API — repeated or comma-joined values
+    // are both rejected. Callers wanting several statuses must search per status.
     if (input.status?.length) params.set('status', input.status.join(','));
     if (input.approvalStatus?.length) params.set('approvalStatus', input.approvalStatus.join(','));
-    if (input.types?.length) params.set('types', input.types.join(','));
-    if (input.tracks?.length) params.set('tracks', input.tracks.join(','));
-    if (input.tags?.length) params.set('tags', input.tags.join(','));
-    if (input.groups?.length) params.set('groups', input.groups.join(','));
+    if (input.types?.length) appendArrayParam(params, 'types', input.types);
+    if (input.tracks?.length) appendArrayParam(params, 'tracks', input.tracks);
+    if (input.tags?.length) appendArrayParam(params, 'tags', input.tags);
+    if (input.groups?.length) appendArrayParam(params, 'groups', input.groups);
     if (input.updatedDateStart) params.set('updatedDateStart', input.updatedDateStart);
     if (input.updatedDateEnd) params.set('updatedDateEnd', input.updatedDateEnd);
     if (input.ids?.length) params.set('ids', input.ids.join(','));

@@ -101,15 +101,36 @@ describe('searchChallengesTool — request construction', () => {
         expect(url).toContain('/v6/challenges');
         expect(url).toContain('projectId=123');
         expect(url).toContain('status=ACTIVE');
-        expect(url).toContain('types=Challenge');
-        expect(url).toContain('tracks=Development');
-        expect(url).toContain('tags=react');
-        expect(url).toContain('groups=acme');
+        expect(url).toContain('types%5B%5D=Challenge');
+        expect(url).toContain('tracks%5B%5D=Development');
+        expect(url).toContain('tags%5B%5D=react');
+        expect(url).toContain('groups%5B%5D=acme');
         expect(url).toContain('page=1');
         expect(url).toContain('perPage=10');
         expect(url).toContain('sortBy=updated');
         expect(url).toContain('sortOrder=asc');
         expect(init.method).toBe('GET');
+    });
+
+    it('sends types, tracks, tags and groups as bracketed array params', async () => {
+        const fetchMock = mockFetchResponse([]);
+
+        await executeTool({
+            types: ['Challenge', 'Task'],
+            tracks: ['Development', 'Design'],
+            tags: ['react', 'node'],
+            groups: ['acme', 'globex'],
+        });
+
+        // The v6 API rejects comma-joined and bare single array criteria with
+        // HTTP 400 ("must be an array"); only key[]=... is accepted.
+        const [url] = fetchMock.mock.calls[0] as [string, any];
+        const query = decodeURIComponent(url.split('?')[1]);
+        expect(query).toContain('types[]=Challenge&types[]=Task');
+        expect(query).toContain('tracks[]=Development&tracks[]=Design');
+        expect(query).toContain('tags[]=react&tags[]=node');
+        expect(query).toContain('groups[]=acme&groups[]=globex');
+        expect(query).not.toContain('types=Challenge,Task');
     });
 
     it('includes Authorization bearer token from M2MService', async () => {
