@@ -14,7 +14,9 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "studio": "mastra studio",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "ingest": "tsx --env-file=.env src/scripts/ingest-challenges.ts",
+    "sync": "tsx --env-file=.env src/scripts/sync-challenges.ts"
   },
   "keywords": [],
   "author": "Kiril Kartunov",
