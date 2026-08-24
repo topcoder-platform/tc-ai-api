@@ -1,5 +1,4 @@
 import { ollama } from './ollama';
-import { wipro } from './wipro';
 import { createBedrockProvider } from './bedrock';
 import { tcAILogger } from '../logger';
 import { openai } from './openai';
@@ -18,9 +17,6 @@ export function createModel(providerName: string, modelName: string, agentId?: s
                 //     num_predict: Number(process.env.OLLAMA_NUM_PREDICT || 2048),
                 // }
             });
-
-        case 'WiproAI':
-            return wipro.chatModel(modelName);
 
         case 'AWSBedrock':
             return createBedrockProvider(agentId)(modelName);

@@ -65,6 +65,6 @@ export const mastra = new Mastra({
   },
   bundler: {
     externals: ["tc-core-library-js"],
-    transpilePackages: ['@topcoder/wipro-ai-sdk-provider'],
+    transpilePackages: [],
   },
 });
