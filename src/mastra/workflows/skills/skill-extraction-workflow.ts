@@ -1,4 +1,5 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { noopObserve } from '@mastra/core/tools';
 import { z } from 'zod';
 import { standardizedSkillsFuzzyTool } from '../../tools/skills/standardized-skills-fuzzy-tool';
 import { standardizedSkillsSemanticTool } from '../../tools/skills/standardized-skills-semantic-tool';
@@ -99,7 +100,7 @@ const fuzzyMatchTermSkills = createStep({
     try {
       const toolResult = await standardizedSkillsFuzzyTool.execute?.(
         { term: searchTerm, size: matchSize },
-        { requestContext },
+        { requestContext, observe: noopObserve },
       );
 
       if (!toolResult || 'error' in toolResult || !toolResult.matches) {
@@ -143,7 +144,7 @@ const semanticMatchTermSkills = createStep({
     try {
       const toolResult = await standardizedSkillsSemanticTool.execute?.(
         { text: searchTerm },
-        { requestContext },
+        { requestContext, observe: noopObserve },
       );
 
       if (!toolResult || 'error' in toolResult || !toolResult.matches) {

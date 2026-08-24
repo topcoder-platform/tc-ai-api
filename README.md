@@ -15,10 +15,11 @@
 11. [Tools](#tools)
 12. [Scorers (Evaluation)](#scorers-evaluation)
 13. [Workflows — Skill Extraction](#workflows--skill-extraction)
-14. [Sequence Diagrams](#sequence-diagrams)
-15. [External API Interactions](#external-api-interactions)
-16. [CI/CD Pipeline](#cicd-pipeline)
-17. [Deployment](#deployment)
+14. [Challenges Vector RAG](#challenges-vector-rag)
+15. [Sequence Diagrams](#sequence-diagrams)
+16. [External API Interactions](#external-api-interactions)
+17. [CI/CD Pipeline](#cicd-pipeline)
+18. [Deployment](#deployment)
 
 ---
 
@@ -118,6 +119,15 @@ tc-ai-api/
 | `SKILL_MATCHING_CONCURRENCY`        | No       | `5`                                    | Concurrency limit for parallel skill-matching requests           |
 | `SKILL_MATCHING_SEMANTIC_THRESHOLD` | No       | `0.45`                                 | Max cosine distance for semantic matches (lower = stricter)      |
 | `SKILL_DISCOVERY_EVAL_SAMPLE_RATE`  | No       | -                                      | Fraction of agent interactions sampled for evaluation scoring    |
+| `RAG_EMBEDDING_PROVIDER`            | No       | `TC-Ollama`                            | Embedding provider for challenge RAG (`TC-Ollama` \| `AWSBedrock`) |
+| `RAG_EMBEDDING_MODEL_ID`            | No       | `nomic-embed-text`                     | Embedding model id (768d locally; `amazon.titan-embed-text-v2:0`, 1024d, in prod) |
+| `VECTOR_INDEX_NAME`                 | No       | `challenge_embeddings`                 | Vector table name (SQL-identifier validated) — override per environment when reindexing |
+| `VECTOR_SEARCH_THRESHOLD`           | No       | `0.5`                                  | Minimum similarity score, applied after retrieval                |
+| `RAG_CHUNK_MAX_SIZE`                | No       | `512`                                  | Max characters per chunk before recursive splitting               |
+| `RAG_CHUNK_OVERLAP`                 | No       | `50`                                   | Character overlap between recursively-split chunks                |
+| `RAG_TOP_K`                         | No       | `10`                                   | Default result count for challenge vector search                  |
+| `CHALLENGE_SEARCH_AI_PROVIDER`      | No       | `AWSBedrock`                           | Model provider for `challenge-search-agent`                       |
+| `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-4-5`        | Model id for `challenge-search-agent`                              |
 
 > \* Auth0 variables are required unless `DISABLE_AUTH=true`.
 
@@ -349,6 +359,93 @@ Runs two branches **in parallel**:
 
 - **Direct matches** (fuzzy match name === search term, case-insensitive): `score = 1.0`
 - **Semantic matches**: `score = max(0, min(1, 1 - (weighted_distance / threshold)))` where threshold defaults to `0.45`. Matches above the threshold are discarded.
+
+---
+
+## Challenges Vector RAG
+
+Retrieval-Augmented Generation over Topcoder challenge descriptions: an ingestion pipeline that chunks and embeds challenge text into `pgvector`, and a retrieval surface exposed both as an LLM-backed agent and as a deterministic, LLM-free workflow. Ported from the `tc-challenges-vector-rag` prototype (see [ADR 0001](docs/adr/0001-integrate-challenges-vector-rag.md) for the full design record and rationale — decisions below are cited as `D#`).
+
+### Overview
+
+| Concern | Summary |
+| --- | --- |
+| **Vector store** | `PgVector` (`@mastra/pg`), same `MASTRA_DB_CONNECTION` database and `MASTRA_DB_SCHEMA` as the rest of Mastra (D3) — no new infrastructure. |
+| **Embeddings** | Provider-switched: Ollama `nomic-embed-text` (768d) locally, AWS Bedrock `amazon.titan-embed-text-v2:0` (1024d) in production (D2). |
+| **Ingestion source** | Primary: the Challenge Search API (`GET /v6/challenges`), via `searchChallengesTool` and the `challenge-bulk-ingestion` workflow (D11). Secondary: CSV backfill CLI, for offline/air-gapped environments. |
+| **Retrieval** | Two paths sharing one tool (`challengeVectorQueryTool`) so they cannot diverge: `challenge-search-agent` (synthesised NL answers) and `challenge-search` workflow (raw ranked results, no LLM) (D8). |
+| **Project scoping** | Vector metadata carries only an opaque `projectId` reference — no project attributes are denormalized in. Callers resolve project detail via a separate `GET /v6/projects/:projectId` call (D10). |
+
+### Ingestion
+
+**`challenge-ingestion`** (workflow) — ingests one challenge, by `challengeId` (fetched via `fetchChallengeTool`) or an inline record:
+
+1. `resolve-challenge` — fetch or validate the inline record; `projectId` is carried through as a string reference only, never dereferenced (D10).
+2. `chunk-and-embed` — `processDescription` (line-ending normalization, BOM-aware trim, HTML→Markdown, frontmatter strip) → `chunkChallengeDescription` (two-pass chunking, see below) → `enrichChunksWithChallengeName` → `embedMany` via the embedding-provider factory, wrapped in retry-with-backoff.
+3. `upsert-vectors` — `ensureChallengeIndex()` (idempotent create/dimension-guard, D7), then `upsert({ deleteFilter: { challengeId } })` — delete-then-insert as one transaction, so a challenge is never left partially indexed.
+
+Only the challenge's **public** `description` is ever embedded — `privateDescription` is never read by the ingestion path.
+
+**`challenge-bulk-ingestion`** (workflow, D11) — paginates `searchChallengesTool` (filterable by `projectId`/`projectIds`, `status`, `types`, `tracks`, `tags`, `groups`, `updatedDateStart` for incremental sync) and fans out to `challenge-ingestion` per challenge with bounded concurrency (default 3). One bad challenge cannot abort the run — failures are captured per-challenge in the aggregated report.
+
+**CLI (secondary path, D11):**
+
+```bash
+# CSV backfill — offline/air-gapped environments, or CSV exports that predate the search API
+pnpm run ingest -- --file path/to/challenges.csv [--dry-run]
+pnpm run ingest -- --folder path/to/csvs
+pnpm run ingest -- --clear-all --folder path/to/csvs   # confirms, then drops the vector index
+
+# Incremental sync / project-scoped backfill — thin wrapper around challenge-bulk-ingestion
+pnpm run sync -- --project-id 17423 [--dry-run]
+pnpm run sync -- --status ACTIVE --updated-since 2026-08-01 --concurrency 5
+```
+
+Both CLIs invoke the same workflows the API exposes (via `mastra.getWorkflowById(...).createRun().start(...)`), so the CLI and API paths cannot drift onto separate implementations. `ingest-challenges.ts` writes per-run logs to `logs/ingestion-<timestamp>/{output.log,error.log,report.json}` (git-ignored).
+
+### Retrieval
+
+- **`challengeVectorQueryTool`** — the shared retrieval primitive. Composes an `$and` metadata filter from `skills` (`$in`), `type`/`track` (`$eq`, free-form strings per D12 — not enums), `groups` (`$in`), and `projectId` (`$in`, D10). `query` is optional: with at least one filter and no query text, it performs a metadata-only lookup (`query({ filter })`, no `queryVector`) — e.g. "everything indexed for project 17423". The relevance threshold (`VECTOR_SEARCH_THRESHOLD`) is applied **after** retrieval in application code rather than passed to `query({ minScore })`, because passing `minScore` forces `@mastra/pg` off the HNSW ANN fast path onto a full exact scan.
+- **`challenge-search-agent`** ("Topcoder Challenge Assistant") — infers `skills`/`type`/`track`/`groups` filters from natural language and calls the tool. Never infers `projectId` from the query text — that must come from the caller's context, and **scope filters must be enforced server-side**, not left to the model (see the ADR's security note).
+- **`challenge-search`** (workflow, D8) — the deterministic, LLM-free path: same tool, same filter composition, so results cannot diverge from the agent path. Input adds `groupBy` (`chunk` | `challenge` | `project`, default `challenge`): `chunk` returns raw hits ungrouped; `challenge` groups hits by `challengeId` (best chunk score becomes the challenge score, contributing chunks listed underneath); `project` rolls the same hits up by `projectId`.
+- **`fetchProjectTool`** (optional, D10) — retrieval-time enrichment: resolves a `projectId` from a hit to project name/status/tech stack via `GET /v6/projects/:projectId`, under the caller's own authorization. Not used by, and nothing in, the ingestion or retrieval path depends on it.
+
+### Chunking strategy
+
+Two-pass, mirroring the source prototype:
+
+1. **Markdown-header pass** — splits on `#`/`##` headers, keeping code blocks and tables as atomic units.
+2. **Size-based pass** — chunks over `RAG_CHUNK_MAX_SIZE` (default 512 chars) are recursively split (`RAG_CHUNK_OVERLAP`, default 50). Atomic blocks (code/tables) are kept intact if they fit the embedding model's context window; if an atomic block still exceeds it, it is force-split and reported (`forceSplits` in every ingestion report) — a rare safety fallback, not expected in real Topcoder data.
+
+### Metadata schema
+
+Every row is one challenge chunk. There is no separate text column — the chunk text lives in `metadata.text` (named `text`, not the prototype's `content`, to match `@mastra/rag`'s convention — see ADR 0001 for the full rationale):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `challengeId` | `string` | The `deleteFilter` key for per-challenge replacement. |
+| `name` | `string` | Challenge title. |
+| `type` | `string` | Free-form (`ChallengeType` reference table, D12) — not an enum. |
+| `track` | `string` | Free-form (`ChallengeTrack.name`, D12) — not an enum. |
+| `skills` | `string[]` | Filterable via `$in`. |
+| `groups` | `string[]` | Filterable via `$in`. |
+| `projectId` | `string \| null` | The **only** project field (D10). Stored as a string — `@mastra/pg` compares metadata scalars as text. |
+| `chunkIndex` / `totalChunks` | `number` | 1-based position / total chunk count, for reassembly. |
+| `text` | `string` | The chunk text, prefixed with `# Challenge: <name>`. |
+| `ingestedAt` | `string` | ISO-8601. Compensates for Mastra's table having no `created_at` column. |
+
+### Embedding models
+
+| Provider | Model | Dimension | Context window | Use |
+| --- | --- | --- | --- | --- |
+| `TC-Ollama` | `nomic-embed-text` | 768 | 2048 | Local development default |
+| `AWSBedrock` | `amazon.titan-embed-text-v2:0` | 1024 | 8192 | Production default |
+
+Switching a given environment's embedding provider requires a full reindex — `VECTOR_INDEX_NAME` is environment-overridable, and `ensureChallengeIndex()` throws an actionable error if the configured model's dimension doesn't match an existing index (D7).
+
+### Database bootstrap
+
+Per D3, there is **no hand-maintained DDL script** — `PgVector.createIndex()` performs all schema/table/index creation on first use (schema, table, HNSW vector index, and btree `metadataIndexes` on `challengeId`/`projectId`/`track`). This assumes the `vector` extension is enabled and the runtime database role holds DDL privileges. Local development uses the same `docker/docker-compose.yml` (`pgvector/pgvector:pg16`) as the rest of the project — no separate `init-db` step.
 
 ---
 
@@ -597,6 +694,11 @@ Mastra automatically exposes the following REST endpoints:
 | `/api/workflows/skill-extraction-workflow/:runId` | `GET`  | Get workflow run status/result           |
 | `/api/agents/skillsMatchingAgent/generate`        | `POST` | Direct agent text generation             |
 | `/api/agents/skillsMatchingAgent/stream`          | `POST` | Direct agent streaming generation        |
+| `/api/workflows/challenge-ingestion/start`        | `POST` | Ingest one challenge by id or inline record |
+| `/api/workflows/challenge-bulk-ingestion/start`   | `POST` | Paginated bulk / incremental-sync ingestion |
+| `/api/workflows/challenge-search/start`           | `POST` | Deterministic ranked challenge search (no LLM) |
+| `/api/agents/challengeSearchAgent/generate`       | `POST` | Synthesised NL challenge search           |
+| `/api/agents/challengeSearchAgent/stream`         | `POST` | Synthesised NL challenge search (streaming) |
 | `/studio/*`                                       | `GET`  | Mastra Studio UI (development/debugging) |
 
 All `/api/*` endpoints are protected by Auth0 authentication (unless `DISABLE_AUTH=true`) and scoped by the resource ID middleware.
