@@ -3,9 +3,11 @@ import { skillExtractionWorkflow } from './workflows/skills/skill-extraction-wor
 import { challengeContextWorkflow } from './workflows/challenge/challenge-context-workflow';
 import { challengeIngestionWorkflow } from './workflows/challenge/challenge-ingestion-workflow';
 import { challengeBulkIngestionWorkflow } from './workflows/challenge/challenge-bulk-ingestion-workflow';
+import { challengeSearchWorkflow } from './workflows/challenge/challenge-search-workflow';
 import { jdAutowriteWorkflow } from './workflows/jd/jd-autowrite-workflow';
 import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
 import { challengeParserAgent } from './agents/challenge/challenge-parser-agent';
+import { challengeSearchAgent } from './agents/challenge/challenge-search-agent';
 import { jdRewriterAgent } from './agents/jd/jd-rewriter-agent';
 import { PostgresStore } from '@mastra/pg';
 import {
@@ -21,9 +23,10 @@ export const mastra = new Mastra({
     challengeContextWorkflow,
     challengeIngestionWorkflow,
     challengeBulkIngestionWorkflow,
+    challengeSearchWorkflow,
     jdAutowriteWorkflow,
   },
-  agents: { skillsMatchingAgent, challengeParserAgent, jdRewriterAgent },
+  agents: { skillsMatchingAgent, challengeParserAgent, challengeSearchAgent, jdRewriterAgent },
   scorers: {
     instanceAnswerRelevancyScorer,
     instancePromptAlignmentScorer,
