@@ -11,7 +11,7 @@ const m2mService = new M2MService();
 export const fetchChallengeTool = createTool({
     id: 'fetch-challenge-by-id',
     description:
-        'Fetches a Topcoder challenge by its UUID from the Topcoder v5 Challenges API using M2M authentication',
+        'Fetches a Topcoder challenge by its UUID from the Topcoder v6 Challenges API using M2M authentication',
     inputSchema: z.object({
         challengeId: z.string().uuid().describe('UUID of the Topcoder challenge to fetch'),
     }),

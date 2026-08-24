@@ -1,6 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { createModel } from '../../../utils';
 import { challengeVectorQueryTool } from '../../tools/challenge/challenge-vector-query-tool';
+import { Memory } from '@mastra/memory';
+import { fetchProjectTool } from '../../tools/project/fetch-project-tool';
 
 const PROVIDER_NAME = process.env.CHALLENGE_SEARCH_AI_PROVIDER || 'AWSBedrock';
 const MODEL_ID = process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5';
@@ -26,6 +28,11 @@ export const challengeSearchAgent = new Agent({
     id: AGENT_ID,
     name: 'Topcoder Challenge Assistant',
     model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
+    memory: new Memory({
+        options: {
+            lastMessages: 10,
+        },
+    }),
     instructions: {
         role: 'system',
         content: `You are a helpful Topcoder Challenge Assistant. Your goal is to assist members in finding relevant information about Topcoder challenges regarding their query.
@@ -49,5 +56,5 @@ Tool Usage Strategy:
 
 Ground your response SOLELY on the context returned by the tool. If no results are found, say "I couldn't find any challenges matching your criteria."`,
     },
-    tools: { challengeVectorQueryTool },
+    tools: { challengeVectorQueryTool, fetchProjectTool },
 });
