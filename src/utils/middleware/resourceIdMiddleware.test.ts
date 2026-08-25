@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 
-const { authenticateTokenMock, loggerErrorMock } = vi.hoisted(() => ({
+const { authenticateTokenMock, loggerErrorMock, loggerInfoMock } = vi.hoisted(() => ({
     authenticateTokenMock: vi.fn(),
     loggerErrorMock: vi.fn(),
+    loggerInfoMock: vi.fn(),
 }));
 
 vi.mock('../auth', () => ({
@@ -15,6 +16,7 @@ vi.mock('../auth', () => ({
 vi.mock('../logger', () => ({
     tcAILogger: {
         error: loggerErrorMock,
+        info: loggerInfoMock,
     },
 }));
 
@@ -86,6 +88,10 @@ describe('resourceIdMiddleware', () => {
         expect(next).toHaveBeenCalledOnce();
         expect(json).not.toHaveBeenCalled();
         expect(authenticateTokenMock).not.toHaveBeenCalled();
+        expect(loggerInfoMock).toHaveBeenCalledWith('Auth resolved for request', {
+            authType: 'member',
+            resourceId: '12345',
+        });
     });
 
     it('hydrates user from bearer token when request context user is missing', async () => {
@@ -124,6 +130,10 @@ describe('resourceIdMiddleware', () => {
         expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('m2m-subject');
         expect(next).toHaveBeenCalledOnce();
         expect(json).not.toHaveBeenCalled();
+        expect(loggerInfoMock).toHaveBeenCalledWith('Auth resolved for request', {
+            authType: 'm2m',
+            resourceId: 'm2m-subject',
+        });
     });
 
     it('returns 401 when user cannot be resolved', async () => {

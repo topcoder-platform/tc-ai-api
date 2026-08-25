@@ -1,0 +1,9 @@
+"id","name","description","descriptionFormat","typeName","trackName","skills"
+"9781b09b-3853-4ee0-a28f-7e56c3f7937d","Build a Realtime Energy Dashboard","## Overview
+Build a dashboard that visualizes realtime energy usage data.
+
+### Requirements
+- Ingest a streaming data source
+- Render a live-updating chart
+- Persist historical readings for trend analysis","markdown","Challenge","Development","React,TypeScript,Node.js"
+"1941cf87-36a2-4a90-9c23-eeeb8de3fd5c","QA Automation Suite for Checkout Flow","<p>Build an automated test suite covering the checkout flow.</p><ul><li>Cart validation</li><li>Payment gateway mocking</li><li>Order confirmation emails</li></ul>","html","Task","Quality Assurance","Selenium,Cypress"

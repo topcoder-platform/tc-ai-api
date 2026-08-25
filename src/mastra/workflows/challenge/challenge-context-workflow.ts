@@ -1,4 +1,5 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { noopObserve } from '@mastra/core/tools';
 import { z } from 'zod';
 import { tcAILogger } from '../../../utils/logger';
 import { generateWithStructuredOutputFallback } from '../../../utils/structured-output-wrapper';
@@ -310,7 +311,7 @@ const fetchChallengeDetails = createStep({
 
         const toolResult = await fetchChallengeTool.execute?.(
             { challengeId: inputData.challengeId },
-            { requestContext },
+            { requestContext, observe: noopObserve },
         );
 
         if (!toolResult || 'error' in toolResult || !toolResult.challenge) {
