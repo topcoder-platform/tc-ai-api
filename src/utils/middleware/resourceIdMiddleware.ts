@@ -68,7 +68,14 @@ const resourceIdMiddlewareHandler = async (c: any, next: any) => {
 
         // Force all API operations to use this user's ID
         // This takes precedence over any client-provided resourceId
-        requestContext.set(MASTRA_RESOURCE_ID_KEY, userId || sub);
+        const resourceId = userId || sub;
+        requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+        tcAILogger.info('Auth resolved for request', {
+            authType: userId ? 'member' : 'm2m',
+            resourceId,
+            user,
+        });
 
         return next();
 };
