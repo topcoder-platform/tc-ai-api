@@ -19,65 +19,64 @@ import { API_PREFIX, CHAT_ROUTE_BASE_PATH } from '../server-routes';
  * @returns 401 Unauthorized if the user is missing or an ID cannot be extracted.
  */
 const resourceIdMiddlewareHandler = async (c: any, next: any) => {
-        const requestContext = c.get('requestContext');
-        let user = requestContext.get('user');
+    const requestContext = c.get('requestContext');
+    let user = requestContext.get('user');
 
-        if (!user) {
-            const authHeader = c.req.header('authorization') || '';
-            const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-            const apiKeyToken = c.req.query('apiKey') || '';
-            const token = bearerToken || apiKeyToken;
+    if (!user) {
+        const authHeader = c.req.header('authorization') || '';
+        const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+        const apiKeyToken = c.req.query('apiKey') || '';
+        const token = bearerToken || apiKeyToken;
 
-            if (token) {
-                try {
-                    user = await apiAuthLayer.authenticateToken(token, c.req.raw);
-                    if (user) {
-                        requestContext.set('user', user);
-                    }
-                } catch (error) {
-                    tcAILogger.error('Failed to authenticate token in resource middleware', { error });
+        if (token) {
+            try {
+                user = await apiAuthLayer.authenticateToken(token, c.req.raw);
+                if (user) {
+                    requestContext.set('user', user);
                 }
+            } catch (error) {
+                tcAILogger.error('Failed to authenticate token in resource middleware', { error });
             }
         }
+    }
 
-        if (!user) {
-            tcAILogger.error('User object missing in context!');
-            return c.json({ error: 'Unauthorized' }, 401);
+    if (!user) {
+        tcAILogger.error('User object missing in context!');
+        return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    // Logic to extract userId
+    const tcApiBase = process.env.TC_API_BASE || '';
+    let domain = 'topcoder.com';
+    try {
+        if (tcApiBase) {
+            const url = new URL(tcApiBase);
+            domain = url.hostname.replace('api.', '');
         }
+    } catch (e) {
+        console.error('Error parsing TC_API_BASE:', e);
+    }
 
-        // Logic to extract userId
-        const tcApiBase = process.env.TC_API_BASE || '';
-        let domain = 'topcoder.com';
-        try {
-            if (tcApiBase) {
-                const url = new URL(tcApiBase);
-                domain = url.hostname.replace('api.', '');
-            }
-        } catch (e) {
-            console.error('Error parsing TC_API_BASE:', e);
-        }
+    const userIdKey = `https://${domain}/userId`;
+    const userId = user[userIdKey];
+    const sub = user['sub']; // M2M user
 
-        const userIdKey = `https://${domain}/userId`;
-        const userId = user[userIdKey];
-        const sub = user['sub']; // M2M user
+    if (!userId && !sub) {
+        tcAILogger.error('Failed to identify userId/sub', { user });
+        return c.json({ error: 'Failed to extract userId/sub from user object' }, 401);
+    }
 
-        if (!userId && !sub) {
-            tcAILogger.error('Failed to identify userId/sub', { user });
-            return c.json({ error: 'Failed to extract userId/sub from user object' }, 401);
-        }
+    // Force all API operations to use this user's ID
+    // This takes precedence over any client-provided resourceId
+    const resourceId = userId || sub;
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
 
-        // Force all API operations to use this user's ID
-        // This takes precedence over any client-provided resourceId
-        const resourceId = userId || sub;
-        requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+    tcAILogger.info('Auth resolved for request', {
+        authType: userId ? 'member' : 'm2m',
+        resourceId,
+    });
 
-        tcAILogger.info('Auth resolved for request', {
-            authType: userId ? 'member' : 'm2m',
-            resourceId,
-            user,
-        });
-
-        return next();
+    return next();
 };
 
 // Built-in Mastra routes (agents, workflows, memory, threads, ...) live under apiPrefix.
