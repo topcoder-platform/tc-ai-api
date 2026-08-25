@@ -78,16 +78,23 @@ tc-ai-api/
 │   │   ├── scorers/
 │   │   │   └── skills-matching-scorers.ts        # Evaluation scorers
 │   │   └── public/                               # Static assets (empty)
+│   ├── config/
+│   │   └── tool-auth-fallback.config.ts  # Per-tool M2M fallback opt-in (off by default)
 │   └── utils/
 │       ├── index.ts              # Barrel re-exports
 │       ├── logger.ts             # Pino logger configuration
+│       ├── server-routes.ts      # API_PREFIX / CHAT_ROUTE_PATH — shared by auth + middleware
+│       ├── tc-api-client.ts      # Requestor-token-first TC_API_BASE client, with M2M fallback
 │       ├── auth/
-│       │   └── index.ts          # Auth0 composite auth setup
+│       │   ├── index.ts          # Auth0 composite auth setup (protected paths, mapUserToResourceId)
+│       │   └── m2m.service.ts    # Service M2M token acquisition
 │       ├── middleware/
 │       │   ├── index.ts          # Middleware registration
 │       │   └── resourceIdMiddleware.ts  # Resource isolation middleware
 │       └── providers/
 │           └── ollama.ts         # Ollama AI provider config
+├── docs/
+│   └── adr/                      # Architecture decision records
 ├── Dockerfile                    # Production container image
 ├── appStartUp.sh                 # Container entrypoint
 ├── package.json
@@ -114,6 +121,12 @@ tc-ai-api/
 | `AUTH0_M2M_DOMAIN`                  | Yes\*    | —                                      | Auth0 domain for M2M JWT validation                              |
 | `AUTH0_M2M_AUDIENCE`                | Yes\*    | —                                      | Auth0 audience for M2M tokens                                    |
 | `DISABLE_AUTH`                      | No       | `false`                                | Set to `"true"` to disable all authentication (dev mode)         |
+| `M2M_AUTH_CLIENT_ID`                | No\*\*   | —                                       | Client id for tc-ai-api's own service M2M credential (`M2MService`) |
+| `M2M_AUTH_CLIENT_SECRET`            | No\*\*   | —                                       | Client secret for tc-ai-api's own service M2M credential            |
+| `M2M_AUTH_URL`                      | No       | `https://topcoder-dev.auth0.com/oauth/token` | Token endpoint used to obtain the service M2M token             |
+| `M2M_AUTH_DOMAIN`                   | No       | `topcoder-dev.auth0.com`               | Auth0 domain for the service M2M credential                        |
+| `M2M_AUTH_AUDIENCE`                 | No       | `https://m2m.topcoder-dev.com/`        | Auth0 audience for the service M2M credential                      |
+| `M2M_AUTH_PROXY_SERVER_URL`         | No       | `https://auth0proxy.topcoder-dev.com/token` | Proxy used to request the service M2M token                    |
 | `JD_MAX_CHARS`                      | No       | `6000`                                 | Max character length for job description preprocessing           |
 | `SKILL_MATCHING_FUZZY_MATCH_SIZE`   | No       | `3`                                    | Number of candidates returned per fuzzy-match query              |
 | `SKILL_MATCHING_CONCURRENCY`        | No       | `5`                                    | Concurrency limit for parallel skill-matching requests           |
@@ -130,6 +143,7 @@ tc-ai-api/
 | `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-4-5`        | Model id for `challenge-search-agent`                              |
 
 > \* Auth0 variables are required unless `DISABLE_AUTH=true`.
+> \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are only exercised if a tool is explicitly opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) — no tool is today, so these aren't required for the currently-shipped behavior, only for future fallback use.
 
 ---
 
@@ -147,11 +161,17 @@ export const mastra = new Mastra({
   observability: new Observability({...}),  // OpenTelemetry
   server: {
     port: 3000,
-    auth: apiAuthLayer,              // CompositeAuth (Auth0)
-    middleware: middlewareConfig,     // resourceIdMiddleware
+    apiPrefix: API_PREFIX,            // '/v6/ai' — built-in Mastra routes live here
+    auth: apiAuthLayer,               // CompositeAuth (Auth0)
+    middleware: middlewareConfig,     // resourceIdMiddleware, registered per-route (see below)
+    apiRoutes: [
+      chatRoute({ path: CHAT_ROUTE_PATH }),  // '/chat/:agentId' — NOT under apiPrefix
+    ],
   },
 });
 ```
+
+`API_PREFIX` and `CHAT_ROUTE_PATH` come from `src/utils/server-routes.ts` — the single source of truth both the auth config and the middleware paths are built from, so they can't drift out of sync (see [Authentication & Middleware](#authentication--middleware)).
 
 ### NPM Scripts
 
@@ -198,27 +218,57 @@ postgresql://<user>:<password>@<host>:<port>/<database>?schema=<schema>
 
 ## Authentication & Middleware
 
+> See [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md) for the design rationale behind the outbound tool-call token flow described below.
+
 ### Auth0 Composite Authentication
 
-Authentication is handled by `CompositeAuth` from `@mastra/core/server`, which evaluates incoming JWTs against **two** Auth0 tenants:
+Authentication is handled by `CompositeAuth` from `@mastra/core/server` (`src/utils/auth/index.ts`), which evaluates incoming JWTs against **two** Auth0 tenants, in order:
 
 1. **Member tokens** — issued by `AUTH0_DOMAIN` with audience `AUTH0_AUDIENCE`
 2. **M2M (machine-to-machine) tokens** — issued by `AUTH0_M2M_DOMAIN` with audience `AUTH0_M2M_AUDIENCE`
 
-A request is authorized if it passes validation against **either** tenant.
+A request is authorized if it passes validation against **either** tenant. Both providers declare `protected: ['/v6/ai/*']` (the server's `apiPrefix` — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default.
+
+Both providers also set `mapUserToResourceId`, deriving the caller's Topcoder user id from the JWT claim `https://<domain>/userId` (member tokens) or `sub` (M2M tokens) — see `tcUserIdClaimKey()` / `mapUserToResourceId` in `src/utils/auth/index.ts`. Mastra's core auth flow stores that value under `MASTRA_RESOURCE_ID_KEY` in the request context automatically, and it takes precedence over any client-supplied `resourceId`/`memory.resource` — this is what actually enforces per-user memory/thread isolation; the `Resource ID Middleware` below is a belt-and-suspenders check on top of it, not the primary mechanism.
+
+The same core auth flow also stores the **raw bearer token** that authenticated the request under `MASTRA_AUTH_TOKEN_KEY` in the request context. This is the "requestor token" referenced throughout this section and in ADR 0002 — see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) below.
 
 Authentication can be fully disabled by setting `DISABLE_AUTH=true` (useful for local development).
 
 ### Resource ID Middleware
 
-When auth is enabled, the `resourceIdMiddleware` intercepts all `/api/*` requests and:
+`resourceIdMiddleware` (`src/utils/middleware/resourceIdMiddleware.ts`) is a secondary, explicit check on top of `mapUserToResourceId` above. When auth is enabled it's registered against the two real route surfaces the server actually exposes (`src/utils/server-routes.ts` is the single source of truth for both):
 
-1. Extracts the authenticated `user` object from the request context.
+- `${API_PREFIX}/*` (i.e. `/v6/ai/*`) — the built-in Mastra routes (agents, workflows, memory, threads)
+- `/chat/*` — `chatRoute()`, which is registered *outside* `apiPrefix` (custom API routes aren't prefixed by Mastra), so it needs its own entry
+
+For each matching request it:
+
+1. Extracts the authenticated `user` object from the request context (or authenticates the bearer/`apiKey` token itself if the framework hasn't populated it yet).
 2. Derives the Topcoder domain from `TC_API_BASE` (e.g., `topcoder-dev.com`).
 3. Reads the user ID from the JWT claim `https://<domain>/userId`, falling back to `sub` for M2M tokens.
-4. Sets `MASTRA_RESOURCE_ID_KEY` in the request context, scoping all subsequent Mastra operations (memory, threads, state) to that user.
+4. Sets `MASTRA_RESOURCE_ID_KEY` in the request context (redundant with `mapUserToResourceId`, but fails the request with a `401` if no user/id can be resolved at all).
+5. Logs `'Auth resolved for request'` at `info` level with `authType` (`member`/`m2m`) and the resolved `resourceId`, for auth verification during rollout.
 
 This ensures **resource isolation** — each user's agent memory and workflow state are segregated.
+
+### Requestor Token Propagation to Topcoder Platform Tools
+
+Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authorized as the **requesting user**, not a shared service account, by default. The mechanism (`src/utils/tc-api-client.ts`, `callTcApi()`):
+
+1. Reads the requestor's own token from `context.requestContext.get(MASTRA_AUTH_TOKEN_KEY)` — the same value the core auth flow set (see above). This works uniformly for a TC member JWT or an M2M JWT; the client makes no distinction between token types, it just forwards whatever authenticated the caller of `tc-ai-api`.
+2. Calls the Topcoder platform endpoint with `Authorization: Bearer <requestor token>`.
+3. Optionally, **only for a tool id explicitly listed as `true`** in `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`, off/empty by default), retries **once** with tc-ai-api's own service M2M token (`M2MService.getM2MToken()`) if the requestor-token attempt came back `401`/`403`. Every fallback attempt is logged at `warn` level with the tool id and status code.
+
+| Tool | Auth |
+| --- | --- |
+| `fetch-challenge-by-id` | Requestor token only — no fallback configured |
+| `search-challenges` | Requestor token only — no fallback configured |
+| `fetch-project-by-id` | Requestor token only — no fallback configured |
+| `standardized-skills-fuzzy-match` | Unauthenticated (public endpoint) — unaffected by this mechanism |
+| `standardized-skills-semantic-search` | Unauthenticated (public endpoint) — unaffected by this mechanism |
+
+`TOOL_M2M_FALLBACK_CONFIG` currently has **no entries** — every tool above uses only whichever token the requestor authenticated with. The fallback path exists as reusable infrastructure for a future tool that needs it (see ADR 0002's "Resolution of open questions" for why the three existing Challenge/Project tools deliberately ship without a safety net: correctness of authorization was prioritized over availability).
 
 ---
 
@@ -331,7 +381,7 @@ Rewrites a raw/rough job description into Topcoder's canonical structured format
 
 ## Tools
 
-Six tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zod input/output schema. The four Challenge/Project tools authenticate via `M2MService` (M2M JWT); the two Skills tools call unauthenticated public endpoints.
+Six tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zod input/output schema. The three Challenge/Project tools call `TC_API_BASE` authorized as the requesting user (see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools)); the two Skills tools call unauthenticated public endpoints.
 
 | Tool ID | Purpose | Called by |
 | --- | --- | --- |
@@ -369,7 +419,7 @@ Performs vector-based semantic search against the skills taxonomy. Returns match
 | Property   | Value                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | **ID**     | `fetch-challenge-by-id`                                             |
-| **API**    | `GET {TC_API_BASE}/v6/challenges/:challengeId` (M2M)                |
+| **API**    | `GET {TC_API_BASE}/v6/challenges/:challengeId` (requestor token)    |
 | **Input**  | `{ challengeId: uuid }`                                             |
 | **Output** | Full challenge object — `name`, `description`, `privateDescription`, `descriptionFormat`, `status`, `track`, `type`, `tags`, `skills`, `projectId`, `groups`, timeline dates, `prizeSets`, `reviewers`, `discussions`, `overview`, `task`, `legacy` |
 
@@ -380,7 +430,7 @@ Fetches one challenge's full detail, including the reviewer-only `privateDescrip
 | Property   | Value                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | **ID**     | `search-challenges`                                                  |
-| **API**    | `GET {TC_API_BASE}/v6/challenges` (M2M)                              |
+| **API**    | `GET {TC_API_BASE}/v6/challenges` (requestor token)                  |
 | **Input**  | `{ projectId?, projectIds?, status?, approvalStatus?, types?, tracks?, tags?, groups?, updatedDateStart?, updatedDateEnd?, ids?, page?, perPage?, sortBy?, sortOrder? }` |
 | **Output** | `{ challenges: [...], total, page, perPage }`                       |
 
@@ -401,7 +451,7 @@ The shared retrieval primitive behind both the search agent and the deterministi
 | Property   | Value                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | **ID**     | `fetch-project-by-id`                                                |
-| **API**    | `GET {TC_API_BASE}/v6/projects/:projectId` (M2M)                     |
+| **API**    | `GET {TC_API_BASE}/v6/projects/:projectId` (requestor token)         |
 | **Input**  | `{ projectId: string, fields?: string }`                            |
 | **Output** | `{ project: { id, name?, status?, type?, billingAccountId?, directProjectId?, techStack? } }` |
 
@@ -627,29 +677,69 @@ sequenceDiagram
 sequenceDiagram
     participant Client
     participant Server as Mastra HTTP Server
-    participant CompositeAuth as CompositeAuth
+    participant CoreAuth as Mastra core auth flow
     participant MemberAuth as Auth0 (Member)
     participant M2MAuth as Auth0 (M2M)
     participant ResMiddleware as resourceIdMiddleware
 
-    Client->>Server: Request with Authorization: Bearer <JWT>
-    Server->>CompositeAuth: Validate token
+    Client->>Server: Request to /v6/ai/* or /chat/:agentId<br/>Authorization: Bearer <JWT>
+    Server->>CoreAuth: checkRouteAuth() — CompositeAuth
 
     alt Member Token
-        CompositeAuth->>MemberAuth: Verify JWT (domain: auth.topcoder-dev.com)
-        MemberAuth-->>CompositeAuth: ✓ Valid — user claims
+        CoreAuth->>MemberAuth: Verify JWT (domain: AUTH0_DOMAIN)
+        MemberAuth-->>CoreAuth: ✓ Valid — user claims
     else M2M Token
-        CompositeAuth->>M2MAuth: Verify JWT (domain: topcoder-dev.auth0.com)
-        M2MAuth-->>CompositeAuth: ✓ Valid — M2M claims
+        CoreAuth->>M2MAuth: Verify JWT (domain: AUTH0_M2M_DOMAIN)
+        M2MAuth-->>CoreAuth: ✓ Valid — M2M claims
     end
 
-    CompositeAuth-->>Server: Authenticated user object
+    CoreAuth->>CoreAuth: mapUserToResourceId(user)<br/>→ set MASTRA_RESOURCE_ID_KEY
+    CoreAuth->>CoreAuth: Store raw token<br/>→ set MASTRA_AUTH_TOKEN_KEY
+    CoreAuth-->>Server: Authenticated — requestContext populated
 
-    Server->>ResMiddleware: /api/* interceptor
-    ResMiddleware->>ResMiddleware: Extract userId from<br/>https://topcoder-dev.com/userId<br/>or fallback to 'sub' claim
-    ResMiddleware->>ResMiddleware: Set MASTRA_RESOURCE_ID_KEY
+    Server->>ResMiddleware: /v6/ai/* or /chat/* interceptor
+    ResMiddleware->>ResMiddleware: Extract userId from<br/>https://<domain>/userId<br/>or fallback to 'sub' claim
+    ResMiddleware->>ResMiddleware: Confirm/set MASTRA_RESOURCE_ID_KEY<br/>log authType + resourceId
     ResMiddleware-->>Server: Continue to handler
 ```
+
+### Topcoder Platform Tool Call — Requestor Token Flow
+
+`MASTRA_AUTH_TOKEN_KEY`, set once during authentication above, is threaded automatically by Mastra core all the way from the HTTP request into every tool a triggered agent run calls — no extra plumbing required. This is what lets `callTcApi()` forward the requestor's own token instead of a shared service credential:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ChatRoute as chatRoute() handler
+    participant Agent as Mastra Agent
+    participant Tool as fetch-challenge-by-id /<br/>search-challenges /<br/>fetch-project-by-id
+    participant TcApiClient as callTcApi()
+    participant TC as Topcoder Platform API
+    participant M2M as M2MService (fallback only)
+
+    Client->>ChatRoute: POST /chat/:agentId<br/>Authorization: Bearer <requestor JWT>
+    Note over ChatRoute: MASTRA_AUTH_TOKEN_KEY already set<br/>on requestContext by core auth
+    ChatRoute->>Agent: stream(messages, { requestContext })
+    Agent->>Tool: execute(inputData, { requestContext })
+    Tool->>TcApiClient: callTcApi({ toolId, url, requestContext })
+    TcApiClient->>TcApiClient: token = requestContext.get(MASTRA_AUTH_TOKEN_KEY)
+    TcApiClient->>TC: GET/POST ... Authorization: Bearer <requestor JWT>
+
+    alt 2xx / non-401/403
+        TC-->>TcApiClient: Response
+    else 401 or 403 AND toolId listed in TOOL_M2M_FALLBACK_CONFIG
+        TcApiClient->>TcApiClient: log warn (toolId, status)
+        TcApiClient->>M2M: getM2MToken()
+        M2M-->>TcApiClient: service M2M token
+        TcApiClient->>TC: Retry once — Authorization: Bearer <M2M token>
+        TC-->>TcApiClient: Response
+    end
+
+    TcApiClient-->>Tool: Response
+    Tool-->>Agent: Mapped result
+```
+
+`fetch-challenge-by-id`, `search-challenges`, and `fetch-project-by-id` are **not** listed in `TOOL_M2M_FALLBACK_CONFIG` today, so for them the "else" branch never fires — a 401/403 from the requestor's own token is returned as-is.
 
 ### Agent Interaction — Term Extraction Detail
 
@@ -704,21 +794,32 @@ The service communicates with the following external systems:
 
 These are **unauthenticated** calls (no bearer token forwarded). The API base URL is configured via `TC_API_BASE`.
 
-### 2. Ollama LLM API
+### 2. Topcoder Challenges & Projects API (v6)
+
+| Endpoint                                   | Method | Purpose                            | Called By              |
+| ------------------------------------------- | ------ | ------------------------------------ | ----------------------- |
+| `{TC_API_BASE}/v6/challenges/:challengeId` | `GET`  | Fetch full challenge detail          | `fetchChallengeTool`   |
+| `{TC_API_BASE}/v6/challenges`              | `GET`  | Filtered/paginated challenge search  | `searchChallengesTool` |
+| `{TC_API_BASE}/v6/projects/:projectId`     | `GET`  | Resolve a `projectId` reference      | `fetchProjectTool`     |
+
+Authorized as the **requesting user** — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No M2M fallback is configured for these three today.
+
+### 3. Ollama LLM API
 
 | Endpoint                    | Method | Purpose                                         | Called By                          |
 | --------------------------- | ------ | ----------------------------------------------- | ---------------------------------- |
 | `{OLLAMA_API_URL}/api/chat` | `POST` | Streaming chat completion with `mistral:latest` | `skillsMatchingAgent` (via AI SDK) |
 | `{OLLAMA_API_URL}/api/chat` | `POST` | Evaluation model inference                      | Evaluation scorers                 |
 
-### 3. Auth0
+### 4. Auth0
 
-| Endpoint                                           | Purpose                            |
-| -------------------------------------------------- | ---------------------------------- |
-| `https://{AUTH0_DOMAIN}/.well-known/jwks.json`     | JWKS for member token verification |
-| `https://{AUTH0_M2M_DOMAIN}/.well-known/jwks.json` | JWKS for M2M token verification    |
+| Endpoint                                                   | Purpose                                                                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `https://{AUTH0_DOMAIN}/.well-known/jwks.json`             | JWKS for member token verification                                                                                                  |
+| `https://{AUTH0_M2M_DOMAIN}/.well-known/jwks.json`         | JWKS for M2M token verification                                                                                                     |
+| `{M2M_AUTH_URL}` (proxied via `M2M_AUTH_PROXY_SERVER_URL`) | Issues tc-ai-api's own service M2M token (`M2MService`) — used only as an unconfigured fallback credential, not the default for any tool today |
 
-### 4. PostgreSQL
+### 5. PostgreSQL
 
 | Purpose                                 | Connection                                          |
 | --------------------------------------- | --------------------------------------------------- |

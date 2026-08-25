@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
 
+// The tool no longer instantiates M2MService directly — the shared
+// tc-api-client does, only on the (untested-here) M2M fallback path. Mocked
+// so importing the client module doesn't construct a real M2M auth client.
 const { m2mTokenMock } = vi.hoisted(() => ({
     m2mTokenMock: vi.fn(),
 }));
@@ -12,9 +16,14 @@ vi.mock('../../../utils/auth/m2m.service', () => ({
 
 import { fetchProjectTool } from './fetch-project-tool';
 
-// Minimal context for execute — the tool only uses context.mastra?.getLogger?.()
-// which is optional, so undefined mastra is safe.
-const minimalContext = { mastra: undefined } as any;
+// Minimal context for execute — the tool uses context.mastra?.getLogger?.()
+// (optional) and context.requestContext (to read the requestor's token).
+const minimalContext = {
+    mastra: undefined,
+    requestContext: {
+        get: (key: string) => (key === MASTRA_AUTH_TOKEN_KEY ? 'fake-requestor-token' : undefined),
+    },
+} as any;
 
 /**
  * Installs a global fetch spy that resolves with the given JSON body.
@@ -70,7 +79,7 @@ describe('fetchProjectTool — request construction', () => {
         const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
         expect(url).toMatch(/\/v6\/projects\/17423$/);
         expect(init.method).toBe('GET');
-        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-m2m-token');
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-requestor-token');
     });
 
     it('appends a fields query param when supplied', async () => {
