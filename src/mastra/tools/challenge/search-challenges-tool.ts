@@ -1,14 +1,18 @@
-// Challenge API: GET /v6/challenges (M2M token required)
+// Challenge API: GET /v6/challenges
 // Searches Topcoder challenges with filters via the v6 Challenges API.
 // The v6 endpoint returns a bare JSON array (not a paginated envelope);
 // this tool wraps it into { challenges, total, page, perPage } for callers.
+//
+// Authorized as the requestor by default (their own token is forwarded
+// as-is); no M2M fallback configured for this tool — see
+// docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { M2MService } from '../../../utils/auth/m2m.service';
+import type { RequestContext } from '@mastra/core/request-context';
+import { callTcApi } from '../../../utils/tc-api-client';
 
+const TOOL_ID = 'search-challenges';
 const BASE_URL = `${process.env.TC_API_BASE}/v6/challenges`;
-
-const m2mService = new M2MService();
 
 const challengeSummarySchema = z.object({
     id: z.string(),
@@ -25,9 +29,9 @@ const challengeSummarySchema = z.object({
 });
 
 export const searchChallengesTool = createTool({
-    id: 'search-challenges',
+    id: TOOL_ID,
     description:
-        'Searches Topcoder challenges via the v6 Challenges API using M2M authentication with filter support (projectId, status, types, tracks, tags, groups, dates, pagination)',
+        'Searches Topcoder challenges via the v6 Challenges API, authorized as the requesting user, with filter support (projectId, status, types, tracks, tags, groups, dates, pagination)',
     inputSchema: z.object({
         projectId: z.string().optional(),
         projectIds: z.array(z.string()).optional(),
@@ -54,7 +58,7 @@ export const searchChallengesTool = createTool({
     execute: async (inputData, context) => {
         const logger = context.mastra?.getLogger?.();
         logger?.info('Searching challenges with filters');
-        return await searchChallenges(inputData);
+        return await searchChallenges(inputData, context.requestContext);
     },
 });
 
@@ -143,20 +147,18 @@ function mapChallenge(raw: any) {
     };
 }
 
-const searchChallenges = async (input: SearchChallengesInput) => {
-    const token = await m2mService.getM2MToken();
-
+const searchChallenges = async (input: SearchChallengesInput, requestContext: RequestContext | undefined) => {
     const params = buildQueryParams(input);
     const url = `${BASE_URL}?${params.toString()}`;
 
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'app-version': '2.0.0',
+    const response = await callTcApi({
+        toolId: TOOL_ID,
+        url,
+        init: {
+            method: 'GET',
+            signal: AbortSignal.timeout(15_000),
         },
-        signal: AbortSignal.timeout(15_000),
+        requestContext,
     });
 
     if (!response.ok) {

@@ -1,17 +1,21 @@
-// Challenge API: GET /v6/challenges/:challengeId (M2M token required)
+// Challenge API: GET /v6/challenges/:challengeId
 // Fetches full challenge details from the Topcoder API by challenge ID.
+//
+// Authorized as the requestor by default (their own token is forwarded
+// as-is); no M2M fallback configured for this tool — see
+// docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { M2MService } from '../../../utils/auth/m2m.service';
+import type { RequestContext } from '@mastra/core/request-context';
+import { callTcApi } from '../../../utils/tc-api-client';
 
+const TOOL_ID = 'fetch-challenge-by-id';
 const BASE_URL = `${process.env.TC_API_BASE}/v6/challenges`;
 
-const m2mService = new M2MService();
-
 export const fetchChallengeTool = createTool({
-    id: 'fetch-challenge-by-id',
+    id: TOOL_ID,
     description:
-        'Fetches a Topcoder challenge by its UUID from the Topcoder v6 Challenges API using M2M authentication',
+        'Fetches a Topcoder challenge by its UUID from the Topcoder v6 Challenges API, authorized as the requesting user',
     inputSchema: z.object({
         challengeId: z.string().uuid().describe('UUID of the Topcoder challenge to fetch'),
     }),
@@ -92,23 +96,20 @@ export const fetchChallengeTool = createTool({
         logger?.info('Fetching challenge by ID: {challengeId}', {
             challengeId: inputData.challengeId,
         });
-        return await fetchChallenge(inputData.challengeId);
+        return await fetchChallenge(inputData.challengeId, context.requestContext);
     },
 });
 
-const fetchChallenge = async (challengeId: string) => {
-    const token = await m2mService.getM2MToken();
-
+const fetchChallenge = async (challengeId: string, requestContext: RequestContext | undefined) => {
     const url = `${BASE_URL}/${encodeURIComponent(challengeId)}`;
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'app-version': '2.0.0',
-
+    const response = await callTcApi({
+        toolId: TOOL_ID,
+        url,
+        init: {
+            method: 'GET',
+            signal: AbortSignal.timeout(15_000),
         },
-        signal: AbortSignal.timeout(15_000),
+        requestContext,
     });
 
     if (!response.ok) {
