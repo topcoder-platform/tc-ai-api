@@ -15,7 +15,9 @@ import {
   instancePromptAlignmentScorer,
 } from './scorers/instance-scorers';
 import { apiAuthLayer, middlewareConfig, tcAILogger } from '../utils';
+import { API_PREFIX, CHAT_ROUTE_PATH } from '../utils/server-routes';
 import { aiWorkspace } from './workspaces';
+import { chatRoute } from '@mastra/ai-sdk';
 
 export const mastra = new Mastra({
   workflows: {
@@ -42,7 +44,7 @@ export const mastra = new Mastra({
     host: process.env.MASTRA_HOST || process.env.HOST || '0.0.0.0',
     port: Number(process.env.PORT || 3000),
     studioBase: '/studio',
-    apiPrefix: '/v6/ai',
+    apiPrefix: API_PREFIX,
     auth: process.env.DISABLE_AUTH === 'true' ? undefined : apiAuthLayer,
     build: {
       apiReqLogs: true,
@@ -61,7 +63,12 @@ export const mastra = new Mastra({
         "Link",
       ],
       maxAge: 3600
-    }
+    },
+    apiRoutes: [
+      chatRoute({
+        path: CHAT_ROUTE_PATH,
+      }),
+    ],
   },
   bundler: {
     externals: ["tc-core-library-js"],
