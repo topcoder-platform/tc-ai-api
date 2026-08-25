@@ -30,6 +30,7 @@
     "@ai-sdk/amazon-bedrock": "^4.0.121",
     "@ai-sdk/openai": "^3.0.74",
     "@aws-sdk/credential-providers": "^3.1075.0",
+    "@mastra/ai-sdk": "^1.9.1",
     "@mastra/auth-auth0": "^1.2.2",
     "@mastra/core": "^1.61.0",
     "@mastra/evals": "^1.9.0",

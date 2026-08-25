@@ -1,6 +1,7 @@
 import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/request-context";
 import { apiAuthLayer } from '../auth';
 import { tcAILogger } from '../logger';
+import { API_PREFIX, CHAT_ROUTE_BASE_PATH } from '../server-routes';
 
 /**
  * Resource ID Middleware
@@ -17,9 +18,7 @@ import { tcAILogger } from '../logger';
  *
  * @returns 401 Unauthorized if the user is missing or an ID cannot be extracted.
  */
-export const resourceIdMiddleware = {
-    path: '/api/*',
-    handler: async (c: any, next: any) => {
+const resourceIdMiddlewareHandler = async (c: any, next: any) => {
         const requestContext = c.get('requestContext');
         let user = requestContext.get('user');
 
@@ -72,5 +71,17 @@ export const resourceIdMiddleware = {
         requestContext.set(MASTRA_RESOURCE_ID_KEY, userId || sub);
 
         return next();
-    },
+};
+
+// Built-in Mastra routes (agents, workflows, memory, threads, ...) live under apiPrefix.
+export const resourceIdMiddleware = {
+    path: `${API_PREFIX}/*`,
+    handler: resourceIdMiddlewareHandler,
+};
+
+// chatRoute() is a custom API route registered outside apiPrefix (see src/mastra/index.ts),
+// so it needs its own entry to be covered.
+export const chatResourceIdMiddleware = {
+    path: `${CHAT_ROUTE_BASE_PATH}/*`,
+    handler: resourceIdMiddlewareHandler,
 };
