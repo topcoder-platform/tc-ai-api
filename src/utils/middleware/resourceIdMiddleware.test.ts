@@ -91,7 +91,6 @@ describe('resourceIdMiddleware', () => {
         expect(loggerInfoMock).toHaveBeenCalledWith('Auth resolved for request', {
             authType: 'member',
             resourceId: '12345',
-            user,
         });
     });
 
@@ -134,7 +133,6 @@ describe('resourceIdMiddleware', () => {
         expect(loggerInfoMock).toHaveBeenCalledWith('Auth resolved for request', {
             authType: 'm2m',
             resourceId: 'm2m-subject',
-            user,
         });
     });
 
