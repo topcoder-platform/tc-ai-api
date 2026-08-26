@@ -5,7 +5,7 @@ import { Memory } from '@mastra/memory';
 import { fetchProjectTool } from '../../tools/project/fetch-project-tool';
 
 const PROVIDER_NAME = process.env.CHALLENGE_SEARCH_AI_PROVIDER || 'AWSBedrock';
-const MODEL_ID = process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5';
+const MODEL_ID = process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const AGENT_ID = 'challenge-search-agent';
 
 /**
