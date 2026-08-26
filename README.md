@@ -135,7 +135,7 @@ tc-ai-api/
 | `RAG_EMBEDDING_PROVIDER`            | No       | `TC-Ollama`                            | Embedding provider for challenge RAG (`TC-Ollama` \| `AWSBedrock`) |
 | `RAG_EMBEDDING_MODEL_ID`            | No       | `nomic-embed-text`                     | Embedding model id (768d locally; `amazon.titan-embed-text-v2:0`, 1024d, in prod) |
 | `VECTOR_INDEX_NAME`                 | No       | `challenge_embeddings`                 | Vector table name (SQL-identifier validated) — override per environment when reindexing |
-| `VECTOR_SEARCH_THRESHOLD`           | No       | `0.5`                                  | Minimum similarity score, applied after retrieval                |
+| `VECTOR_SEARCH_THRESHOLD`           | No       | `0.25`                                 | Minimum similarity score, applied after retrieval                |
 | `RAG_CHUNK_MAX_SIZE`                | No       | `512`                                  | Max characters per chunk before recursive splitting               |
 | `RAG_CHUNK_OVERLAP`                 | No       | `50`                                   | Character overlap between recursively-split chunks                |
 | `RAG_TOP_K`                         | No       | `10`                                   | Default result count for challenge vector search                  |
