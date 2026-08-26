@@ -121,7 +121,7 @@ export function getRagConfig(): RagConfig {
     const vectorSearchThreshold = parseNumber(
         process.env.VECTOR_SEARCH_THRESHOLD,
         'VECTOR_SEARCH_THRESHOLD',
-        0.5,
+        0.25,
     );
 
     const chunkMaxSize = parseNumber(
