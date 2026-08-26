@@ -67,6 +67,7 @@ export const mastra = new Mastra({
     apiRoutes: [
       chatRoute({
         path: CHAT_ROUTE_PATH,
+        version: 'v6',
       }),
     ],
   },
