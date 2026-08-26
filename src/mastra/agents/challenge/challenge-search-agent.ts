@@ -9,6 +9,27 @@ const MODEL_ID = process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claud
 const AGENT_ID = 'challenge-search-agent';
 
 /**
+ * Derives the member-facing challenge details page origin from TC_API_BASE
+ * (mirrors the domain-derivation in ../../../utils/auth.ts), so the agent's
+ * instructions link to the right environment (dev vs prod) without a
+ * separate env var to keep in sync.
+ */
+function resolveChallengeDetailsBaseUrl(): string {
+    let domain = 'topcoder.com';
+    try {
+        const tcApiBase = process.env.TC_API_BASE || '';
+        if (tcApiBase) {
+            domain = new URL(tcApiBase).hostname.replace('api.', '');
+        }
+    } catch {
+        // fall back to default domain
+    }
+    return `https://www.${domain}/challenges`;
+}
+
+const CHALLENGE_DETAILS_BASE_URL = resolveChallengeDetailsBaseUrl();
+
+/**
  * "Topcoder Challenge Assistant" — synthesises natural-language answers over
  * indexed challenge descriptions via challengeVectorQueryTool.
  *
@@ -30,7 +51,7 @@ export const challengeSearchAgent = new Agent({
     model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
     memory: new Memory({
         options: {
-            lastMessages: 10,
+            lastMessages: 25,
         },
     }),
     instructions: {
@@ -62,7 +83,7 @@ Every result carries a "projectId" in its metadata. Challenges from different pr
 - If the user's question only makes sense answered within a single project's scope (e.g. "what's already been done here"), make sure you aren't quietly blending in matches from other projects.
 
 Answering
-Base your answer only on what the tool actually returned — summarize and organize it, but don't add detail the results don't support. If nothing relevant turns up after a couple of query attempts, say so plainly and suggest what the user could try instead.`,
+Base your answer only on what the tool actually returned — summarize and organize it, but don't add detail the results don't support. Format your responses in markdown (bold, bullet lists, headings) where that makes the answer easier to scan — it renders properly for the user. Whenever you name a specific challenge, make its title a markdown link to \`${CHALLENGE_DETAILS_BASE_URL}/<challengeId>\`, using the challengeId from that result's metadata — e.g. \`[Member Profile Processor Enhancement](${CHALLENGE_DETAILS_BASE_URL}/abc123-def456)\`. If nothing relevant turns up after a couple of query attempts, say so plainly and suggest what the user could try instead.`,
     },
     tools: { challengeVectorQueryTool, fetchProjectTool },
     // Opts this agent out of the Mastra-instance-level `aiWorkspace`
