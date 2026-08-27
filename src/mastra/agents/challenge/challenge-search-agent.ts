@@ -52,6 +52,7 @@ export const challengeSearchAgent = new Agent({
     memory: new Memory({
         options: {
             lastMessages: 25,
+            generateTitle: true,
         },
     }),
     instructions: {
