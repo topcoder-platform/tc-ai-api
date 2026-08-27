@@ -27,7 +27,7 @@ vi.mock('../../../utils/providers/embedding-factory', () => ({
 }));
 
 vi.mock('../../vector/challenge-vector-store', () => ({
-    getChallengeVectorStore: () => ({ query: mocks.storeQuery }),
+    ensureChallengeIndex: async () => ({ query: mocks.storeQuery }),
 }));
 
 vi.mock('../../../config/rag.config', () => ({
