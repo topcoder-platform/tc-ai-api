@@ -10,12 +10,13 @@ const MODEL_ID = process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claud
 const AGENT_ID = 'challenge-search-agent';
 
 /**
- * Derives the member-facing challenge details page origin from TC_API_BASE
- * (mirrors the domain-derivation in ../../../utils/auth.ts), so the agent's
- * instructions link to the right environment (dev vs prod) without a
- * separate env var to keep in sync.
+ * Derives the member-facing domain from TC_API_BASE (mirrors the
+ * domain-derivation in ../../../utils/auth.ts), so the agent's instructions
+ * link to the right environment (dev vs prod) without a separate env var to
+ * keep in sync. Shared by both the challenge and project details base URLs
+ * below — they differ only in subdomain and path.
  */
-function resolveChallengeDetailsBaseUrl(): string {
+function resolveDomain(): string {
     let domain = 'topcoder.com';
     try {
         const tcApiBase = process.env.TC_API_BASE || '';
@@ -25,10 +26,12 @@ function resolveChallengeDetailsBaseUrl(): string {
     } catch {
         // fall back to default domain
     }
-    return `https://www.${domain}/challenges`;
+    return domain;
 }
 
-const CHALLENGE_DETAILS_BASE_URL = resolveChallengeDetailsBaseUrl();
+const CHALLENGE_DETAILS_BASE_URL = `https://www.${resolveDomain()}/challenges`;
+// e.g. https://work.topcoder.com/projects/1001025
+const PROJECT_DETAILS_BASE_URL = `https://work.${resolveDomain()}/projects`;
 
 /**
  * "Topcoder Challenge Assistant" — synthesises natural-language answers over
@@ -82,6 +85,7 @@ Keep projects separate
 Every result carries a "projectId" in its metadata. Challenges from different projects are different engagements for different customers — the work, context, and skills involved can be completely unrelated even when the text looks similar. Never merge or summarize results across projects as if they were one pool:
 - When results span more than one project, group your answer by project rather than presenting one flat list.
 - Use the "fetch-project-by-id" tool to resolve a projectId to its name when that would make the grouping clearer (e.g. labeling "Project: Acme Storefront Redesign" instead of a bare id) — only for projects that actually showed up in results, not speculatively.
+- Every time you mention a project — by its bare id or by its resolved name/title — link it, the same way challenge titles are linked (see "Answering" below): \`[Acme Storefront Redesign](${PROJECT_DETAILS_BASE_URL}/17423)\` or, if you haven't resolved a name, \`[17423](${PROJECT_DETAILS_BASE_URL}/17423)\`. Never mention a project as bare, unlinked text.
 - If the user's question only makes sense answered within a single project's scope (e.g. "what's already been done here"), make sure you aren't quietly blending in matches from other projects.
 
 Fetching full challenge details
@@ -92,7 +96,7 @@ The "challenge-vector-query" tool only returns indexed description chunks — it
 - If a result's status is already visible in the description text, don't re-fetch just to confirm it — reach for this tool when the user wants something the search result doesn't already show.
 
 Answering
-Base your answer only on what the tool actually returned — summarize and organize it, but don't add detail the results don't support. Format your responses in markdown (bold, bullet lists, headings) where that makes the answer easier to scan — it renders properly for the user. Whenever you name a specific challenge, make its title a markdown link to \`${CHALLENGE_DETAILS_BASE_URL}/<challengeId>\`, using the challengeId from that result's metadata — e.g. \`[Member Profile Processor Enhancement](${CHALLENGE_DETAILS_BASE_URL}/abc123-def456)\`. If nothing relevant turns up after a couple of query attempts, say so plainly and suggest what the user could try instead.`,
+Base your answer only on what the tool actually returned — summarize and organize it, but don't add detail the results don't support. Format your responses in markdown (bold, bullet lists, headings) where that makes the answer easier to scan — it renders properly for the user, and every link below opens in a new tab. Whenever you name a specific challenge, make its title a markdown link to \`${CHALLENGE_DETAILS_BASE_URL}/<challengeId>\`, using the challengeId from that result's metadata — e.g. \`[Member Profile Processor Enhancement](${CHALLENGE_DETAILS_BASE_URL}/abc123-def456)\`. Do the same for every project id or project name/title you mention, linking to \`${PROJECT_DETAILS_BASE_URL}/<projectId>\` — e.g. \`[Acme Storefront Redesign](${PROJECT_DETAILS_BASE_URL}/17423)\` or \`[17423](${PROJECT_DETAILS_BASE_URL}/17423)\` when you don't have a resolved name. If nothing relevant turns up after a couple of query attempts, say so plainly and suggest what the user could try instead.`,
     },
     tools: { challengeVectorQueryTool, fetchProjectTool, fetchChallengeTool },
     // Opts this agent out of the Mastra-instance-level `aiWorkspace`
