@@ -23,7 +23,7 @@ import { z } from 'zod';
 import { getRagConfig } from '../../../config/rag.config';
 import { tcAILogger } from '../../../utils/logger';
 import { createEmbeddingModel } from '../../../utils/providers/embedding-factory';
-import { getChallengeVectorStore } from '../../vector/challenge-vector-store';
+import { ensureChallengeIndex } from '../../vector/challenge-vector-store';
 
 // ---------------------------------------------------------------------------
 // Zod Schemas
@@ -78,8 +78,20 @@ const inputSchema = z.preprocess(
                 'then becomes a metadata-only lookup with no embedding call.',
             ),
         skills: z.array(z.string()).optional().describe('Filter by challenge skills (e.g. ["TypeScript", "React"])'),
-        type: z.string().optional().describe('Filter by challenge type. Free-form (D12) — not an enum.'),
-        track: z.string().optional().describe('Filter by challenge track. Free-form (D12) — not an enum.'),
+        type: z
+            .enum(['Challenge', 'Marathon Match'])
+            .optional()
+            .describe(
+                'Filter by challenge type. One of "Challenge" (standard challenge) or ' +
+                '"Marathon Match" (extended-duration competitive challenge). Omit to search across all types.',
+            ),
+        track: z
+            .enum(['Data Science', 'Design', 'Quality Assurance', 'Development'])
+            .optional()
+            .describe(
+                'Filter by challenge track. One of "Data Science", "Design", "Quality Assurance", ' +
+                'or "Development". Omit to search across all tracks.',
+            ),
         groups: z.array(z.string()).optional().describe('Filter by challenge group ids'),
         projectId: z
             .union([z.string(), z.array(z.string())])
@@ -169,7 +181,7 @@ export const challengeVectorQueryTool = createTool({
         const minScore = inputData.minScore ?? config.vectorSearchThreshold;
 
         try {
-            const store = getChallengeVectorStore();
+            const store = await ensureChallengeIndex();
 
             let queryVector: number[] | undefined;
             if (query) {

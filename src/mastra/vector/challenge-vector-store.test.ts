@@ -243,17 +243,19 @@ describe('challenge-vector-store', () => {
             );
         });
 
-        it('is idempotent — second call does not call createIndex', async () => {
-            // First call: index exists with correct dimension → skip create
+        it('is idempotent — calls createIndex every time even when the index already exists', async () => {
+            // createIndex is itself idempotent (CREATE TABLE/INDEX IF NOT EXISTS)
+            // and is the only place @mastra/pg's schema migrations run (e.g. the
+            // 1.22+ namespace column), so it must run on every call, not just
+            // when the index is missing.
             mocks.describeIndex.mockResolvedValue({ dimension: 768, count: 0 });
             mocks.createIndex.mockResolvedValue(undefined);
 
             await ensureChallengeIndex();
-            expect(mocks.createIndex).toHaveBeenCalledTimes(0);
+            expect(mocks.createIndex).toHaveBeenCalledTimes(1);
 
-            // Second call: still exists with correct dimension → still skip
             await ensureChallengeIndex();
-            expect(mocks.createIndex).toHaveBeenCalledTimes(0);
+            expect(mocks.createIndex).toHaveBeenCalledTimes(2);
         });
 
         it('does not throw on second call', async () => {
@@ -377,12 +379,13 @@ describe('challenge-vector-store', () => {
             await expect(ensureChallengeIndex()).resolves.not.toThrow();
         });
 
-        it('does not call createIndex when dimensions match', async () => {
+        it('still calls createIndex when dimensions match (idempotent schema check)', async () => {
             mocks.describeIndex.mockResolvedValue({ dimension: 768, count: 100 });
+            mocks.createIndex.mockResolvedValue(undefined);
             mockConfig({ dimension: 768 });
 
             await ensureChallengeIndex();
-            expect(mocks.createIndex).not.toHaveBeenCalled();
+            expect(mocks.createIndex).toHaveBeenCalledTimes(1);
         });
 
         it('names the index in the error message', async () => {
@@ -413,8 +416,9 @@ describe('challenge-vector-store', () => {
             expect(mocks.disconnect).not.toHaveBeenCalled();
         });
 
-        it('does not call disconnect during ensureChallengeIndex (idempotent path)', async () => {
+        it('does not call disconnect during ensureChallengeIndex (index already exists)', async () => {
             mocks.describeIndex.mockResolvedValue({ dimension: 768, count: 0 });
+            mocks.createIndex.mockResolvedValue(undefined);
 
             await ensureChallengeIndex();
             expect(mocks.disconnect).not.toHaveBeenCalled();

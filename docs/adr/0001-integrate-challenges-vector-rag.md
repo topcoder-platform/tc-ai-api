@@ -79,7 +79,7 @@ Neither can be copied as-is.
 | D9 | Event-driven ingestion (triggering on challenge activation/update) is **deferred**; the first release is on-demand invocation only. | Keeps the initial surface small; the workflow is already idempotent per challenge, so an event trigger can be layered on later without reworking it. |
 | D10 | Metadata carries **only `projectId`** as an opaque project reference (nullable, stored as a string). No project attributes are denormalized into metadata, no project text is indexed, and ingestion makes no call to projects-api. Consumers that need project detail resolve it in a **subsequent** call to `GET /v6/projects/:projectId`. | Keeps ingestion dependent on a single upstream API, and eliminates the denormalization staleness problem outright: there is no copied project field that can drift when a project is renamed, re-typed, or reassigned to a different billing account, so no refresh mechanism, no re-ingestion trigger, and no staleness signal are needed. It also keeps customer-identifying commercial data out of a store searched by similarity, leaving authorization where it belongs — on the projects-api call, which is already scope-guarded. `projectId` alone still supports project-scoped filtering (`{ projectId: { $in: [...] } }`) and roll-up of challenge hits by project. |
 | D11 | The **Challenge Search API** (`GET /v6/challenges`) is the primary bulk ingestion source, not CSV. It supports `projectId`/`projectIds`, `status`, `approvalStatus`, `types`/`tracks`, `tags`/`groups`, `updatedDateStart`/`updatedDateEnd`, and `page`/`perPage` pagination, enabling project-scoped fan-out, status-filtered corpus building, and incremental sync by `updatedDateStart`. CSV backfill remains as a secondary path for offline/air-gapped environments. | The search endpoint is already M2M-authenticated (`scopes: [READ]`) and returns the full challenge payload (including `description`) when `isLightweight` is false (the default). It eliminates the need to export and ship CSV files, and its `updatedDateStart` filter makes incremental sync a single paginated call rather than a full re-export. |
-| D12 | `type` and `track` are stored and filtered as **free-form strings**, not Zod enums. `ChallengeType` is a reference table (`model ChallengeType` with `name`, `isActive`, `isTask`, `isLegacy`), not an enum — new types can be added at runtime. `ChallengeTrackEnum` has four values (`DESIGN`, `DATA_SCIENCE`, `DEVELOPMENT`, `QUALITY_ASSURANCE`) but the API returns `track.name` (human-readable, e.g. "Quality Assurance"), not the enum value, and tracks can be deactivated via `isActive`. | The prototype hardcoded `['Challenge', 'First2Finish', 'Marathon Match']` as a Zod enum for type and `['Data Science', 'Design', 'Development']` for track, missing `Quality Assurance` and rejecting any future type. Treating both as strings (with the known values documented for reference but not enforced) is forward-compatible with the reference-table model and avoids ingestion failures when a new type or track is added. |
+| D12 | `type` and `track` are stored as **free-form strings**, not Zod enums. `ChallengeType` is a reference table (`model ChallengeType` with `name`, `isActive`, `isTask`, `isLegacy`), not an enum — new types can be added at runtime. `ChallengeTrackEnum` has four values (`DESIGN`, `DATA_SCIENCE`, `DEVELOPMENT`, `QUALITY_ASSURANCE`) but the API returns `track.name` (human-readable, e.g. "Quality Assurance"), not the enum value, and tracks can be deactivated via `isActive`. **Amended (2026-08-27):** both the `type` and `track` *query filters* (on `challengeVectorQueryTool` and the `challenge-search` workflow input) are now Zod enums — `type` restricted to `['Challenge', 'Marathon Match']`, `track` restricted to `['Data Science', 'Design', 'Quality Assurance', 'Development']` — a deliberate reversal of the free-form-filter half of this decision for those two callers. Storage/ingestion is unaffected: it still accepts and indexes any `ChallengeType` value (including `First2Finish`, `Task`) and any `track.name`. | The prototype hardcoded `['Challenge', 'First2Finish', 'Marathon Match']` as a Zod enum for type and `['Data Science', 'Design', 'Development']` for track, missing `Quality Assurance` and rejecting any future type. Treating both as strings (with the known values documented for reference but not enforced) is forward-compatible with the reference-table model and avoids ingestion failures when a new type or track is added. The amendment narrows the *query* surface to the values users actually filter by in practice, accepting that a future new `ChallengeType` (or `First2Finish`/`Task`) becomes unfilterable via `type` until the enum is revisited, and that a deactivated or renamed track (`ChallengeTrackEnum`'s `isActive` flag) would need the same revisit for `track` — it does not touch ingestion, so no re-indexing risk. |
 
 ## Implementation plan
 
@@ -108,11 +108,15 @@ Neither can be copied as-is.
   default, per D2) — chunk sizes,
   `VECTOR_SEARCH_THRESHOLD`, `VECTOR_INDEX_NAME` (SQL-identifier validated, as in
   the original), `RAG_TOP_K`. Per D12, `type` and `track` are **not** hardcoded
-  enums — the config documents the known `ChallengeTrackEnum` values
-  (`DESIGN`, `DATA_SCIENCE`, `DEVELOPMENT`, `QUALITY_ASSURANCE`) and the current
-  `ChallengeType` reference-table names for readability, but the query tool
-  accepts any string. Database settings reuse `MASTRA_DB_CONNECTION` and
-  `MASTRA_DB_SCHEMA` (default `ai`).
+  enums at the storage/config layer — the config documents the known
+  `ChallengeTrackEnum` values (`DESIGN`, `DATA_SCIENCE`, `DEVELOPMENT`,
+  `QUALITY_ASSURANCE`) and the current `ChallengeType` reference-table names for
+  readability but does not enforce them at the storage/config layer. The `type`
+  and `track` query filters are Zod enums restricted to `['Challenge', 'Marathon
+  Match']` and `['Data Science', 'Design', 'Quality Assurance', 'Development']`
+  respectively (D12 amendment, 2026-08-27) — narrower than storage on purpose.
+  Database settings reuse `MASTRA_DB_CONNECTION` and `MASTRA_DB_SCHEMA` (default
+  `ai`).
 - **`src/utils/providers/embedding-factory.ts`** — `createEmbeddingModel(provider, modelId)`
   switch mirroring `createModel`, using `ollama.embedding(modelId)` and
   `createBedrockProvider().embedding(modelId)`, logging via `tcAILogger`. Re-exported
@@ -263,7 +267,7 @@ Supporting changes:
 - **`src/mastra/workflows/challenge/challenge-search-workflow.ts`**, id
   `challenge-search`, registered under `workflows` — the deterministic path from D8,
   with no agent and no LLM call:
-  - Input `{ query?: string, skills?: string[], type?: string, track?: string, groups?: string[], projectId?: string | string[], groupBy?: 'chunk' | 'challenge' | 'project', topK?: number, minScore?: number }`.
+  - Input `{ query?: string, skills?: string[], type?: 'Challenge' | 'Marathon Match', track?: 'Data Science' | 'Design' | 'Quality Assurance' | 'Development', groups?: string[], projectId?: string | string[], groupBy?: 'chunk' | 'challenge' | 'project', topK?: number, minScore?: number }` (`type`/`track` enums per the D12 amendment above).
     Filters are supplied explicitly by the caller; unlike the agent path, nothing is
     inferred from natural language.
   - Single step `search-challenges` executing `challengeVectorQueryTool` with the
