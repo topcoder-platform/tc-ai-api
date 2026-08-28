@@ -186,7 +186,7 @@ export const challengeVectorQueryTool = createTool({
             let queryVector: number[] | undefined;
             if (query) {
                 const { embedding } = await embed({
-                    model: createEmbeddingModel(config.embedding.provider, config.embedding.modelId),
+                    model: createEmbeddingModel(config.embedding.provider, config.embedding.modelId, 'challenge-vector-query-tool'),
                     value: query,
                 });
                 queryVector = embedding;

@@ -141,6 +141,8 @@ tc-ai-api/
 | `RAG_TOP_K`                         | No       | `10`                                   | Default result count for challenge vector search                  |
 | `CHALLENGE_SEARCH_AI_PROVIDER`      | No       | `AWSBedrock`                           | Model provider for `challenge-search-agent`                       |
 | `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-4-5`        | Model id for `challenge-search-agent`                              |
+| `BEDROCK_PROMPT_CACHE_ENABLED`      | No       | `true`                                 | Global kill switch for Bedrock prompt caching (see below)         |
+| `BEDROCK_PROMPT_CACHE_TTL`          | No       | `5m`                                   | Bedrock cache checkpoint TTL — `5m` or `1h`                       |
 
 > \* Auth0 variables are required unless `DISABLE_AUTH=true`.
 > \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are only exercised if a tool is explicitly opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) — no tool is today, so these aren't required for the currently-shipped behavior, only for future fallback use.
@@ -323,6 +325,8 @@ Four agents are registered in `src/mastra/index.ts`, all built via the shared `c
 | `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | — | — (structured-output rewriter) |
 
 Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_MODEL_ID` env vars (e.g. `SKILLS_EXTRACTOR_AI_PROVIDER`, `CHALLENGE_PARSER_AI_PROVIDER`, `CHALLENGE_SEARCH_AI_PROVIDER`, `JD_REWRITER_AI_PROVIDER`).
+
+**Bedrock prompt caching:** every agent's static system-prompt instructions are cached automatically via AWS Bedrock prompt caching, applied centrally by `createBedrockChatModel` (`src/utils/providers/bedrock.ts`) — no per-agent code. This cuts cost and time-to-first-token for the (often large) system-prompt portion on every call after the first cached one. It's gated by an allowlist of confirmed cache-capable model IDs (current-generation Claude 3.5+/Sonnet 4-5/Haiku 4.5 and Amazon Nova), so overriding an agent's model to something else (e.g. an older Claude 3 model, or Titan) degrades gracefully to no caching rather than erroring. Set `BEDROCK_PROMPT_CACHE_ENABLED=false` to disable it globally, or `BEDROCK_PROMPT_CACHE_TTL=1h` to trade a higher cache-write cost for a longer idle window between requests (default `5m`). Cache read/write token counts are logged at `debug` level per call (`[Bedrock cache] agent=... model=... cacheReadTokens=... cacheWriteTokens=...`).
 
 ### `skillsMatchingAgent`
 
