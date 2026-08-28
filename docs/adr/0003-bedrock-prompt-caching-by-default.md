@@ -1,11 +1,13 @@
 # ADR 0003 — Enable AWS Bedrock prompt caching by default
 
-- **Status:** **Proposed** (not yet implemented) — for review
-- **Date:** 2026-08-26
+- **Status:** **Accepted** (proposed 2026-08-26, refreshed 2026-08-28, accepted and implemented 2026-08-28) — implemented on this branch
+- **Date:** 2026-08-26 (refreshed 2026-08-28 — see "Update" in Context)
 - **Target branch:** `challenges-rag`
-- **Related:** none directly, but touches the same `createModel()` / provider-factory
-  infrastructure (`src/utils/providers/model-factory.ts`, `src/utils/providers/bedrock.ts`)
-  every existing agent goes through.
+- **Related:** `src/utils/providers/bedrock.ts` / `src/utils/providers/model-factory.ts`
+  already carry a `wrapLanguageModel`-based Bedrock **request-metadata** middleware
+  (`createBedrockChatModel`), landed on this branch ahead of this ADR. See "Update"
+  below — this ADR's caching middleware composes with that existing wrapper rather
+  than wrapping a bare provider model.
 
 ## Context
 
@@ -83,6 +85,43 @@ Memory option, or built-in processor that sets `providerOptions.bedrock.cachePoi
 automatically. None of the four agents in this repo currently use Observational
 Memory (they use plain `lastMessages`). This has to be built as model middleware.
 
+### Update (2026-08-28) — a Bedrock request-metadata middleware landed first
+
+Since this ADR was drafted, `src/utils/providers/bedrock.ts` and
+`src/utils/providers/model-factory.ts` were changed to fix an unrelated bug: the
+per-agent `X-Amzn-Bedrock-Request-Metadata` HTTP header set at provider-construction
+time had no effect on chat calls, because Bedrock's Converse/ConverseStream API
+(what `@ai-sdk/amazon-bedrock`'s chat model actually calls) reads request metadata
+from a `requestMetadata` field in the JSON **body**, not from that HTTP header — the
+header only applies to the InvokeModel/InvokeModelWithResponseStream API, which is
+what this repo's embedding/image models use. The fix, already merged:
+
+- `bedrock.ts` now exports `createBedrockChatModel(modelId, agentId?)`, which wraps
+  `createBedrockProvider(agentId)(modelId)` in `wrapLanguageModel({ model,
+  middleware: defaultSettingsMiddleware({ settings: { providerOptions: { bedrock: {
+  requestMetadata: { department: 'ai_api', role: \`agent-${agentId}\` } } } } }) })`
+  — i.e. exactly the `wrapLanguageModel`-based middleware pattern this ADR proposes
+  to add for caching, already established for a different purpose.
+- `model-factory.ts`'s `AWSBedrock` branch already calls `createBedrockChatModel(modelName,
+  agentId)`, **not** `createBedrockProvider(agentId)(modelName)` directly. Every
+  current agent's model is therefore already `wrapLanguageModel`-wrapped by the time
+  this ADR's caching feature would be added — Decision items 1–2 below need to
+  extend that existing wrapper, not introduce a second, separate one.
+- A TypeScript workaround was needed and is now established precedent: `ai@6.0.209`'s
+  own `LanguageModel`/`wrapLanguageModel` return type resolves against a different
+  `@ai-sdk/provider` instance than the one Mastra vendors internally (its bundled
+  `_types/@ai-sdk_provider-v5`), so TS treats them as structurally incompatible even
+  though they implement the same interface at runtime. `bedrock.ts` anchors to
+  `type BedrockLanguageModel = ReturnType<ReturnType<typeof createBedrockProvider>>`
+  and casts the `wrapLanguageModel(...)` result back onto it. This ADR's caching
+  middleware should reuse that same anchor type rather than re-derive its own.
+- Practically, this **retires the specific risk the original Phase 1 plan called out
+  for verification** ("confirm `wrapLanguageModel`'s wrapper doesn't break the
+  agents' existing test suites") — that's no longer a hypothetical to check during
+  this ADR's implementation, it's already true in production code today: all four
+  agents already receive a `wrapLanguageModel`-wrapped model (for request-metadata
+  tagging), and their existing test suites already pass against it unmodified.
+
 ## Scope
 
 **In scope:**
@@ -147,20 +186,28 @@ boilerplate.
      negative here just means "no caching for this call" (silent, harmless); a
      false positive means a hard `ValidationException` that breaks the agent's
      next request outright. When in doubt, don't cache.
-   - `createCachedBedrockModel(agentId, modelName)` — wraps
-     `createBedrockProvider(agentId)(modelName)` in `wrapLanguageModel({ model,
-     middleware })` (from the `ai` package). The middleware's `transformParams`
-     locates the system message in `params.prompt` and, only when
-     `isCacheCapableBedrockModel(modelName)` is true and the feature is enabled,
-     returns a new params object with `providerOptions.bedrock.cachePoint = {
-     type: 'default', ttl: <configured> }` merged onto that message's existing
-     `providerOptions` (never clobbering anything already set there). Otherwise
-     returns `params` unchanged. `transformParams` returns a new object rather
-     than mutating the input, matching the AI SDK middleware contract.
-2. **`src/utils/providers/model-factory.ts`'s `AWSBedrock` branch calls
-   `createCachedBedrockModel(agentId, modelName)`** instead of
-   `createBedrockProvider(agentId)(modelName)`. This is the one line that makes the
-   feature apply to all four agents automatically — no agent file changes.
+   - A cache middleware (`transformParams`) that locates the system message in
+     `params.prompt` and, only when `isCacheCapableBedrockModel(modelName)` is true
+     and the feature is enabled, returns a new params object with
+     `providerOptions.bedrock.cachePoint = { type: 'default', ttl: <configured> }`
+     merged onto that message's existing `providerOptions` (never clobbering
+     anything already set there — this matters concretely now, since the
+     request-metadata middleware already populates `providerOptions.bedrock` on
+     every call). Otherwise returns `params` unchanged. `transformParams` returns a
+     new object rather than mutating the input, matching the AI SDK middleware
+     contract.
+   - This middleware is added as a **second entry** in `createBedrockChatModel`'s
+     existing `wrapLanguageModel({ model, middleware })` call (`middleware` becomes
+     an array: `[requestMetadataMiddleware, cacheMiddleware]`, gated independently —
+     the cache entry only activates for cache-capable models with the feature
+     enabled, exactly as the request-metadata entry already only activates when
+     `agentId` is provided). One `wrapLanguageModel` call, one `BedrockLanguageModel`
+     cast, both concerns composed — not two nested wraps of the provider model.
+2. **`src/utils/providers/model-factory.ts`'s `AWSBedrock` branch keeps calling
+   `createBedrockChatModel(modelName, agentId)`** — unchanged from its current
+   form. No factory-level plumbing changes; the caching behavior activates because
+   `createBedrockChatModel` itself now composes the cache middleware alongside the
+   request-metadata one. No agent file changes either way.
 3. **Two new environment variables**, both optional with defaults, following this
    repo's existing env-var convention (`rag.config.ts`'s pattern of
    validated-with-sane-default):
@@ -184,16 +231,21 @@ boilerplate.
 ### Config surface
 
 ```ts
-// src/utils/providers/bedrock.ts (additive)
+// src/utils/providers/bedrock.ts (additive — extends the existing
+// createBedrockChatModel, does not replace or duplicate it)
 export function isCacheCapableBedrockModel(modelId: string): boolean {
   // Allowlist of confirmed-capable model ID patterns — Claude 3.5+/Sonnet 4-5/
   // Haiku 4.5, Amazon Nova. Extend deliberately; a miss here just means no
   // caching, a wrong inclusion means a hard ValidationException on the next call.
 }
 
-export function createCachedBedrockModel(agentId: string | undefined, modelName: string) {
-  // wrapLanguageModel({ model: createBedrockProvider(agentId)(modelName), middleware })
-}
+// Inside createBedrockChatModel's existing wrapLanguageModel({ model, middleware })
+// call: middleware becomes an array, e.g.
+//   middleware: [
+//     ...(agentId ? [requestMetadataMiddleware(agentId)] : []),
+//     ...(cacheEnabled && isCacheCapableBedrockModel(modelId) ? [cacheMiddleware] : []),
+//   ]
+// still cast once to the existing BedrockLanguageModel anchor type.
 ```
 
 ```bash
@@ -205,30 +257,42 @@ BEDROCK_PROMPT_CACHE_TTL="[5m|1h — default 5m]"
 ## Implementation plan
 
 ### Phase 0 — Middleware and eligibility check
-- `src/utils/providers/bedrock.ts`: add `isCacheCapableBedrockModel()`,
-  `createCachedBedrockModel()`, and the local (untyped-upstream) TypeScript
+- `src/utils/providers/bedrock.ts`: add `isCacheCapableBedrockModel()`, a cache
+  `transformParams` middleware, and the local (untyped-upstream) TypeScript
   interface describing the `cachePoint` shape, since the installed SDK doesn't
-  export one.
+  export one. Compose the middleware into `createBedrockChatModel`'s existing
+  `wrapLanguageModel({ model, middleware })` call as an additional array entry
+  (gated on `isCacheCapableBedrockModel(modelId)` and the enabled flag) rather than
+  adding a second, separate wrapper function — `createBedrockChatModel` is already
+  the one `wrapLanguageModel` choke point every agent goes through (see "Update" in
+  Context), and it already resolves the `BedrockLanguageModel` type-cast this would
+  otherwise need to re-derive.
 - Read the two new env vars once (module scope or lazily, matching the existing
   style in this file) with validation matching `rag.config.ts`'s
   `parseNumber`/`validateSqlIdentifier` pattern — throw an actionable error for an
   invalid `BEDROCK_PROMPT_CACHE_TTL`, don't silently fall back.
-- `src/utils/providers/bedrock.test.ts` (new or extended): unit tests for
+- `src/utils/providers/bedrock.test.ts` (new — doesn't exist yet): unit tests for
   `isCacheCapableBedrockModel` — positive cases for the four model IDs actually in
-  use today, negative cases for Titan/Llama/pre-3.5 Claude; and for
-  `createCachedBedrockModel`'s `transformParams` — cache point added for a capable
-  model with the feature enabled, absent when disabled via env, absent for a
-  non-capable model, existing `providerOptions` on the system message preserved
-  rather than overwritten.
+  use today, negative cases for Titan/Llama/pre-3.5 Claude; and for the cache
+  middleware's `transformParams` — cache point added for a capable model with the
+  feature enabled, absent when disabled via env, absent for a non-capable model,
+  existing `providerOptions` on the system message preserved rather than
+  overwritten (this last case is no longer hypothetical — the request-metadata
+  middleware already sets `providerOptions.bedrock` on every tagged call, so the
+  non-clobbering behavior is exercised by real, existing traffic, not just a
+  synthetic test fixture). Also add a case with both middleware entries present
+  (agentId set *and* a cache-capable model) confirming both `requestMetadata` and
+  `cachePoint` land in the final params.
 
 ### Phase 1 — Wire into the model factory
-- `src/utils/providers/model-factory.ts`: `AWSBedrock` branch calls
-  `createCachedBedrockModel(agentId, modelName)`. No other branch changes.
-- Confirm none of the four agents' existing test suites assert on the exact shape
-  of the model instance returned by `createModel()` in a way `wrapLanguageModel`'s
-  wrapper would break (it still satisfies the same `LanguageModelV3` interface
-  `Agent({ model })` expects, so this is expected to be a non-issue, but worth
-  confirming against the actual test suites rather than assuming).
+- No `model-factory.ts` changes needed — its `AWSBedrock` branch already calls
+  `createBedrockChatModel(modelName, agentId)`; the caching behavior activates
+  purely from Phase 0's change to that function's internals.
+- The original risk here — "confirm `wrapLanguageModel`'s wrapper doesn't break the
+  four agents' existing test suites" — is already resolved, not just de-risked: all
+  four agents already run against a `wrapLanguageModel`-wrapped model today (for
+  request-metadata tagging), and their test suites already pass unmodified against
+  it. Nothing new to verify here beyond re-running that same suite after Phase 0.
 
 ### Phase 2 — Validation
 - `npx tsc --noEmit`, `npx eslint`, full `vitest run`.
@@ -255,9 +319,9 @@ BEDROCK_PROMPT_CACHE_TTL="[5m|1h — default 5m]"
 
 | File | Change |
 | --- | --- |
-| `src/utils/providers/bedrock.ts` | Modified — adds `isCacheCapableBedrockModel()`, `createCachedBedrockModel()`, local cache-point type, env-var reads |
-| `src/utils/providers/bedrock.test.ts` | New or modified — eligibility + middleware unit tests |
-| `src/utils/providers/model-factory.ts` | Modified — one line, `AWSBedrock` branch calls the new wrapper |
+| `src/utils/providers/bedrock.ts` | Modified further (already contains `createBedrockChatModel`/`requestMetadataFor`/`BedrockLanguageModel` from the request-metadata fix) — adds `isCacheCapableBedrockModel()`, a cache `transformParams` middleware composed into `createBedrockChatModel`'s existing `wrapLanguageModel` call, local cache-point type, env-var reads |
+| `src/utils/providers/bedrock.test.ts` | New — doesn't exist yet; eligibility + middleware unit tests (including composition with the existing request-metadata middleware) |
+| `src/utils/providers/model-factory.ts` | **Unchanged** — its `AWSBedrock` branch already calls `createBedrockChatModel(modelName, agentId)`; nothing here needs to change for caching |
 | `README.md` | Modified — env var table + short explainer |
 | `.env.sample` | Modified — two new keys |
 | `src/mastra/agents/**` | **Unchanged** — the whole point of centralizing this in the provider factory |
@@ -268,7 +332,8 @@ BEDROCK_PROMPT_CACHE_TTL="[5m|1h — default 5m]"
 
 - Every current and future Bedrock-backed agent gets prompt caching automatically,
   with no per-agent code — the same "one choke point" property ADR 0002 leaned on
-  for outbound TC API auth.
+  for outbound TC API auth, and the same property the request-metadata middleware
+  already proved out in `createBedrockChatModel` for a different concern.
 - Reduced cost and time-to-first-token on every call after the first, for the
   (often large, always-static) system-prompt portion of every agent's request —
   compounding with `challengeSearchAgent`'s `lastMessages: 25` memory, where the
@@ -278,12 +343,15 @@ BEDROCK_PROMPT_CACHE_TTL="[5m|1h — default 5m]"
 
 **Negative / risk**
 
-- **No compile-time type safety from the SDK.** `cachePoint` is read via untyped
-  passthrough in the installed `@ai-sdk/amazon-bedrock` version — a local
-  hand-written interface is the only thing keeping the shape honest, and it will
-  silently go stale if a future SDK upgrade changes the field name or nesting.
-  Mitigation: the unit tests in Phase 0 pin the expected shape, so an SDK upgrade
-  that breaks it fails tests rather than failing silently in production.
+- **No compile-time type safety from the SDK for the `cachePoint` field itself.**
+  It's read via untyped passthrough in the installed `@ai-sdk/amazon-bedrock`
+  version — a local hand-written interface is the only thing keeping the shape
+  honest, and it will silently go stale if a future SDK upgrade changes the field
+  name or nesting. Mitigation: the unit tests in Phase 0 pin the expected shape, so
+  an SDK upgrade that breaks it fails tests rather than failing silently in
+  production. (This is a separate concern from the `wrapLanguageModel`-return-type
+  skew against Mastra's vendored types — that one is already solved by the
+  `BedrockLanguageModel` anchor type this ADR reuses; see "Update" in Context.)
 - **The allowlist needs manual upkeep.** A new Claude/Nova model released on
   Bedrock with cache support won't benefit from this feature until someone adds it
   to `isCacheCapableBedrockModel()`. Accepted trade-off given the alternative (a
@@ -316,11 +384,14 @@ BEDROCK_PROMPT_CACHE_TTL="[5m|1h — default 5m]"
 
 ## Prerequisites to confirm before implementation starts
 
-- Confirm the four model IDs currently in use are actually cache-enabled in the
-  target AWS account/region for Bedrock (prompt caching is a Bedrock account/model
-  feature that can require explicit enablement or be region-limited — not verified
-  against the live AWS account as part of this ADR's research, only against AI SDK
-  and Bedrock's general documentation).
+- ~~Confirm the four model IDs currently in use are actually cache-enabled in the
+  target AWS account/region for Bedrock~~ — **Confirmed 2026-08-28** by the repo
+  owner: the two distinct model IDs actually in play
+  (`us.anthropic.claude-haiku-4-5-20251001-v1:0`,
+  `us.anthropic.claude-sonnet-5`) are cache-enabled in the target account/region.
+  (Not independently re-verified against the live AWS account in this session — no
+  AWS credentials were available in this environment to query Bedrock directly —
+  this is an owner attestation, not a CLI-verified fact.)
 - Reviewer sign-off on the allowlist-vs-denylist choice (Decision item 1) and the
   global-vs-per-agent config choice (Scope) — both are judgement calls made
   explicit here for review rather than settled facts.
