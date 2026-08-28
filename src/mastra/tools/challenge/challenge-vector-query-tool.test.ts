@@ -168,7 +168,7 @@ describe('challengeVectorQueryTool — semantic query path', () => {
 
         const result = await executeTool({ query: 'realtime dashboard' });
 
-        expect(mocks.createEmbeddingModel).toHaveBeenCalledWith('AWSBedrock', 'amazon.titan-embed-text-v2:0');
+        expect(mocks.createEmbeddingModel).toHaveBeenCalledWith('AWSBedrock', 'amazon.titan-embed-text-v2:0', 'challenge-vector-query-tool');
         expect(mocks.embed).toHaveBeenCalledWith(
             expect.objectContaining({ value: 'realtime dashboard' }),
         );

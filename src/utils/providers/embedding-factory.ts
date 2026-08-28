@@ -7,13 +7,18 @@ import { tcAILogger } from '../logger';
  * createModel pattern. Uses ollama.embedding() for TC-Ollama and
  * createBedrockProvider().embedding() for AWSBedrock.
  *
+ * Bedrock embedding calls go through InvokeModel, which reads request metadata
+ * from the X-Amzn-Bedrock-Request-Metadata header — so passing `agentId` tags
+ * embedding requests the same way chat requests are tagged (see bedrock.ts).
+ *
  * @param provider - Provider name (e.g. 'TC-Ollama', 'AWSBedrock')
  * @param modelId - Embedding model ID (e.g. 'nomic-embed-text')
+ * @param agentId - Optional caller identifier for Bedrock request metadata tagging
  * @returns An AI SDK v6 embedding model usable with embed/embedMany
  */
-export function createEmbeddingModel(provider: string, modelId: string) {
+export function createEmbeddingModel(provider: string, modelId: string, agentId?: string) {
     tcAILogger.info(
-        `[Embedding Factory] PROVIDER: ${provider}, MODEL: ${modelId}`,
+        `[Embedding Factory] PROVIDER: ${provider}, MODEL: ${modelId} for AGENT: ${agentId ?? 'N/A'}`,
     );
 
     switch (provider) {
@@ -21,7 +26,7 @@ export function createEmbeddingModel(provider: string, modelId: string) {
             return ollama.embedding(modelId);
 
         case 'AWSBedrock':
-            return createBedrockProvider().embedding(modelId);
+            return createBedrockProvider(agentId).embedding(modelId);
 
         default:
             tcAILogger.error(
