@@ -4,34 +4,19 @@ import { challengeVectorQueryTool } from '../../tools/challenge/challenge-vector
 import { Memory } from '@mastra/memory';
 import { fetchProjectTool } from '../../tools/project/fetch-project-tool';
 import { fetchChallengeTool } from '../../tools/challenge/fetch-challenge-tool';
+import { resolveTcDomain } from '../../../utils/auth/tc-domain';
 
 const PROVIDER_NAME = process.env.CHALLENGE_SEARCH_AI_PROVIDER || 'AWSBedrock';
 const MODEL_ID = process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const AGENT_ID = 'challenge-search-agent';
 
-/**
- * Derives the member-facing domain from TC_API_BASE (mirrors the
- * domain-derivation in ../../../utils/auth.ts), so the agent's instructions
- * link to the right environment (dev vs prod) without a separate env var to
- * keep in sync. Shared by both the challenge and project details base URLs
- * below — they differ only in subdomain and path.
- */
-function resolveDomain(): string {
-    let domain = 'topcoder.com';
-    try {
-        const tcApiBase = process.env.TC_API_BASE || '';
-        if (tcApiBase) {
-            domain = new URL(tcApiBase).hostname.replace('api.', '');
-        }
-    } catch {
-        // fall back to default domain
-    }
-    return domain;
-}
-
-const CHALLENGE_DETAILS_BASE_URL = `https://www.${resolveDomain()}/challenges`;
+// resolveTcDomain() derives the member-facing domain from TC_API_BASE, so the
+// agent's instructions link to the right environment (dev vs prod) without a
+// separate env var to keep in sync. Shared by both base URLs below — they
+// differ only in subdomain and path.
+const CHALLENGE_DETAILS_BASE_URL = `https://www.${resolveTcDomain()}/challenges`;
 // e.g. https://work.topcoder.com/projects/1001025
-const PROJECT_DETAILS_BASE_URL = `https://work.${resolveDomain()}/projects`;
+const PROJECT_DETAILS_BASE_URL = `https://work.${resolveTcDomain()}/projects`;
 
 /**
  * "Topcoder Challenge Assistant" — synthesises natural-language answers over

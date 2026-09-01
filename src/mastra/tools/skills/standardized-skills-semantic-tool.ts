@@ -1,6 +1,7 @@
 // Standardized Skills API: POST /v5/standardized-skills/skills/semantic-search (body: { text })
 // Response schema: array of objects { id: uuid, name: string, weighted_distance: number }
 import { createTool } from '@mastra/core/tools';
+import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
 
 interface SkillSemanticMatchResponse {
@@ -11,7 +12,7 @@ interface SkillSemanticMatchResponse {
 
 const BASE_URL = `${process.env.TC_API_BASE}/v5/standardized-skills/skills/semantic-search`;
 
-export const standardizedSkillsSemanticTool = createTool({
+export const standardizedSkillsSemanticTool = withAccessPolicy(createTool({
   id: 'standardized-skills-semantic-search',
   description: "Semantic search Topcoder's standardized skills by text",
   inputSchema: z.object({
@@ -31,7 +32,7 @@ export const standardizedSkillsSemanticTool = createTool({
     logger?.info('Fetching semantic matches for text query');
     return await fetchSemanticMatches(inputData.text);
   },
-});
+}));
 
 const fetchSemanticMatches = async (text: string) => {
   const response = await fetch(BASE_URL, {

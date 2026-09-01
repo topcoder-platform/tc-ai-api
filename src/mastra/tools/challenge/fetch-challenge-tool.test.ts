@@ -21,7 +21,12 @@ import { fetchChallengeTool } from './fetch-challenge-tool';
 const minimalContext = {
     mastra: undefined,
     requestContext: {
-        get: (key: string) => (key === MASTRA_AUTH_TOKEN_KEY ? 'fake-requestor-token' : undefined),
+        get: (key: string) =>
+            key === MASTRA_AUTH_TOKEN_KEY
+                ? 'fake-requestor-token'
+                : key === 'user'
+                    ? { sub: 'test-user' }
+                    : undefined,
     },
 } as any;
 

@@ -18,6 +18,7 @@
  */
 
 import { createTool } from '@mastra/core/tools';
+import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { embed } from 'ai';
 import { z } from 'zod';
 import { getRagConfig } from '../../../config/rag.config';
@@ -156,7 +157,7 @@ function errorMessage(error: unknown): string {
 // Tool Definition
 // ---------------------------------------------------------------------------
 
-export const challengeVectorQueryTool = createTool({
+export const challengeVectorQueryTool = withAccessPolicy(createTool({
     id: 'challenge-vector-query',
     description:
         'Searches indexed Topcoder challenge descriptions by semantic similarity, with optional ' +
@@ -238,7 +239,7 @@ export const challengeVectorQueryTool = createTool({
             return { success: false, error: message };
         }
     },
-});
+}));
 
 // ---------------------------------------------------------------------------
 // Testing Exports

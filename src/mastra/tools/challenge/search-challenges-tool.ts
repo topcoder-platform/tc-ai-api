@@ -7,6 +7,7 @@
 // as-is); no M2M fallback configured for this tool — see
 // docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md.
 import { createTool } from '@mastra/core/tools';
+import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/request-context';
 import { callTcApi } from '../../../utils/tc-api-client';
@@ -28,7 +29,7 @@ const challengeSummarySchema = z.object({
     groups: z.array(z.string()).optional(),
 });
 
-export const searchChallengesTool = createTool({
+export const searchChallengesTool = withAccessPolicy(createTool({
     id: TOOL_ID,
     description:
         'Searches Topcoder challenges via the v6 Challenges API, authorized as the requesting user, with filter support (projectId, status, types, tracks, tags, groups, dates, pagination)',
@@ -60,7 +61,7 @@ export const searchChallengesTool = createTool({
         logger?.info('Searching challenges with filters');
         return await searchChallenges(inputData, context.requestContext);
     },
-});
+}));
 
 interface SearchChallengesInput {
     projectId?: string;

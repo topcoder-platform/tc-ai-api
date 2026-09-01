@@ -1,6 +1,7 @@
 // Standardized Skills API: GET /v5/standardized-skills/skills/fuzzymatch (term required, size optional)
 // Response schema: array of objects { id: uuid, name: string }
 import { createTool } from '@mastra/core/tools';
+import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
 
 interface SkillFuzzyMatchResponse {
@@ -10,7 +11,7 @@ interface SkillFuzzyMatchResponse {
 
 const BASE_URL = `${process.env.TC_API_BASE}/v5/standardized-skills/skills/fuzzymatch`;
 
-export const standardizedSkillsFuzzyTool = createTool({
+export const standardizedSkillsFuzzyTool = withAccessPolicy(createTool({
   id: 'standardized-skills-fuzzy-match',
   description: "Fuzzy match Topcoder's standardized skills by term",
   inputSchema: z.object({
@@ -30,7 +31,7 @@ export const standardizedSkillsFuzzyTool = createTool({
     logger?.info('Fetching fuzzy matches for term: {term}', { term: inputData.term });
     return await fetchFuzzyMatches(inputData.term, inputData.size);
   },
-});
+}));
 
 const fetchFuzzyMatches = async (term: string, size?: number) => {
   const url = new URL(BASE_URL);
