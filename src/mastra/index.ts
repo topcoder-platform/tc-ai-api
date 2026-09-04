@@ -18,6 +18,7 @@ import { apiAuthLayer, middlewareConfig, tcAILogger } from '../utils';
 import { API_PREFIX, CHAT_ROUTE_PATH } from '../utils/server-routes';
 import { aiWorkspace } from './workspaces';
 import { chatRoute } from '@mastra/ai-sdk';
+import { ragIndexRoutes } from '../utils/routes/rag-index.routes';
 
 export const mastra = new Mastra({
   workflows: {
@@ -69,6 +70,9 @@ export const mastra = new Mastra({
         path: CHAT_ROUTE_PATH,
         version: 'v7',
       }),
+      // RAG index admin API (list/delete indexed challenges) — administrator
+      // only, see ADR 0004's `route` policy category.
+      ...ragIndexRoutes,
     ],
   },
   bundler: {

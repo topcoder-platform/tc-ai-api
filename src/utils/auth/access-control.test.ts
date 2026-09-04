@@ -3,7 +3,14 @@
  * See docs/adr/0004-role-based-access-for-agents-workflows-tools.md.
  */
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { toEnvKey, type AccessPolicy } from '../../config/access-control.config';
+import {
+    canonicalTargetId,
+    DEFAULT_ACCESS_POLICIES,
+    TARGET_ID_ALIASES,
+    toEnvKey,
+    type AccessCategory,
+    type AccessPolicy,
+} from '../../config/access-control.config';
 import {
     _resetAccessPolicyCache,
     authorizeAccessPolicy,
@@ -424,5 +431,109 @@ describe('withAccessPolicy', () => {
         await expect(
             tool.execute!({}, ctx(m2mUser(['challengesRAG:admin']))),
         ).resolves.toMatchObject({ ok: true });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Registry-key aliases — both spellings of a target must resolve identically,
+// or a restriction is bypassable by addressing it the other way.
+// ---------------------------------------------------------------------------
+
+describe('registry-key aliases', () => {
+    const aliasEntries = (['agent', 'workflow', 'tool', 'route'] as AccessCategory[])
+        .flatMap(category => Object.entries(TARGET_ID_ALIASES[category])
+            .map(([registryKey, canonicalId]) => ({ canonicalId, category, registryKey })));
+
+    it.each(aliasEntries)(
+        '$category: $registryKey resolves to the $canonicalId policy',
+        ({ category, registryKey, canonicalId }) => {
+            expect(canonicalTargetId(category, registryKey)).toBe(canonicalId);
+            expect(resolveAccessPolicy(category, registryKey)).toEqual(
+                resolveAccessPolicy(category, canonicalId),
+            );
+        },
+    );
+
+    it('leaves an id that is already canonical untouched', () => {
+        expect(canonicalTargetId('agent', 'skillsMatchingAgent')).toBe('skillsMatchingAgent');
+        expect(canonicalTargetId('workflow', 'challenge-ingestion')).toBe('challenge-ingestion');
+    });
+
+    it('denies the registry-key spelling of a restricted workflow over HTTP', () => {
+        // The regression this map exists for: platform-ui's default workflow id
+        // was the registry key, which used to resolve to "no policy" -> public.
+        const byRegistryKey = '/v6/ai/workflows/challengeIngestionWorkflow/start';
+        const byId = '/v6/ai/workflows/challenge-ingestion/start';
+
+        for (const path of [byRegistryKey, byId]) {
+            expect(authorizeAccessPolicy(memberUser(['copilot']), authRequest(path))).toBe(false);
+            expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(true);
+        }
+    });
+
+    it('keeps every env override reachable from the registry-key spelling', () => {
+        process.env.ACCESS_POLICY_WORKFLOW_CHALLENGE_SEARCH_ROLES = 'administrator';
+        _resetAccessPolicyCache();
+
+        expect(resolveAccessPolicy('workflow', 'challengeSearchWorkflow')).toEqual({
+            mode: 'restricted',
+            roles: ['administrator'],
+            scopes: undefined,
+        });
+    });
+
+    it('has an alias entry for every restricted code default whose key differs', () => {
+        // Guards the standing footgun: adding a restricted entry keyed on `.id`
+        // without registering its registry key leaves the alias open.
+        const restrictedWorkflowIds = Object.entries(DEFAULT_ACCESS_POLICIES.workflow)
+            .filter(([, policy]) => policy.mode !== 'public')
+            .map(([id]) => id);
+        const aliasTargets = Object.values(TARGET_ID_ALIASES.workflow);
+
+        for (const id of restrictedWorkflowIds) {
+            expect(aliasTargets).toContain(id);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// The `route` category — this repo's own custom API routes
+// ---------------------------------------------------------------------------
+
+describe('route policies', () => {
+    const LIST = '/v6/ai/rag/challenges';
+    const DELETE_ONE = '/v6/ai/rag/challenges/9f1c2e4a-7b3d';
+
+    it('ships the RAG index admin API restricted, with no env vars set', () => {
+        expect(resolveAccessPolicy('route', 'rag-challenges')).toEqual({
+            mode: 'restricted',
+            roles: ['administrator'],
+            scopes: ['challengesRAG:admin'],
+        });
+    });
+
+    it.each([LIST, DELETE_ONE])('denies a non-administrator on %s', path => {
+        expect(authorizeAccessPolicy(memberUser(['copilot']), authRequest(path))).toBe(false);
+        expect(authorizeAccessPolicy(m2mUser(['read:challenges']), authRequest(path))).toBe(false);
+    });
+
+    it.each([LIST, DELETE_ONE])('allows an administrator and a scoped M2M client on %s', path => {
+        expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(true);
+        expect(authorizeAccessPolicy(m2mUser(['challengesRAG:admin']), authRequest(path))).toBe(true);
+    });
+
+    it('does not match a path that merely starts with the same prefix', () => {
+        // /rag/challenges-export is a different route and must not inherit the
+        // policy by accident.
+        expect(
+            authorizeAccessPolicy(memberUser(['copilot']), authRequest('/v6/ai/rag/challenges-export')),
+        ).toBe(true);
+    });
+
+    it('is overridable by env like any other category', () => {
+        process.env.ACCESS_POLICY_ROUTE_RAG_CHALLENGES_MODE = 'deny';
+        _resetAccessPolicyCache();
+
+        expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(LIST))).toBe(false);
     });
 });

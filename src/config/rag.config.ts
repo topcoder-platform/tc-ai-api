@@ -59,17 +59,22 @@ const KNOWN_TRACKS = [
 ];
 
 // ---------------------------------------------------------------------------
-// SQL identifier validation for VECTOR_INDEX_NAME
+// SQL identifier validation
 // ---------------------------------------------------------------------------
 
 const SQL_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-function validateSqlIdentifier(name: string, envVar: string): string {
+/**
+ * Guards any env value that ends up interpolated into SQL as an identifier
+ * (table or schema name), which cannot be a bound parameter. Exported because
+ * the RAG index admin queries interpolate both the index and schema names.
+ */
+export function validateSqlIdentifier(name: string, envVar: string): string {
     if (!SQL_IDENTIFIER_RE.test(name)) {
         throw new Error(
             `Invalid ${envVar}="${name}": must be a valid SQL identifier ` +
             '(matching ^[A-Za-z_][A-Za-z0-9_]*$). ' +
-            'Set VECTOR_INDEX_NAME to a valid SQL identifier.',
+            `Set ${envVar} to a valid SQL identifier.`,
         );
     }
     return name;
@@ -148,7 +153,12 @@ export function getRagConfig(): RagConfig {
         process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5';
 
     const connectionString = process.env.MASTRA_DB_CONNECTION;
-    const schemaName = process.env.MASTRA_DB_SCHEMA || 'ai';
+    // Validated for the same reason as vectorIndexName: it is interpolated
+    // into SQL as an identifier, which cannot be a bound parameter.
+    const schemaName = validateSqlIdentifier(
+        process.env.MASTRA_DB_SCHEMA || 'ai',
+        'MASTRA_DB_SCHEMA',
+    );
 
     return {
         embedding: {

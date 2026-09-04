@@ -15,6 +15,7 @@
  */
 import { getWebRequest, type MastraAuthRequest } from '@mastra/core/server';
 import {
+    canonicalTargetId,
     DEFAULT_ACCESS_POLICIES,
     toEnvKey,
     type AccessCategory,
@@ -128,13 +129,17 @@ function envPolicy(category: AccessCategory, targetId: string): AccessPolicy | u
  * invalid _MODE throws an actionable error on first resolution.
  */
 export function resolveAccessPolicy(category: AccessCategory, targetId: string): AccessPolicy {
-    const cacheKey = `${category}:${targetId}`;
+    // A caller can address an agent/workflow by either its `.id` or its
+    // registry key; both must resolve to the same policy, or a restriction is
+    // bypassable by spelling the target the other way.
+    const canonicalId = canonicalTargetId(category, targetId);
+    const cacheKey = `${category}:${canonicalId}`;
     const cached = policyCache.get(cacheKey);
     if (cached) return cached;
 
     const policy =
-        envPolicy(category, targetId) ??
-        DEFAULT_ACCESS_POLICIES[category][targetId] ??
+        envPolicy(category, canonicalId) ??
+        DEFAULT_ACCESS_POLICIES[category][canonicalId] ??
         globalDefaultPolicy();
 
     policyCache.set(cacheKey, policy);
@@ -150,7 +155,17 @@ const WORKFLOW_PATH_RE = new RegExp(`^${API_PREFIX}/workflows/([^/]+)`);
 // chatRoute() is CHAT_ROUTE_BASE_PATH/:agentId — an agent by another path.
 const CHAT_PATH_RE = new RegExp(`^${CHAT_ROUTE_BASE_PATH}/([^/]+)`);
 
-/** null when the path isn't an agent/workflow invocation (memory, threads, telemetry, ...). */
+/**
+ * This repo's own custom API routes, which are neither agents nor workflows and
+ * so match none of the patterns above. Each entry maps a path prefix to the
+ * DEFAULT_ACCESS_POLICIES.route slug that governs it; a custom route absent
+ * here falls through to "no target" and stays open to any authenticated caller.
+ */
+const ROUTE_PATH_TARGETS: { prefix: string; targetId: string }[] = [
+    { prefix: `${API_PREFIX}/rag/challenges`, targetId: 'rag-challenges' },
+];
+
+/** null when the path addresses none of the four categories (memory, threads, telemetry, ...). */
 function parseTarget(pathname: string): { category: AccessCategory; targetId: string } | null {
     const agent = AGENT_PATH_RE.exec(pathname);
     if (agent) return { category: 'agent', targetId: decodeURIComponent(agent[1]) };
@@ -160,6 +175,11 @@ function parseTarget(pathname: string): { category: AccessCategory; targetId: st
 
     const chat = CHAT_PATH_RE.exec(pathname);
     if (chat) return { category: 'agent', targetId: decodeURIComponent(chat[1]) };
+
+    const route = ROUTE_PATH_TARGETS.find(
+        r => pathname === r.prefix || pathname.startsWith(`${r.prefix}/`),
+    );
+    if (route) return { category: 'route', targetId: route.targetId };
 
     return null;
 }
