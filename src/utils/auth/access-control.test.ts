@@ -501,8 +501,8 @@ describe('registry-key aliases', () => {
 // ---------------------------------------------------------------------------
 
 describe('route policies', () => {
-    const LIST = '/v6/ai/rag/challenges';
-    const DELETE_ONE = '/v6/ai/rag/challenges/9f1c2e4a-7b3d';
+    const LIST = '/v6/ai-rag/challenges';
+    const DELETE_ONE = '/v6/ai-rag/challenges/9f1c2e4a-7b3d';
 
     it('ships the RAG index admin API restricted, with no env vars set', () => {
         expect(resolveAccessPolicy('route', 'rag-challenges')).toEqual({
@@ -523,10 +523,10 @@ describe('route policies', () => {
     });
 
     it('does not match a path that merely starts with the same prefix', () => {
-        // /rag/challenges-export is a different route and must not inherit the
-        // policy by accident.
+        // /challenges-export would be a different route and must not inherit
+        // the policy by accident.
         expect(
-            authorizeAccessPolicy(memberUser(['copilot']), authRequest('/v6/ai/rag/challenges-export')),
+            authorizeAccessPolicy(memberUser(['copilot']), authRequest('/v6/ai-rag/challenges-export')),
         ).toBe(true);
     });
 

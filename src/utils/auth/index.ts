@@ -1,6 +1,6 @@
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 import { CompositeAuth } from '@mastra/core/server';
-import { API_PREFIX, CHAT_ROUTE_BASE_PATH } from '../server-routes';
+import { API_PREFIX, CHAT_ROUTE_BASE_PATH, RAG_ADMIN_ROUTE_BASE_PATH } from '../server-routes';
 import { authorizeAccessPolicy } from './access-control';
 import { tcUserIdClaimKey } from './tc-domain';
 
@@ -15,7 +15,11 @@ const mapUserToResourceId = (user: Record<string, unknown>): string | undefined 
 // sets requiresAuth, so Mastra's coreAuthMiddleware treats it as unprotected and
 // returns before ever reaching authorizeUser. Listing it here is what brings it
 // under the same authenticate-then-authorize path as the native routes.
-const PROTECTED_PATHS = [`${API_PREFIX}/*`, `${CHAT_ROUTE_BASE_PATH}/*`];
+const PROTECTED_PATHS = [
+  `${API_PREFIX}/*`,
+  `${CHAT_ROUTE_BASE_PATH}/*`,
+  `${RAG_ADMIN_ROUTE_BASE_PATH}/*`,
+];
 
 export const apiAuthLayer = new CompositeAuth([
   // TC Member Auth0 JWTs

@@ -234,7 +234,7 @@ Authentication is handled by `CompositeAuth` from `@mastra/core/server` (`src/ut
 1. **Member tokens** — issued by `AUTH0_DOMAIN` with audience `AUTH0_AUDIENCE`
 2. **M2M (machine-to-machine) tokens** — issued by `AUTH0_M2M_DOMAIN` with audience `AUTH0_M2M_AUDIENCE`
 
-A request is authorized if it passes validation against **either** tenant. Both providers declare `protected: ['/v6/ai/*', '/v6/ai-chat/*']` (the server's `apiPrefix` plus the `chatRoute()` base path — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default. `/v6/ai-chat/*` has to be listed explicitly because `chatRoute()` is registered outside `apiPrefix` and never sets `requiresAuth`, so Mastra's `isProtectedPath` check would otherwise skip it — including its authorization step (see [Access control](#access-control)).
+A request is authorized if it passes validation against **either** tenant. Both providers declare `protected: ['/v6/ai/*', '/v6/ai-chat/*', '/v6/ai-rag/*']` (the server's `apiPrefix` plus each custom-route base path — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default. `/v6/ai-chat/*` has to be listed explicitly because `chatRoute()` is registered outside `apiPrefix` and never sets `requiresAuth`, so Mastra's `isProtectedPath` check would otherwise skip it — including its authorization step (see [Access control](#access-control)).
 
 Both providers also set `mapUserToResourceId`, deriving the caller's Topcoder user id from the JWT claim `https://<domain>/userId` (member tokens) or `sub` (M2M tokens) — see `tcUserIdClaimKey()` / `mapUserToResourceId` in `src/utils/auth/index.ts`. Mastra's core auth flow stores that value under `MASTRA_RESOURCE_ID_KEY` in the request context automatically, and it takes precedence over any client-supplied `resourceId`/`memory.resource` — this is what actually enforces per-user memory/thread isolation; the `Resource ID Middleware` below is a belt-and-suspenders check on top of it, not the primary mechanism.
 
@@ -298,7 +298,7 @@ Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note tha
 **Three enforcement points:**
 
 - **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
-- **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Currently one entry: `/v6/ai/rag/challenges` → `rag-challenges`, restricted to `administrator` / `challengesRAG:admin` out of the box.
+- **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Currently one entry: `/v6/ai-rag/challenges` → `rag-challenges`, restricted to `administrator` / `challengesRAG:admin` out of the box.
 - **Tools** — tools have no HTTP route of their own, so `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the `user` already on `RequestContext` and throws `ToolAccessDeniedError` on denial — surfaced to the LLM as a failed tool call, or to a workflow step as a rejected `execute()`.
 
 Nested, in-process invocations (`challenge-bulk-ingestion` → `challenge-ingestion`, `challenge-context` → `challenge-parser-agent`) are **not** re-gated: they never re-enter the HTTP router, and you can't reach them without passing the outer check first.
@@ -629,9 +629,11 @@ Both CLIs invoke the same workflows the API exposes (via `mastra.getWorkflowById
 Two custom routes for inspecting and pruning what the index currently holds — the backend for the **TopScout RAG** admin page. Both are **administrator-only** (`route`/`rag-challenges` policy, see [Access control](#access-control)).
 
 ```
-GET    /v6/ai/rag/challenges                 list indexed challenges
-DELETE /v6/ai/rag/challenges/:challengeId    remove one challenge's vectors
+GET    /v6/ai-rag/challenges                 list indexed challenges
+DELETE /v6/ai-rag/challenges/:challengeId    remove one challenge's vectors
 ```
+
+> **Why `/v6/ai-rag` and not `/v6/ai/rag`?** Mastra reserves its `apiPrefix` exclusively for built-in routes and **refuses to start** if a custom `apiRoutes` entry is registered at or beneath it — `validateCustomRoutePaths()` throws during `createHonoServer`, so the container crash-loops rather than failing a request. Custom routes are therefore hyphenated siblings of the prefix (`/v6/ai-chat`, `/v6/ai-rag`), which is also why each needs its own entry in `apiAuthLayer`'s `protected` list. `src/utils/routes/rag-index.routes.test.ts` asserts this rule, so a bad path fails a test instead of a deploy.
 
 `GET` aggregates `challenge_embeddings` by `metadata->>'challengeId'` — the ingestion path writes one row per *chunk*, while an operator thinks in *challenges*. Query params: `page` (1-based, default 1), `perPage` (default 25, max 100), `projectId`, `track`, `type`, `search` (case-insensitive substring on challenge name **or** id). Empty/whitespace params are treated as absent.
 
