@@ -22,7 +22,7 @@ import {
     type AccessPolicy,
 } from '../../config/access-control.config';
 import { tcAILogger } from '../logger';
-import { API_PREFIX, CHAT_ROUTE_BASE_PATH } from '../server-routes';
+import { API_PREFIX, CHAT_ROUTE_BASE_PATH, RAG_ADMIN_ROUTE_BASE_PATH } from '../server-routes';
 import { resolveTcDomain, tcUserIdClaimKey } from './tc-domain';
 
 // ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ const CHAT_PATH_RE = new RegExp(`^${CHAT_ROUTE_BASE_PATH}/([^/]+)`);
  * here falls through to "no target" and stays open to any authenticated caller.
  */
 const ROUTE_PATH_TARGETS: { prefix: string; targetId: string }[] = [
-    { prefix: `${API_PREFIX}/rag/challenges`, targetId: 'rag-challenges' },
+    { prefix: `${RAG_ADMIN_ROUTE_BASE_PATH}/challenges`, targetId: 'rag-challenges' },
 ];
 
 /** null when the path addresses none of the four categories (memory, threads, telemetry, ...). */

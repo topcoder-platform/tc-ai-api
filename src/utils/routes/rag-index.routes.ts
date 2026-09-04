@@ -1,13 +1,15 @@
 /**
  * RAG index admin API — list and delete what challenge_embeddings holds.
  *
- * Registered as custom apiRoutes under API_PREFIX (see src/mastra/index.ts).
- * Auth: Mastra protects these automatically — the path matches apiAuthLayer's
- * `${API_PREFIX}/*` and custom routes default to requiresAuth — and ADR 0004's
- * `authorizeAccessPolicy` gates them on the `route`/`rag-challenges` policy,
- * which ships restricted to administrators. `requiresAuth: true` is set
- * explicitly rather than relying on that default, since the default is what
- * decides whether these endpoints are reachable unauthenticated.
+ * Registered as custom apiRoutes (see src/mastra/index.ts). They live under
+ * `/v6/ai-rag`, NOT under API_PREFIX: Mastra reserves the prefix for its
+ * built-ins and throws at boot for any custom route beneath it (see
+ * server-routes.ts). Auth comes from two places: `requiresAuth: true` makes
+ * Mastra authenticate them (set explicitly rather than relying on its
+ * `requiresAuth !== false` default, since that default is what decides whether
+ * these are reachable unauthenticated), and ADR 0004's `authorizeAccessPolicy`
+ * gates them on the `route`/`rag-challenges` policy, which ships restricted to
+ * administrators.
  *
  * Pagination is returned in X-Page/X-Per-Page/X-Total/X-Total-Pages headers
  * with a bare array body — the Topcoder platform convention that
@@ -18,7 +20,7 @@
 import { registerApiRoute } from '@mastra/core/server';
 import { deleteIndexedChallenge, listIndexedChallenges } from '../../mastra/rag/index-admin';
 import { tcAILogger } from '../logger';
-import { API_PREFIX } from '../server-routes';
+import { RAG_CHALLENGE_ROUTE_PATH, RAG_CHALLENGES_ROUTE_PATH } from '../server-routes';
 
 /** Empty/whitespace query params are treated as absent, not as a filter for "". */
 function queryValue(raw: string | undefined): string | undefined {
@@ -38,7 +40,7 @@ function errorMessage(error: unknown): string {
 }
 
 export const listIndexedChallengesRoute = registerApiRoute(
-    `${API_PREFIX}/rag/challenges`,
+    RAG_CHALLENGES_ROUTE_PATH,
     {
         method: 'GET',
         requiresAuth: true,
@@ -75,7 +77,7 @@ export const listIndexedChallengesRoute = registerApiRoute(
 );
 
 export const deleteIndexedChallengeRoute = registerApiRoute(
-    `${API_PREFIX}/rag/challenges/:challengeId`,
+    RAG_CHALLENGE_ROUTE_PATH,
     {
         method: 'DELETE',
         requiresAuth: true,
