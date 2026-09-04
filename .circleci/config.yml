@@ -65,6 +65,8 @@ workflows:
               only:
                 - develop
                 - challenges-rag
+            tags:
+                only: /^dev-.*/
 
       # Production builds are exectuted only on tagged commits to the
       # master branch.
