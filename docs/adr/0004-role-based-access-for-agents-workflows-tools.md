@@ -5,6 +5,47 @@
 - **Target branch:** `challenges-rag`
 - **Related:** ADR 0001 (D10 — "any scope restriction MUST be enforced server-side, never left to the model"), ADR 0002 (existing inbound-vs-outbound auth split), `src/utils/auth/index.ts` (`apiAuthLayer`), `src/utils/middleware/resourceIdMiddleware.ts`, `src/config/tool-auth-fallback.config.ts` (precedent for a per-tool, opt-in-by-default code registry)
 
+## Corrections after implementation
+
+Two claims below turned out to be wrong when the design was executed rather than read. Both are corrected in place
+where they appear; recorded together here because one of them was a live vulnerability and the other invalidates this
+ADR's headline argument.
+
+### C1. The registry-key alias bypassed every policy (fixed)
+
+Policies key on a resource's own `.id`, but `getAgentById`/`getWorkflowById` fall back to the **registry key**, so both
+spellings address the same resource over HTTP — and `authorizeAccessPolicy` trusted whichever appeared in the URL:
+
+```
+/v6/ai/workflows/challenge-ingestion/start          member(no roles) -> DENY
+/v6/ai/workflows/challengeIngestionWorkflow/start   member(no roles) -> ALLOW  <-- BYPASS
+```
+
+Not hypothetical: platform-ui's `RAG_CHALLENGE_INGESTION_WORKFLOW_ID` defaulted to the registry key, so the only
+production caller of a restricted workflow was using the bypassing spelling. The "Registry-key vs `.id` is a standing
+footgun" risk noted at the bottom of this ADR was therefore understated — it was not only a config-authoring hazard,
+it was an authorization bypass. Fixed by `TARGET_ID_ALIASES` + `canonicalTargetId()` in
+`src/config/access-control.config.ts`, applied inside `resolveAccessPolicy()` before any lookup. Tests assert every
+alias resolves identically to its canonical id, and that every restricted code default has an alias entry.
+
+### C2. There was no chatRoute gap
+
+This ADR's central argument — that `chatRoute` can never reach `authorizeUser` because it declares neither a matching
+`protected` path nor `requiresAuth` — is **false**. `buildHonoApp` derives `const requiresAuth = route.requiresAuth
+!== false` (`@mastra/deployer/dist/server/index.js:4478`), so custom routes are protected **by default**, and
+`isProtectedCustomRoute` pattern-matches the registered `/v6/ai-chat/:agentId` against the incoming path. Executed
+against the real exported helpers with the *pre-ADR* config (`protected: ['/v6/ai/*']`):
+
+```
+POST /v6/ai-chat/challenge-search-agent   customRoute=true  protectedPre=true  protectedPost=true
+```
+
+chatRoute was already protected and already reaching `authorizeUser`; it has been covered since `authorizeUser` became
+a real function, with no `protected`-list change required. The `${CHAT_ROUTE_BASE_PATH}/*` entry is kept — it makes
+coverage explicit and independent of Mastra's `requiresAuth` default rather than contingent on it — but it is
+belt-and-braces, not the load-bearing fix this ADR claimed. The error was reading `isProtectedPath`'s two branches
+without checking what populates `customRouteAuthConfig`.
+
 ## Context
 
 ### What exists today
@@ -25,11 +66,11 @@ To be precise about what's already proven to work in production versus what's ac
 
 (Mastra also ships two other, more elaborate authorization primitives on `MastraAuthConfig` — a declarative `rules: [{ path, methods, condition, allow }]` array and an `authorize(path, method, user, ctx)` function — plus a wholly separate `server.rbac`/`server.fga` provider concept (`getPermissions`/`getRoles`, EE-gated). None of these apply here: `coreAuthMiddleware` checks `"authorizeUser" in authConfig"` **first**, and falls through to `authorize`/`rules` only when `authorizeUser` is absent. Since `apiAuthLayer` is a `CompositeAuth`, which always implements `authorizeUser`, those other branches are unreachable for this setup regardless. `authorizeUser` is correctly the one mechanism to build on here, not a preference among several equally-live options.)
 
-**"Protected" is a path-pattern decision, evaluated once per route, made *before* `authorizeUser` ever gets a chance to run — and this is the actual, narrow gap.** `coreAuthMiddleware` only proceeds to authenticate/authorize a request at all if `isProtectedPath(path, method, authConfig, customRouteAuthConfig)` is true. That function ORs two things: (a) the path matching an entry in `defaultAuthConfig.protected` (Mastra's own built-in default, `["/api/*"]` — unrelated to this repo's `API_PREFIX`) or `authConfig.protected` (this repo's `${API_PREFIX}/*`, i.e. `/v6/ai/*`, merged from both `MastraAuthAuth0` instances by `CompositeAuth`'s constructor), or (b) the specific custom route being registered with `requiresAuth: true` in its own definition (`isProtectedCustomRoute`, keyed off a `customRouteAuthConfig` map built from each `apiRoutes` entry's own `requiresAuth` field). `chatRoute()` (`@mastra/ai-sdk`) does neither: its path is `/v6/ai-chat/:agentId`, which matches neither `/api/*` nor `/v6/ai/*`, and its `registerApiRoute(...)` call (confirmed by reading the installed `@mastra/ai-sdk@1.10.0` source) never sets `requiresAuth`. So `checkRouteAuth`/`coreAuthMiddleware` **does get invoked** for every chatRoute request (it's registered through the exact same `registerRoute()` path as everything else), but `isProtectedPath` returns `false` for it, and the function returns "allow, do nothing" before ever reaching `authenticateToken` or `authorizeUser`. **This is why `authorizeUser` alone, even once populated with a real policy, would never fire for chatRoute** — not because chatRoute lacks auth (it doesn't; see next paragraph), but because Mastra's native per-route check never gets past its own "is this path protected" gate for it.
+**"Protected" is a path-pattern decision, evaluated once per route, made *before* `authorizeUser` ever gets a chance to run.** *(The rest of this paragraph, and its conclusion that this is "the actual, narrow gap", is **wrong** — see C2 above. Custom routes default to `requiresAuth: true`, so `isProtectedCustomRoute` already returned `true` for chatRoute. Retained as written for the record.)* `coreAuthMiddleware` only proceeds to authenticate/authorize a request at all if `isProtectedPath(path, method, authConfig, customRouteAuthConfig)` is true. That function ORs two things: (a) the path matching an entry in `defaultAuthConfig.protected` (Mastra's own built-in default, `["/api/*"]` — unrelated to this repo's `API_PREFIX`) or `authConfig.protected` (this repo's `${API_PREFIX}/*`, i.e. `/v6/ai/*`, merged from both `MastraAuthAuth0` instances by `CompositeAuth`'s constructor), or (b) the specific custom route being registered with `requiresAuth: true` in its own definition (`isProtectedCustomRoute`, keyed off a `customRouteAuthConfig` map built from each `apiRoutes` entry's own `requiresAuth` field). `chatRoute()` (`@mastra/ai-sdk`) does neither: its path is `/v6/ai-chat/:agentId`, which matches neither `/api/*` nor `/v6/ai/*`, and its `registerApiRoute(...)` call (confirmed by reading the installed `@mastra/ai-sdk@1.10.0` source) never sets `requiresAuth`. So `checkRouteAuth`/`coreAuthMiddleware` **does get invoked** for every chatRoute request (it's registered through the exact same `registerRoute()` path as everything else), but `isProtectedPath` returns `false` for it, and the function returns "allow, do nothing" before ever reaching `authenticateToken` or `authorizeUser`. **This is why `authorizeUser` alone, even once populated with a real policy, would never fire for chatRoute** — not because chatRoute lacks auth (it doesn't; see next paragraph), but because Mastra's native per-route check never gets past its own "is this path protected" gate for it.
 
 **What actually authenticates chatRoute today is this repo's own code, running earlier in the request pipeline, independently of the mechanism above.** `resourceIdMiddleware`/`chatResourceIdMiddleware` (`src/utils/middleware/resourceIdMiddleware.ts`) are registered as Hono `server.middleware` entries (`${API_PREFIX}/*` and `${CHAT_ROUTE_BASE_PATH}/*`), which Hono runs *before* the specific route handler — i.e. before `checkRouteAuth` ever executes inside that handler. `resourceIdMiddlewareHandler` calls `apiAuthLayer.authenticateToken(...)` directly and 401s on failure; that's genuinely why chatRoute correctly rejects bad tokens today, and this ADR changes none of it. But this custom middleware only calls `authenticateToken` — never `authorizeUser` — so even with a real role/scope check wired into `apiAuthLayer`, nothing on the chatRoute path evaluates it, from either mechanism, until this ADR closes that specific, narrow gap.
 
-**The fix, given all of the above, is one line, not new middleware:** add `${CHAT_ROUTE_BASE_PATH}/*` to the `protected` array already passed to both `MastraAuthAuth0` providers in `apiAuthLayer`. That's the only thing standing between chatRoute and the exact same native `checkRouteAuth`/`coreAuthMiddleware`/`authorizeUser` path every other protected route already goes through — since `checkRouteAuth` already runs for chatRoute on every request (confirmed above), it only needs `isProtectedPath` to say yes. No new middleware, no second copy of the authorization check, no risk of the two mechanisms drifting apart. `resourceIdMiddleware.ts` itself needs **no changes** for this — it keeps doing exactly what it does today (pre-emptive authentication + resourceId scoping); `coreAuthMiddleware` will now additionally run its own (redundant, harmless — same token, same result) authentication and, newly, its authorization check, immediately afterward, inside the route handler.
+**The fix, given all of the above, is one line, not new middleware** *(superseded by C2 — chatRoute needed no fix; the line below is retained as explicit, default-independent coverage)**:* add `${CHAT_ROUTE_BASE_PATH}/*` to the `protected` array already passed to both `MastraAuthAuth0` providers in `apiAuthLayer`. That's the only thing standing between chatRoute and the exact same native `checkRouteAuth`/`coreAuthMiddleware`/`authorizeUser` path every other protected route already goes through — since `checkRouteAuth` already runs for chatRoute on every request (confirmed above), it only needs `isProtectedPath` to say yes. No new middleware, no second copy of the authorization check, no risk of the two mechanisms drifting apart. `resourceIdMiddleware.ts` itself needs **no changes** for this — it keeps doing exactly what it does today (pre-emptive authentication + resourceId scoping); `coreAuthMiddleware` will now additionally run its own (redundant, harmless — same token, same result) authentication and, newly, its authorization check, immediately afterward, inside the route handler.
 
 Tools remain the one case genuinely outside this entire mechanism: this codebase never registers a top-level `tools: {}` map on the `Mastra` instance, so a tool is never itself a route — it's invoked from inside an agent's tool-calling loop (`generate`/`stream`/chatRoute, all already covered by the above) or directly from workflow step code (`tool.execute(...)`, e.g. `challenge-search-workflow.ts:249`, `challenge-bulk-ingestion-workflow.ts`). There's no path/route for `coreAuthMiddleware` to gate for a tool specifically — enforcement for that category has to happen inside the tool itself, using the `user` that `coreAuthMiddleware`/`resourceIdMiddleware` already placed on `RequestContext` by the time any tool runs. See Decision 5.
 
@@ -117,7 +158,12 @@ export type AccessPolicy =
   | { mode: 'deny' }                                             // nobody, regardless of role/scope
   | { mode: 'restricted'; roles?: string[]; scopes?: string[] }; // see checkAccess below
 
-export type AccessCategory = 'agent' | 'workflow' | 'tool';
+export type AccessCategory = 'agent' | 'workflow' | 'tool' | 'route';
+// 'route' was added when the RAG index admin API landed: this repo's own
+// registerApiRoute entries are neither agents nor workflows, so they matched
+// none of authorizeAccessPolicy's patterns and stayed open to any
+// authenticated caller. Route slugs are assigned by this repo (mapped from a
+// path prefix by ROUTE_PATH_TARGETS), so they have no registry-key alias.
 
 /**
  * Code-level defaults, mirroring TOOL_M2M_FALLBACK_CONFIG's convention:
@@ -132,6 +178,11 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
     'challenge-bulk-ingestion': { mode: 'restricted', roles: ['administrator'], scopes: ['challengesRAG:admin'] },
   },
   tool: {},
+  route: {
+    // GET/DELETE ${API_PREFIX}/rag/challenges — mutates the same shared vector
+    // index as the ingestion workflows, so it ships behind the same credentials.
+    'rag-challenges': { mode: 'restricted', roles: ['administrator'], scopes: ['challengesRAG:admin'] },
+  },
 };
 ```
 
@@ -243,7 +294,8 @@ ACCESS_CONTROL_DEFAULT_POLICY="[public|deny — default public]"
 ACCESS_CONTROL_ROLES_CLAIM="[JWT claim key for member roles — default https://<TC_API_BASE domain>/roles]"
 
 # Per-target override — only needed to diverge from the code default / global default.
-# <CATEGORY> = AGENT | WORKFLOW | TOOL, <TARGET_KEY> = the target's own .id, upper-snake-cased.
+# <CATEGORY> = AGENT | WORKFLOW | TOOL | ROUTE, <TARGET_KEY> = the target's own .id
+# (or, for ROUTE, this repo's route slug), upper-snake-cased.
 ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_MODE="[public|deny — omit to use ROLES/SCOPES below]"
 ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_ROLES="[comma-separated member roles]"
 ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_SCOPES="[comma-separated M2M scopes]"
@@ -325,7 +377,11 @@ Every denial (both enforcement points) logs one `tcAILogger.warn` line with cate
 - `challenge-ingestion`/`challenge-bulk-ingestion` are safe by default the moment this ships — no operator action required, matching the explicit requirement.
 - One shared `checkAccess`/`resolveAccessPolicy` implementation for all three categories — no drift between "how agents are gated" and "how tools are gated."
 - Opting a new resource in or out of restriction is an env var (no redeploy) or a one-line code-registry entry (reviewable, `git blame`-able, same pattern as `TOOL_M2M_FALLBACK_CONFIG`) — never a per-resource code change to the resource itself.
-- Closes a real, previously-silent gap: chatRoute — the actual primary agent entry point — gets RBAC coverage it structurally lacked before this ADR.
+- ~~Closes a real, previously-silent gap: chatRoute gets RBAC coverage it structurally lacked.~~ **Withdrawn (C2):**
+  chatRoute was already protected by Mastra's `requiresAuth` default and already reached `authorizeUser`. The
+  `protected`-list entry makes that explicit rather than default-dependent, which is worth keeping, but it closed no gap.
+- Closes a real, previously-silent bypass instead (C1): a restricted agent or workflow could be invoked by spelling its
+  registry key in the URL instead of its `.id`.
 - Agent/workflow enforcement is **one function, wired at one existing extension point** (`authorizeUser`, already invoked by Mastra's own `coreAuthMiddleware` on every protected request) plus a one-line path-list extension — not a parallel authorization system. `resourceIdMiddleware.ts` needed zero RBAC-related changes because the existing, working pipeline already had the right hook; it just needed a real function instead of the default allow-all, and one more path pattern to reach chatRoute.
 
 **Negative / risk**
@@ -345,7 +401,7 @@ Every denial (both enforcement points) logs one `tcAILogger.warn` line with cate
 ## Prerequisites to confirm before implementation starts
 
 - **Create the `challengesRAG:admin` scope/permission in Auth0** on the `AUTH0_M2M_AUDIENCE` API resource, and grant it to the M2M client(s) that should be able to trigger ingestion. Still open — the confirmed payload above is a member token and carries no `scope` claim, so it confirms the JWT-role side only, not the M2M side.
-- A manual smoke test against a real deployment for the `authorizeUser` + extended `protected`-list design closing the chatRoute gap (Decision 4) — the mechanism was verified by reading `@mastra/deployer`'s and `@mastra/server`'s compiled source, not by an end-to-end request, so Phase 3's smoke test (chatRoute `403` before/after the role check) is the first live confirmation.
+- **Resolved (C2): there was no chatRoute gap.** (Original item: a manual smoke test for the `protected`-list design closing the chatRoute gap) — the mechanism was verified by reading `@mastra/deployer`'s and `@mastra/server`'s compiled source, not by an end-to-end request, so Phase 3's smoke test (chatRoute `403` before/after the role check) is the first live confirmation.
 - Reviewer sign-off on the tool-export-site wrapping approach (Decision 5) — specifically:
   - **One policy per tool, globally, not per-usage.** Wrapping at the tool's own export site means a tool has exactly one access policy regardless of caller — no per-agent/per-workflow variance without a second wrapped export. A non-issue today (every tool in the Resource inventory has exactly one caller), but a real constraint on future flexibility to accept knowingly, not discover later.
   - **Failure surfaces as a thrown `ToolAccessDeniedError`, breaking each tool's own `{success: false, error}` convention.** Fine for the agent tool-calling loop (a thrown tool error becomes a failed tool-call result the LLM sees), but needs confirming for the workflow-step call sites that invoke `tool.execute()` directly (`challenge-search-workflow.ts:249`, `challenge-bulk-ingestion-workflow.ts`) — their existing try/catch handles the tool's own return shape, not necessarily a thrown error from inside it.

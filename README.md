@@ -263,7 +263,7 @@ This ensures **resource isolation** — each user's agent memory and workflow st
 
 > See [ADR 0004](docs/adr/0004-role-based-access-for-agents-workflows-tools.md) for the design rationale.
 
-Authentication answers *"is this a valid caller?"*; access control answers *"may **this** caller invoke **this** agent / workflow / tool?"*. Both are off the same policy core in `src/utils/auth/access-control.ts`.
+Authentication answers *"is this a valid caller?"*; access control answers *"may **this** caller invoke **this** agent / workflow / tool / admin route?"*. All are off the same policy core in `src/utils/auth/access-control.ts`.
 
 **Policy model** — every target resolves to exactly one policy:
 
@@ -281,20 +281,24 @@ Authentication answers *"is this a valid caller?"*; access control answers *"may
 2. **Code default** — `DEFAULT_ACCESS_POLICIES` in `src/config/access-control.config.ts`
 3. **Global default** — `ACCESS_CONTROL_DEFAULT_POLICY` (`public` unless set to `deny`)
 
-`<CATEGORY>` is `AGENT`, `WORKFLOW` or `TOOL`. `<TARGET_KEY>` is the resource's own **`.id`**, upper-snake-cased — `challenge-bulk-ingestion` → `CHALLENGE_BULK_INGESTION`, `skillsMatchingAgent` → `SKILLS_MATCHING_AGENT`. Always the `.id` passed to `new Agent`/`createWorkflow`/`createTool`, **never** the object-property name it's registered under in `src/mastra/index.ts` — 9 of the 10 registrations differ, and a policy keyed on the wrong one silently never matches. An invalid `_MODE` throws an actionable error on first resolution rather than falling back silently.
+`<CATEGORY>` is `AGENT`, `WORKFLOW`, `TOOL` or `ROUTE`. `<TARGET_KEY>` is the resource's own **`.id`**, upper-snake-cased — `challenge-bulk-ingestion` → `CHALLENGE_BULK_INGESTION`, `skillsMatchingAgent` → `SKILLS_MATCHING_AGENT`. Always the `.id` passed to `new Agent`/`createWorkflow`/`createTool`, **never** the object-property name it's registered under in `src/mastra/index.ts` — 9 of the 10 registrations differ, and a policy keyed on the wrong one silently never matches. An invalid `_MODE` throws an actionable error on first resolution rather than falling back silently.
+
+Because Mastra's `getAgentById`/`getWorkflowById` fall back to the registry key, **both spellings reach the same resource over HTTP** — `/v6/ai/workflows/challenge-ingestion/start` and `/v6/ai/workflows/challengeIngestionWorkflow/start` are the same workflow. `TARGET_ID_ALIASES` maps every differing registry key to its canonical `.id`, and `resolveAccessPolicy()` canonicalises through it before any lookup, so a restriction can't be bypassed by addressing the target the other way. **Adding a restricted policy for a resource whose registry key differs from its `.id` means adding its alias entry too**; the unit tests assert both spellings resolve identically.
 
 **Shipped defaults.** Only two targets are restricted out of the box — both rewrite the shared challenge vector index:
 
 ```
-challenge-ingestion        roles: [administrator]  scopes: [challengesRAG:admin]
-challenge-bulk-ingestion   roles: [administrator]  scopes: [challengesRAG:admin]
+challenge-ingestion        roles: [administrator]  scopes: [challengesRAG:admin]   (workflow)
+challenge-bulk-ingestion   roles: [administrator]  scopes: [challengesRAG:admin]   (workflow)
+rag-challenges             roles: [administrator]  scopes: [challengesRAG:admin]   (route)
 ```
 
 Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
 
-**Two enforcement points:**
+**Three enforcement points:**
 
 - **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
+- **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Currently one entry: `/v6/ai/rag/challenges` → `rag-challenges`, restricted to `administrator` / `challengesRAG:admin` out of the box.
 - **Tools** — tools have no HTTP route of their own, so `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the `user` already on `RequestContext` and throws `ToolAccessDeniedError` on denial — surfaced to the LLM as a failed tool call, or to a workflow step as a rejected `execute()`.
 
 Nested, in-process invocations (`challenge-bulk-ingestion` → `challenge-ingestion`, `challenge-context` → `challenge-parser-agent`) are **not** re-gated: they never re-enter the HTTP router, and you can't reach them without passing the outer check first.
@@ -619,6 +623,26 @@ pnpm run sync -- --status ACTIVE --updated-since 2026-08-01 --concurrency 5
 ```
 
 Both CLIs invoke the same workflows the API exposes (via `mastra.getWorkflowById(...).createRun().start(...)`), so the CLI and API paths cannot drift onto separate implementations. `ingest-challenges.ts` writes per-run logs to `logs/ingestion-<timestamp>/{output.log,error.log,report.json}` (git-ignored).
+
+### Index administration API
+
+Two custom routes for inspecting and pruning what the index currently holds — the backend for the **TopScout RAG** admin page. Both are **administrator-only** (`route`/`rag-challenges` policy, see [Access control](#access-control)).
+
+```
+GET    /v6/ai/rag/challenges                 list indexed challenges
+DELETE /v6/ai/rag/challenges/:challengeId    remove one challenge's vectors
+```
+
+`GET` aggregates `challenge_embeddings` by `metadata->>'challengeId'` — the ingestion path writes one row per *chunk*, while an operator thinks in *challenges*. Query params: `page` (1-based, default 1), `perPage` (default 25, max 100), `projectId`, `track`, `type`, `search` (case-insensitive substring on challenge name **or** id). Empty/whitespace params are treated as absent.
+
+The response body is a **bare JSON array**, with pagination in `X-Page` / `X-Per-Page` / `X-Total` / `X-Total-Pages` response headers — the Topcoder platform convention (already listed in this server's CORS `exposeHeaders`, so browsers can read them):
+
+```json
+[{ "challengeId": "…", "name": "…", "type": "Challenge", "track": "Development",
+   "projectId": "17423", "chunks": 9, "ingestedAt": "2026-08-25T10:00:00.000Z" }]
+```
+
+Retrieval goes through PgVector's similarity API, which can't express "list distinct challenges, filtered and paginated", so these two queries run directly on the shared `PgVector.pool`. Every filter value is a bound parameter; the only interpolated identifiers are `VECTOR_INDEX_NAME` and `MASTRA_DB_SCHEMA`, both validated by `validateSqlIdentifier()`. `DELETE` counts the challenge's chunks, then removes them via `deleteVectors({ filter: { challengeId } })` (so metadata-filter translation stays in `@mastra/pg`), and responds `{ challengeId, deletedChunks }` — or **404** when the challenge holds no vectors, rather than reporting a successful no-op.
 
 ### Retrieval
 
