@@ -1,6 +1,6 @@
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 import { CompositeAuth } from '@mastra/core/server';
-import { API_PREFIX, CHAT_ROUTE_BASE_PATH, RAG_ADMIN_ROUTE_BASE_PATH } from '../server-routes';
+import { API_PREFIX, CHAT_ROUTE_BASE_PATH, CUSTOM_API_BASE_PATH } from '../server-routes';
 import { authorizeAccessPolicy } from './access-control';
 import { tcUserIdClaimKey } from './tc-domain';
 
@@ -18,7 +18,7 @@ const mapUserToResourceId = (user: Record<string, unknown>): string | undefined 
 const PROTECTED_PATHS = [
   `${API_PREFIX}/*`,
   `${CHAT_ROUTE_BASE_PATH}/*`,
-  `${RAG_ADMIN_ROUTE_BASE_PATH}/*`,
+  `${CUSTOM_API_BASE_PATH}/*`,
 ];
 
 export const apiAuthLayer = new CompositeAuth([

@@ -179,7 +179,7 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
   },
   tool: {},
   route: {
-    // GET/DELETE /v6/ai-rag/challenges — mutates the same shared vector index
+    // GET/DELETE /v6/ai-api/rag/challenges — mutates the same shared vector index
     // as the ingestion workflows, so it ships behind the same credentials.
     // (Custom routes cannot live under apiPrefix; Mastra throws at boot.)
     'rag-challenges': { mode: 'restricted', roles: ['administrator'], scopes: ['challengesRAG:admin'] },
