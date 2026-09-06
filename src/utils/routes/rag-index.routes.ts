@@ -2,7 +2,7 @@
  * RAG index admin API — list and delete what challenge_embeddings holds.
  *
  * Registered as custom apiRoutes (see src/mastra/index.ts). They live under
- * `/v6/ai-rag`, NOT under API_PREFIX: Mastra reserves the prefix for its
+ * `/v6/ai-api/rag`, NOT under API_PREFIX: Mastra reserves the prefix for its
  * built-ins and throws at boot for any custom route beneath it (see
  * server-routes.ts). Auth comes from two places: `requiresAuth: true` makes
  * Mastra authenticate them (set explicitly rather than relying on its
