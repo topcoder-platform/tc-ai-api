@@ -5,7 +5,6 @@ export type StructuredOutputStrategy =
     | 'native'
     | 'jsonPromptInjection'
     | 'separate-structuring-model'
-    | 'prepareStep'
     | 'plain-text';
 
 export type CallTokenUsageSource = 'native' | 'mixed' | 'estimated' | 'none';
@@ -352,26 +351,14 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
         });
     }
 
-    pushAttempt('prepareStep', {
-        maxSteps: 2,
-        prepareStep: async ({ stepNumber }: { stepNumber: number }) => {
-            if (stepNumber === 0) {
-                return {
-                    structuredOutput: undefined,
-                };
-            }
-
-            return {
-                tools: undefined,
-                toolChoice: 'none',
-                structuredOutput: {
-                    ...strictStructuredOutputBase,
-                    jsonPromptInjection: true,
-                    ...(structuringModel ? { model: structuringModel } : {}),
-                },
-            };
-        },
-    });
+    // NOTE: a 'prepareStep'-based two-step attempt (free-form step 0, then a
+    // structured-output-only step 1) used to live here. It was removed because
+    // step 0's assistant turn can end with a bare `thinking` block (extended
+    // reasoning cut off before any text/tool_use, e.g. on Claude models with
+    // thinking enabled) and Bedrock/Anthropic then rejects step 1 with
+    // "messages.N: The final block in an assistant message cannot be
+    // `thinking`" when that turn is replayed as history. Every remaining
+    // strategy here is single-turn, so none can hit that replay failure.
 
     let lastAttemptError: unknown = null;
 
