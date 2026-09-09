@@ -225,6 +225,33 @@ function isLikelyMojoOrGemini(agent: any): boolean {
     return modelId.includes('gemini') || modelId.includes('mojo');
 }
 
+/**
+ * Best-effort extraction of a JSON object from free-form model text: tries a
+ * direct parse first, then a fenced ```json ... ``` block, then the widest
+ * `{ ... }` span in the text (handles leading/trailing commentary).
+ */
+function extractJsonObject(text: string): unknown | null {
+    const candidates: string[] = [text];
+
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) candidates.push(fenced[1]);
+
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+        candidates.push(text.slice(firstBrace, lastBrace + 1));
+    }
+
+    for (const candidate of candidates) {
+        try {
+            return JSON.parse(candidate.trim());
+        } catch {
+            // try next candidate
+        }
+    }
+    return null;
+}
+
 export function isStructuredOutputCompatibilityError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
     const message = error.message.toLowerCase();
@@ -340,6 +367,21 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
                     ? await agent.generate(prompt, generateOptions)
                     : await agent.generate(prompt);
 
+            if (!response?.object) {
+                // The call resolved (no thrown error) but produced no structured
+                // object — e.g. the model's structured-output run was aborted by
+                // mastra's "strict" errorStrategy (schema-validation failure) or
+                // truncated (finishReason "length"). Treat this the same as a
+                // thrown compatibility error and try the next strategy instead
+                // of silently returning an empty result.
+                tcAILogger.warn(
+                    `[json-wrapper:structured-output] Section "${sectionName}" attempt ` +
+                    `"${attempt.strategy}" resolved without a structured object ` +
+                    `(finishReason: ${response?.finishReason ?? 'unknown'}); trying next strategy`,
+                );
+                continue;
+            }
+
             return {
                 response,
                 strategy: attempt.strategy,
@@ -371,6 +413,25 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
     }
 
     const response = await agent.generate(prompt);
+
+    if (!response?.object && typeof response?.text === 'string') {
+        const rawJson = extractJsonObject(response.text);
+        const parsed = rawJson !== null ? schema.safeParse(rawJson) : null;
+        if (parsed?.success) {
+            tcAILogger.info(
+                `[json-wrapper:structured-output] Section "${sectionName}" recovered a valid object ` +
+                'from plain-text output',
+            );
+            response.object = parsed.data;
+        } else {
+            tcAILogger.error(
+                `[json-wrapper:structured-output] Section "${sectionName}" plain-text JSON recovery failed ` +
+                `(finishReason: ${response?.finishReason ?? 'unknown'}); ` +
+                `raw text (truncated): ${response.text.slice(0, 500)}`,
+            );
+        }
+    }
+
     return {
         response,
         strategy: 'plain-text',
