@@ -76,8 +76,8 @@ const existingArtifactSchema = z.object({
         'library', 'other',
     ]).describe('Kind of pre-existing artifact'),
     description: z.string().describe('What this artifact contains or provides'),
-    url: z.string().optional().describe('URL / link if mentioned (e.g. Git repo, Figma, Swagger)'),
-    notes: z.string().optional().describe('Additional context about this artifact'),
+    url: z.string().nullable().optional().describe('URL / link if mentioned (e.g. Git repo, Figma, Swagger)'),
+    notes: z.string().nullable().optional().describe('Additional context about this artifact'),
 });
 
 const existingCodebaseSchema = z.object({
@@ -99,13 +99,13 @@ const existingCodebaseSchema = z.object({
     branchOrTag: z.string().nullable().optional().describe(
         'Branch, tag, or commit reference to use if specified',
     ),
-    languages: z.array(z.string()).optional().describe(
+    languages: z.array(z.string()).nullable().optional().describe(
         'Programming languages present in the existing codebase (may differ from challenge requirements)',
     ),
-    frameworks: z.array(z.string()).optional().describe(
+    frameworks: z.array(z.string()).nullable().optional().describe(
         'Frameworks / libraries already present in the existing codebase',
     ),
-    notes: z.string().optional().describe(
+    notes: z.string().nullable().optional().describe(
         'Any other observations about the starting point inferred from the challenge spec',
     ),
 });
@@ -150,11 +150,11 @@ const submissionGuidelinesSchema = z.object({
         'true if the submission should be a patch / diff on top of an existing codebase '
         + 'rather than a standalone full codebase',
     ),
-    eligibilityConditions: z.array(z.string()).optional().describe(
+    eligibilityConditions: z.array(z.string()).nullable().optional().describe(
         'Any conditions that must be met for the submission to be eligible for review '
         + '(e.g. "must pass SAST scanner", "must include unit tests with ≥80% coverage")',
     ),
-    notes: z.string().optional().describe(
+    notes: z.string().nullable().optional().describe(
         'Any additional submission-related information that does not fit the above fields',
     ),
 });
