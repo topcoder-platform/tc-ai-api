@@ -42,7 +42,10 @@ import { challengeVectorQueryTool, _testing } from './challenge-vector-query-too
 
 const { buildMetadataFilter } = _testing;
 
-const minimalContext = { mastra: undefined } as any;
+const minimalContext = {
+    mastra: undefined,
+    requestContext: { get: (key: string) => (key === 'user' ? { sub: 'test-user' } : undefined) },
+} as any;
 
 async function executeTool(input: Record<string, unknown>): Promise<any> {
     return challengeVectorQueryTool.execute?.(input, minimalContext) as Promise<any>;

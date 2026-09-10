@@ -143,6 +143,11 @@ tc-ai-api/
 | `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-4-5`        | Model id for `challenge-search-agent`                              |
 | `BEDROCK_PROMPT_CACHE_ENABLED`      | No       | `true`                                 | Global kill switch for Bedrock prompt caching (see below)         |
 | `BEDROCK_PROMPT_CACHE_TTL`          | No       | `5m`                                   | Bedrock cache checkpoint TTL — `5m` or `1h`                       |
+| `ACCESS_CONTROL_DEFAULT_POLICY`     | No       | `public`                               | Global fallback policy for any agent/workflow/tool with no explicit policy — `public` or `deny` |
+| `ACCESS_CONTROL_ROLES_CLAIM`        | No       | `https://<TC_API_BASE domain>/roles`   | JWT claim key carrying member role names — override only if a tenant diverges from the convention |
+| `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_MODE` | No | —                              | Per-target override: `public` or `deny`. See [Access control](#access-control) |
+| `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_ROLES` | No | —                             | Per-target override: comma-separated member roles (implies `restricted`) |
+| `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_SCOPES` | No | —                            | Per-target override: comma-separated M2M scopes (implies `restricted`) |
 
 > \* Auth0 variables are required unless `DISABLE_AUTH=true`.
 > \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are only exercised if a tool is explicitly opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) — no tool is today, so these aren't required for the currently-shipped behavior, only for future fallback use.
@@ -229,7 +234,7 @@ Authentication is handled by `CompositeAuth` from `@mastra/core/server` (`src/ut
 1. **Member tokens** — issued by `AUTH0_DOMAIN` with audience `AUTH0_AUDIENCE`
 2. **M2M (machine-to-machine) tokens** — issued by `AUTH0_M2M_DOMAIN` with audience `AUTH0_M2M_AUDIENCE`
 
-A request is authorized if it passes validation against **either** tenant. Both providers declare `protected: ['/v6/ai/*']` (the server's `apiPrefix` — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default.
+A request is authorized if it passes validation against **either** tenant. Both providers declare `protected: ['/v6/ai/*', '/v6/ai-chat/*']` (the server's `apiPrefix` plus the `chatRoute()` base path — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default. `/v6/ai-chat/*` has to be listed explicitly because `chatRoute()` is registered outside `apiPrefix` and never sets `requiresAuth`, so Mastra's `isProtectedPath` check would otherwise skip it — including its authorization step (see [Access control](#access-control)).
 
 Both providers also set `mapUserToResourceId`, deriving the caller's Topcoder user id from the JWT claim `https://<domain>/userId` (member tokens) or `sub` (M2M tokens) — see `tcUserIdClaimKey()` / `mapUserToResourceId` in `src/utils/auth/index.ts`. Mastra's core auth flow stores that value under `MASTRA_RESOURCE_ID_KEY` in the request context automatically, and it takes precedence over any client-supplied `resourceId`/`memory.resource` — this is what actually enforces per-user memory/thread isolation; the `Resource ID Middleware` below is a belt-and-suspenders check on top of it, not the primary mechanism.
 
@@ -242,7 +247,7 @@ Authentication can be fully disabled by setting `DISABLE_AUTH=true` (useful for 
 `resourceIdMiddleware` (`src/utils/middleware/resourceIdMiddleware.ts`) is a secondary, explicit check on top of `mapUserToResourceId` above. When auth is enabled it's registered against the two real route surfaces the server actually exposes (`src/utils/server-routes.ts` is the single source of truth for both):
 
 - `${API_PREFIX}/*` (i.e. `/v6/ai/*`) — the built-in Mastra routes (agents, workflows, memory, threads)
-- `/chat/*` — `chatRoute()`, which is registered *outside* `apiPrefix` (custom API routes aren't prefixed by Mastra), so it needs its own entry
+- `${CHAT_ROUTE_BASE_PATH}/*` (i.e. `/v6/ai-chat/*`) — `chatRoute()`, which is registered *outside* `apiPrefix` (custom API routes aren't prefixed by Mastra), so it needs its own entry
 
 For each matching request it:
 
@@ -253,6 +258,66 @@ For each matching request it:
 5. Logs `'Auth resolved for request'` at `info` level with `authType` (`member`/`m2m`) and the resolved `resourceId`, for auth verification during rollout.
 
 This ensures **resource isolation** — each user's agent memory and workflow state are segregated.
+
+### Access control
+
+> See [ADR 0004](docs/adr/0004-role-based-access-for-agents-workflows-tools.md) for the design rationale.
+
+Authentication answers *"is this a valid caller?"*; access control answers *"may **this** caller invoke **this** agent / workflow / tool?"*. Both are off the same policy core in `src/utils/auth/access-control.ts`.
+
+**Policy model** — every target resolves to exactly one policy:
+
+| Mode | Meaning |
+| --- | --- |
+| `public` | Any authenticated caller (the default) |
+| `deny` | Nobody, regardless of role or scope |
+| `restricted` | Member callers must hold one of `roles`; M2M callers must hold one of `scopes` |
+
+`restricted` keeps the two dimensions **separate**: a member token is checked only against `roles`, an M2M token only against `scopes`. A policy that configures just one dimension therefore implicitly denies the other credential type.
+
+**Three-layer resolution**, per `(category, targetId)`, resolved lazily and memoised:
+
+1. **Env override** — `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_MODE` / `_ROLES` / `_SCOPES`
+2. **Code default** — `DEFAULT_ACCESS_POLICIES` in `src/config/access-control.config.ts`
+3. **Global default** — `ACCESS_CONTROL_DEFAULT_POLICY` (`public` unless set to `deny`)
+
+`<CATEGORY>` is `AGENT`, `WORKFLOW` or `TOOL`. `<TARGET_KEY>` is the resource's own **`.id`**, upper-snake-cased — `challenge-bulk-ingestion` → `CHALLENGE_BULK_INGESTION`, `skillsMatchingAgent` → `SKILLS_MATCHING_AGENT`. Always the `.id` passed to `new Agent`/`createWorkflow`/`createTool`, **never** the object-property name it's registered under in `src/mastra/index.ts` — 9 of the 10 registrations differ, and a policy keyed on the wrong one silently never matches. An invalid `_MODE` throws an actionable error on first resolution rather than falling back silently.
+
+**Shipped defaults.** Only two targets are restricted out of the box — both rewrite the shared challenge vector index:
+
+```
+challenge-ingestion        roles: [administrator]  scopes: [challengesRAG:admin]
+challenge-bulk-ingestion   roles: [administrator]  scopes: [challengesRAG:admin]
+```
+
+Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
+
+**Two enforcement points:**
+
+- **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
+- **Tools** — tools have no HTTP route of their own, so `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the `user` already on `RequestContext` and throws `ToolAccessDeniedError` on denial — surfaced to the LLM as a failed tool call, or to a workflow step as a rejected `execute()`.
+
+Nested, in-process invocations (`challenge-bulk-ingestion` → `challenge-ingestion`, `challenge-context` → `challenge-parser-agent`) are **not** re-gated: they never re-enter the HTTP router, and you can't reach them without passing the outer check first.
+
+Every denial logs one `tcAILogger.warn` line with the category, target id and whether a user was present.
+
+**Common operations, all zero-code-change:**
+
+```bash
+# Loosen ingestion for a staging environment
+ACCESS_POLICY_WORKFLOW_CHALLENGE_INGESTION_MODE="public"
+
+# Lock down a currently-open workflow
+ACCESS_POLICY_WORKFLOW_CHALLENGE_SEARCH_ROLES="administrator,copilot"
+
+# Temporarily hard-block a tool
+ACCESS_POLICY_TOOL_SEARCH_CHALLENGES_MODE="deny"
+
+# Flip the whole system to closed-by-default
+ACCESS_CONTROL_DEFAULT_POLICY="deny"
+```
+
+Access control is inert when `DISABLE_AUTH=true` — there is no authenticated caller to check.
 
 ### Requestor Token Propagation to Topcoder Platform Tools
 

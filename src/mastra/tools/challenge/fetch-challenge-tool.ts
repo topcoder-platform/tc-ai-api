@@ -5,6 +5,7 @@
 // as-is); no M2M fallback configured for this tool — see
 // docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md.
 import { createTool } from '@mastra/core/tools';
+import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/request-context';
 import { callTcApi } from '../../../utils/tc-api-client';
@@ -12,7 +13,7 @@ import { callTcApi } from '../../../utils/tc-api-client';
 const TOOL_ID = 'fetch-challenge-by-id';
 const BASE_URL = `${process.env.TC_API_BASE}/v6/challenges`;
 
-export const fetchChallengeTool = createTool({
+export const fetchChallengeTool = withAccessPolicy(createTool({
     id: TOOL_ID,
     description:
         'Fetches a Topcoder challenge by its UUID from the Topcoder v6 Challenges API, authorized as the requesting user',
@@ -98,7 +99,7 @@ export const fetchChallengeTool = createTool({
         });
         return await fetchChallenge(inputData.challengeId, context.requestContext);
     },
-});
+}));
 
 const fetchChallenge = async (challengeId: string, requestContext: RequestContext | undefined) => {
     const url = `${BASE_URL}/${encodeURIComponent(challengeId)}`;

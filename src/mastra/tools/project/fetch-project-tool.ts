@@ -12,6 +12,7 @@
 // as-is); no M2M fallback configured for this tool — see
 // docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md.
 import { createTool } from '@mastra/core/tools';
+import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/request-context';
 import { callTcApi } from '../../../utils/tc-api-client';
@@ -19,7 +20,7 @@ import { callTcApi } from '../../../utils/tc-api-client';
 const TOOL_ID = 'fetch-project-by-id';
 const BASE_URL = `${process.env.TC_API_BASE}/v6/projects`;
 
-export const fetchProjectTool = createTool({
+export const fetchProjectTool = withAccessPolicy(createTool({
     id: TOOL_ID,
     description:
         'Fetches a Topcoder project by id from the v6 Projects API, authorized as the requesting user. ' +
@@ -45,7 +46,7 @@ export const fetchProjectTool = createTool({
         logger?.info('Fetching project by ID: {projectId}', { projectId: inputData.projectId });
         return await fetchProject(inputData.projectId, inputData.fields, context.requestContext);
     },
-});
+}));
 
 /**
  * Project.id / billingAccountId / directProjectId are Prisma BigInt on the

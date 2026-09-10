@@ -1,6 +1,6 @@
 # ADR 0004 — Role-based access control for Agents, Workflows, and Tools
 
-- **Status:** **Proposed** (not yet implemented) — for review
+- **Status:** **Accepted — implemented** (see *Implementation notes* at the end for three corrections found while building it)
 - **Date:** 2026-08-27
 - **Target branch:** `challenges-rag`
 - **Related:** ADR 0001 (D10 — "any scope restriction MUST be enforced server-side, never left to the model"), ADR 0002 (existing inbound-vs-outbound auth split), `src/utils/auth/index.ts` (`apiAuthLayer`), `src/utils/middleware/resourceIdMiddleware.ts`, `src/config/tool-auth-fallback.config.ts` (precedent for a per-tool, opt-in-by-default code registry)
@@ -350,3 +350,52 @@ Every denial (both enforcement points) logs one `tcAILogger.warn` line with cate
   - **One policy per tool, globally, not per-usage.** Wrapping at the tool's own export site means a tool has exactly one access policy regardless of caller — no per-agent/per-workflow variance without a second wrapped export. A non-issue today (every tool in the Resource inventory has exactly one caller), but a real constraint on future flexibility to accept knowingly, not discover later.
   - **Failure surfaces as a thrown `ToolAccessDeniedError`, breaking each tool's own `{success: false, error}` convention.** Fine for the agent tool-calling loop (a thrown tool error becomes a failed tool-call result the LLM sees), but needs confirming for the workflow-step call sites that invoke `tool.execute()` directly (`challenge-search-workflow.ts:249`, `challenge-bulk-ingestion-workflow.ts`) — their existing try/catch handles the tool's own return shape, not necessarily a thrown error from inside it.
   - **The `{...tool, execute: wrappedExecute}` shallow clone is assumed behaviorally identical to the original `createTool(...)` result** — not verified against Mastra's own tool-handling internals (schema introspection, tool-calling dispatch), only asserted by "the shape looks the same."
+
+## Implementation notes (added at implementation time)
+
+Three things surfaced while building this against the installed `@mastra/*@1.63.0` packages. The
+first is a correctness bug in Decision 4 as written; the other two close open items above.
+
+**1. `authorizeUser`'s second argument is not a `Request` — Decision 4's `request.url` is `undefined`.**
+`coreAuthMiddleware` passes `adaptToMastraAuthRequest(rawRequest)`, which returns a
+`HonoRequestLike` (`{ raw, headers, header() }`) — the `MastraAuthRequest` union is
+`Request | HonoRequestLike`, and the adapter always produces the latter for a real `Request` input.
+Reading `.url` off it yields `undefined`, no path pattern matches, and `authorizeAccessPolicy`
+returns its "not an agent/workflow path" allow — i.e. **the policy would silently never apply**.
+The implementation uses Mastra's own exported `getWebRequest(request): Request | undefined`
+(`@mastra/core/server`) to recover the underlying `Request`, and **fails closed** (returns `false`)
+if it can't. `access-control.test.ts` exercises `authorizeAccessPolicy` against the
+`HonoRequestLike` shape specifically, so this can't silently regress.
+
+**2. Supplying `authorizeUser` in the provider options *replaces* `MastraAuthAuth0`'s own check.**
+`MastraAuthAuth0`'s constructor ends with `this.registerOptions(options)`, which assigns
+`this.authorizeUser = opts.authorizeUser.bind(this)` — an own property that shadows the class's
+prototype `authorizeUser`, whose baseline behavior is to reject users lacking `sub`/`id` and users
+whose `exp` has passed. `authorizeAccessPolicy` therefore re-asserts both checks before evaluating
+any policy, so nothing is lost. (Because Mastra `.bind(this)`s it, the function must also never
+read `this` — it doesn't.)
+
+**3. The `{...tool, execute}` shallow clone is safe — resolves the third open Prerequisite.**
+`createTool` returns a `Tool` class instance, but the class body declares **no prototype methods**:
+every field, including `this[MASTRA_TOOL_MARKER] = true` where
+`MASTRA_TOOL_MARKER = Symbol.for("mastra.core.tool.Tool")`, is an own enumerable property, and
+object spread copies own enumerable symbol keys. Mastra's `isMastraTool()` accepts
+`MASTRA_TOOL_MARKER in tool` without requiring `instanceof Tool`, and the only other `instanceof Tool`
+check in `@mastra/core` is guarded by `typeof tool === "function"`. Wrapping the *instance's*
+`execute` (rather than the `opts.execute` passed into `createTool`) also means Mastra's
+input/output/resume/requestContext validation still runs — it lives inside the wrapped call.
+
+**Other Prerequisites resolved during implementation:**
+
+- *Thrown `ToolAccessDeniedError` at direct `tool.execute()` workflow call sites* — confirmed safe.
+  All six direct call sites already wrap the call in a `try`/`catch` that either rethrows a
+  descriptive error or converts it into a failed step result. The nested
+  `challenge-bulk-ingestion` → `challenge-ingestion` run forwards `requestContext` into
+  `run.start()`, so the nested run's tools still see the authenticated user.
+- *Existing tool test suites* — the four tool `*.test.ts` files needed their `minimalContext`
+  extended with a `requestContext.get('user')` stub, since the wrapper is fail-closed on a missing
+  user even under a `public` policy. That was the only test churn; no assertions changed.
+
+**Still open (unchanged):** creating `challengesRAG:admin` in Auth0 on the `AUTH0_M2M_AUDIENCE` API
+resource, the live smoke tests in Phase 3, and the dev-token spot-check of the
+`https://topcoder-dev.com/roles` claim key.
