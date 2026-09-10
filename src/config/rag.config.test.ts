@@ -153,7 +153,7 @@ describe('rag.config — getRagConfig', () => {
             expect(config.chunkMaxSize).toBe(512);
             expect(config.chunkOverlap).toBe(50);
             expect(config.topK).toBe(10);
-            expect(config.vectorSearchThreshold).toBe(0.5);
+            expect(config.vectorSearchThreshold).toBe(0.25);
         });
 
         it('throws actionable error for non-numeric RAG_CHUNK_MAX_SIZE', () => {

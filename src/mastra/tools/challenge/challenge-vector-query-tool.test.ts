@@ -27,7 +27,7 @@ vi.mock('../../../utils/providers/embedding-factory', () => ({
 }));
 
 vi.mock('../../vector/challenge-vector-store', () => ({
-    getChallengeVectorStore: () => ({ query: mocks.storeQuery }),
+    ensureChallengeIndex: async () => ({ query: mocks.storeQuery }),
 }));
 
 vi.mock('../../../config/rag.config', () => ({
@@ -42,7 +42,10 @@ import { challengeVectorQueryTool, _testing } from './challenge-vector-query-too
 
 const { buildMetadataFilter } = _testing;
 
-const minimalContext = { mastra: undefined } as any;
+const minimalContext = {
+    mastra: undefined,
+    requestContext: { get: (key: string) => (key === 'user' ? { sub: 'test-user' } : undefined) },
+} as any;
 
 async function executeTool(input: Record<string, unknown>): Promise<any> {
     return challengeVectorQueryTool.execute?.(input, minimalContext) as Promise<any>;
@@ -168,7 +171,7 @@ describe('challengeVectorQueryTool — semantic query path', () => {
 
         const result = await executeTool({ query: 'realtime dashboard' });
 
-        expect(mocks.createEmbeddingModel).toHaveBeenCalledWith('AWSBedrock', 'amazon.titan-embed-text-v2:0');
+        expect(mocks.createEmbeddingModel).toHaveBeenCalledWith('AWSBedrock', 'amazon.titan-embed-text-v2:0', 'challenge-vector-query-tool');
         expect(mocks.embed).toHaveBeenCalledWith(
             expect.objectContaining({ value: 'realtime dashboard' }),
         );

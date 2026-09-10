@@ -5,7 +5,6 @@ export type StructuredOutputStrategy =
     | 'native'
     | 'jsonPromptInjection'
     | 'separate-structuring-model'
-    | 'prepareStep'
     | 'plain-text';
 
 export type CallTokenUsageSource = 'native' | 'mixed' | 'estimated' | 'none';
@@ -272,6 +271,26 @@ export function isStructuredOutputCompatibilityError(error: unknown): boolean {
     );
 }
 
+/**
+ * True when the model DID attempt structured output but the result failed
+ * schema validation (e.g. a truncated array item missing required fields, or
+ * a genuine type mismatch). Unlike a compatibility error this says nothing
+ * about whether the provider supports structured output — but a different
+ * strategy (different prompt shaping, a second unconstrained pass, or the
+ * final plain-text JSON-recovery fallback) can still produce a valid object,
+ * so it should be retried rather than immediately thrown.
+ */
+export function isStructuredOutputValidationError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const message = error.message.toLowerCase();
+
+    return (
+        message.includes('validation failed')
+        || message.includes('invalid input: expected')
+        || error.name === 'ZodError'
+    );
+}
+
 export async function generateWithStructuredOutputFallback<Schema extends z.ZodTypeAny>({
     agent,
     prompt,
@@ -332,28 +351,16 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
         });
     }
 
-    pushAttempt('prepareStep', {
-        maxSteps: 2,
-        prepareStep: async ({ stepNumber }: { stepNumber: number }) => {
-            if (stepNumber === 0) {
-                return {
-                    structuredOutput: undefined,
-                };
-            }
+    // NOTE: a 'prepareStep'-based two-step attempt (free-form step 0, then a
+    // structured-output-only step 1) used to live here. It was removed because
+    // step 0's assistant turn can end with a bare `thinking` block (extended
+    // reasoning cut off before any text/tool_use, e.g. on Claude models with
+    // thinking enabled) and Bedrock/Anthropic then rejects step 1 with
+    // "messages.N: The final block in an assistant message cannot be
+    // `thinking`" when that turn is replayed as history. Every remaining
+    // strategy here is single-turn, so none can hit that replay failure.
 
-            return {
-                tools: undefined,
-                toolChoice: 'none',
-                structuredOutput: {
-                    ...strictStructuredOutputBase,
-                    jsonPromptInjection: true,
-                    ...(structuringModel ? { model: structuringModel } : {}),
-                },
-            };
-        },
-    });
-
-    let lastCompatibilityError: unknown = null;
+    let lastAttemptError: unknown = null;
 
     for (const attempt of attempts) {
         try {
@@ -387,14 +394,16 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
                 strategy: attempt.strategy,
             };
         } catch (err: unknown) {
-            if (!isStructuredOutputCompatibilityError(err)) {
+            const isCompatibilityError = isStructuredOutputCompatibilityError(err);
+            const isValidationError = isStructuredOutputValidationError(err);
+            if (!isCompatibilityError && !isValidationError) {
                 throw err;
             }
 
-            lastCompatibilityError = err;
+            lastAttemptError = err;
             tcAILogger.warn(
                 `[json-wrapper:structured-output] Section "${sectionName}" attempt ` +
-                `"${attempt.strategy}" failed compatibility checks: ` +
+                `"${attempt.strategy}" failed ${isValidationError ? 'schema validation' : 'compatibility checks'}: ` +
                 `${err instanceof Error ? err.message : String(err)}`,
             );
         }
@@ -405,10 +414,10 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
         'falling back to plain-text generation for JSON recovery',
     );
 
-    if (lastCompatibilityError instanceof Error) {
+    if (lastAttemptError instanceof Error) {
         tcAILogger.warn(
-            `[json-wrapper:structured-output] Section "${sectionName}" last compatibility error: ` +
-            lastCompatibilityError.message,
+            `[json-wrapper:structured-output] Section "${sectionName}" last attempt error: ` +
+            lastAttemptError.message,
         );
     }
 

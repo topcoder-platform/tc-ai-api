@@ -1,5 +1,6 @@
 import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/request-context";
 import { apiAuthLayer } from '../auth';
+import { tcUserIdClaimKey } from '../auth/tc-domain';
 import { tcAILogger } from '../logger';
 import { API_PREFIX, CHAT_ROUTE_BASE_PATH } from '../server-routes';
 
@@ -46,19 +47,7 @@ const resourceIdMiddlewareHandler = async (c: any, next: any) => {
     }
 
     // Logic to extract userId
-    const tcApiBase = process.env.TC_API_BASE || '';
-    let domain = 'topcoder.com';
-    try {
-        if (tcApiBase) {
-            const url = new URL(tcApiBase);
-            domain = url.hostname.replace('api.', '');
-        }
-    } catch (e) {
-        console.error('Error parsing TC_API_BASE:', e);
-    }
-
-    const userIdKey = `https://${domain}/userId`;
-    const userId = user[userIdKey];
+    const userId = user[tcUserIdClaimKey()];
     const sub = user['sub']; // M2M user
 
     if (!userId && !sub) {
