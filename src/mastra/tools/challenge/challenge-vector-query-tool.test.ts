@@ -40,7 +40,7 @@ vi.mock('../../../utils/logger', () => ({
 
 import { challengeVectorQueryTool, _testing } from './challenge-vector-query-tool';
 
-const { buildMetadataFilter } = _testing;
+const { buildMetadataFilter, buildSkillsCondition } = _testing;
 
 const minimalContext = {
     mastra: undefined,
@@ -108,10 +108,40 @@ describe('buildMetadataFilter', () => {
         });
     });
 
-    it('composes $in for skills and groups', () => {
+    it('composes a case-insensitive $or of $regex for skills, and $in for groups', () => {
         expect(buildMetadataFilter({ skills: ['React', 'TypeScript'], groups: ['g1'] })).toEqual({
-            $and: [{ skills: { $in: ['React', 'TypeScript'] } }, { groups: { $in: ['g1'] } }],
+            $and: [
+                {
+                    $or: [
+                        { skills: { $regex: '(?i)"React"' } },
+                        { skills: { $regex: '(?i)"TypeScript"' } },
+                    ],
+                },
+                { groups: { $in: ['g1'] } },
+            ],
         });
+    });
+
+    it('emits a bare $regex condition for a single skill', () => {
+        expect(buildMetadataFilter({ skills: ['React'] })).toEqual({
+            $and: [{ skills: { $regex: '(?i)"React"' } }],
+        });
+    });
+
+    it('trims skill names and drops blank entries', () => {
+        expect(buildMetadataFilter({ skills: ['  React  ', '', '   '] })).toEqual({
+            $and: [{ skills: { $regex: '(?i)"React"' } }],
+        });
+    });
+
+    it('escapes regex metacharacters in skill names', () => {
+        expect(buildSkillsCondition(['C++'])).toEqual({ skills: { $regex: '(?i)"C\\+\\+"' } });
+        expect(buildSkillsCondition(['Node.js'])).toEqual({ skills: { $regex: '(?i)"Node\\.js"' } });
+    });
+
+    it('returns undefined for a skills list that is empty after trimming', () => {
+        expect(buildSkillsCondition(['  ', ''])).toBeUndefined();
+        expect(buildSkillsCondition(undefined)).toBeUndefined();
     });
 
     it('normalizes a single projectId string into $in', () => {
@@ -241,7 +271,9 @@ describe('challengeVectorQueryTool — semantic query path', () => {
         await executeTool({ query: 'test', type: 'Challenge', skills: ['React'] });
         expect(mocks.storeQuery).toHaveBeenCalledWith(
             expect.objectContaining({
-                filter: { $and: [{ type: { $eq: 'Challenge' } }, { skills: { $in: ['React'] } }] },
+                filter: {
+                    $and: [{ type: { $eq: 'Challenge' } }, { skills: { $regex: '(?i)"React"' } }],
+                },
             }),
         );
     });

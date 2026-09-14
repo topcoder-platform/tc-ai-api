@@ -115,6 +115,42 @@ export type ChallengeVectorQueryInput = z.infer<typeof inputSchema>;
 // Filter composition
 // ---------------------------------------------------------------------------
 
+/** Escapes a string for literal use inside a POSIX regular expression. */
+function escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Builds the `skills` metadata condition.
+ *
+ * `$in` would be the obvious choice, but @mastra/pg compiles it to a
+ * byte-exact string comparison against each array element, while the skill
+ * names stored at ingestion come verbatim from the standardized-skills
+ * taxonomy. A caller asking for "javascript" (or "JavaScript" when the
+ * taxonomy says "Javascript") then matches nothing at all, which reads as
+ * "no such challenges" rather than "wrong spelling".
+ *
+ * So each requested skill becomes a case-insensitive regex against the
+ * metadata array's JSON text (`["Javascript", "Node.js"]`). The quotes around
+ * the name keep this an element-exact match — "Java" still won't match
+ * "JavaScript" — and multiple skills are OR-ed, matching `$in` semantics.
+ */
+function buildSkillsCondition(skills: string[] | undefined): Record<string, unknown> | undefined {
+    const normalized = (skills ?? []).map((skill) => skill.trim()).filter(Boolean);
+
+    if (normalized.length === 0) {
+        return undefined;
+    }
+
+    // JSON-encode first so the pattern lines up with how the name is escaped
+    // inside the stored array text, then regex-escape the result.
+    const conditions = normalized.map((skill) => ({
+        skills: { $regex: `(?i)"${escapeRegex(JSON.stringify(skill).slice(1, -1))}"` },
+    }));
+
+    return conditions.length === 1 ? conditions[0] : { $or: conditions };
+}
+
 /**
  * Builds the $and metadata filter from the supplied dimensions.
  * Returns undefined when no filter dimension is present.
@@ -122,7 +158,7 @@ export type ChallengeVectorQueryInput = z.infer<typeof inputSchema>;
  * Typed `any`: @mastra/pg's PGVectorFilter type is a closed structural union
  * not exported from the package's public entry point (deep imports are
  * blocked by its package.json "exports" map), so there is no way to name it
- * from here. The shape below ($and of $eq/$in leaves) is exactly what
+ * from here. The shape below ($and of $eq/$regex/$in leaves) is exactly what
  * PgVector's filter builder documents and what the source prototype used.
  */
 export function buildMetadataFilter(
@@ -136,8 +172,9 @@ export function buildMetadataFilter(
     if (input.track) {
         conditions.push({ track: { $eq: input.track } });
     }
-    if (input.skills?.length) {
-        conditions.push({ skills: { $in: input.skills } });
+    const skillCondition = buildSkillsCondition(input.skills);
+    if (skillCondition) {
+        conditions.push(skillCondition);
     }
     if (input.groups?.length) {
         conditions.push({ groups: { $in: input.groups } });
@@ -248,4 +285,4 @@ export const challengeVectorQueryTool = withAccessPolicy(createTool({
 // Testing Exports
 // ---------------------------------------------------------------------------
 
-export const _testing = { buildMetadataFilter };
+export const _testing = { buildMetadataFilter, buildSkillsCondition };

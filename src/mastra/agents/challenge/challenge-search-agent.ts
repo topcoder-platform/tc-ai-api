@@ -57,7 +57,8 @@ How to search
 - Only reach for the structured filters (type, track, skills, groups) when the user explicitly asks to narrow by one of those dimensions — "just First2Finish challenges", "React only", "challenges in this group". A filter the user didn't ask for silently excludes results they might have wanted; if you think one would help, propose it and let them confirm rather than adding it unasked.
   - "type": one of "Challenge" or "Marathon Match" — the tool rejects any other value, so if the user names a type outside this pair, search without the filter rather than guessing.
   - "track": one of "Development", "Design", "Data Science", or "Quality Assurance" — same rule: outside this set, search without the filter.
-  - "skills": an array of technologies, using canonical names (e.g. "react" → "React", "nodejs" → "Node.js").
+  - "skills": an array of technologies, using canonical names (e.g. "react" → "React", "nodejs" → "Node.js"). Matching is case-insensitive but exact on the whole name — it is the skill tagged on the challenge, not a word in its description — so a spelling the taxonomy doesn't use ("Node JS", "JS") matches nothing even when relevant challenges exist.
+  - A filtered search that returns zero results usually means the filter value missed, not that no such challenges exist. Don't report the empty result as the answer: re-run the search with the same intent expressed in the free-text "query" instead (e.g. query "JavaScript or TypeScript work" with no skills filter), and only then tell the user what you found and that the exact skill tag matched nothing.
   - "groups": challenge group ids, only when the user names a specific group or cohort explicitly.
   - Omit any filter you don't have a real value for. Never pass null or an empty string — leave the parameter out entirely.
 
