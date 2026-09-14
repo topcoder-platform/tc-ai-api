@@ -51,7 +51,9 @@ export const fetchProjectTool = withAccessPolicy(createTool({
         'Resolves a Topcoder project from the v6 Projects API, authorized as the requesting user. ' +
         'Accepts either a numeric project id or a project name — a non-numeric value is treated as a ' +
         'name search instead of an id lookup. Returns the project\'s id, name, status, type, and tech ' +
-        'stack; use the returned numeric id when a projectId is needed elsewhere.',
+        'stack; use the returned numeric id when a projectId is needed elsewhere. A name search is ' +
+        'paginated — "totalMatches" is the count across all pages, so it can exceed the number of ' +
+        'entries in "matches".',
     inputSchema: z.object({
         projectId: z.string().describe(
             'Numeric project id, or a project name when the id is not known (a non-numeric value is '
@@ -64,6 +66,10 @@ export const fetchProjectTool = withAccessPolicy(createTool({
         resolvedBy: z.enum(['id', 'name']).describe('Whether the input was looked up as an id or searched as a name'),
         matches: z.array(PROJECT_SHAPE).optional().describe(
             'Other projects whose name also matched, when the name search was ambiguous',
+        ),
+        totalMatches: z.number().optional().describe(
+            'Total number of projects matching the name across all pages, from the X-Total response '
+            + `header. More than ${NAME_SEARCH_PER_PAGE} means only the first page is in "matches"`,
         ),
     }),
     execute: async (inputData, context) => {
@@ -149,6 +155,20 @@ function mapProject(data: any, fallbackId: string) {
  * name match wins when one is present; otherwise the first hit is returned as
  * the best match and the remainder are surfaced as `matches`.
  */
+/**
+ * Reads the total match count from the list endpoint's pagination headers.
+ * The response body only carries the first page, so without this a caller
+ * can't tell "one match" from "the first of hundreds".
+ */
+function readTotalHeader(response: Response): number | undefined {
+    const raw = response.headers?.get?.('X-Total');
+    if (raw === null || raw === undefined || raw.trim() === '') {
+        return undefined;
+    }
+    const total = Number(raw);
+    return Number.isFinite(total) ? total : undefined;
+}
+
 const searchProjectsByName = async (name: string, requestContext: RequestContext | undefined) => {
     const url = `${BASE_URL}?name=${encodeURIComponent(name)}&perPage=${NAME_SEARCH_PER_PAGE}`;
 
@@ -191,5 +211,6 @@ const searchProjectsByName = async (name: string, requestContext: RequestContext
         project: projects[bestIndex],
         resolvedBy: 'name' as const,
         ...(others.length > 0 ? { matches: others } : {}),
+        totalMatches: readTotalHeader(response) ?? projects.length,
     };
 };

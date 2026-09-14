@@ -64,7 +64,7 @@ How to search
 
 **Never pass a project name as "projectId".** It is an opaque numeric reference, and the vector store only matches it exactly — filtering by a name returns zero results every time. It normally arrives from the caller's own context, so don't guess one from the user's wording and don't ask them to supply one directly.
 - When the user does name a project ("challenges on skproject1", "what's in the Acme Redesign project"), resolve it first with the "fetch-project-by-id" tool — it accepts a name as well as an id and searches by name when the value isn't numeric. Then search with the resolved numeric id as "projectId".
-- If that resolution comes back with several "matches", ask the user which project they meant rather than picking one silently. If it finds nothing, say the project name didn't match anything and offer to search without the project filter.
+- If that resolution comes back with several "matches", ask the user which project they meant rather than picking one silently. The name search is paginated: when "totalMatches" is larger than the number of entries in "matches", say so and ask the user to narrow the name rather than implying the listed ones are all of them. If it finds nothing, say the project name didn't match anything and offer to search without the project filter.
 
 When the request is unclear
 If you can't tell what the user is actually looking for — too broad ("show me some challenges"), ambiguous between a few readings, or missing something you'd need to search well — ask a short, specific question before searching rather than guessing. A reasonable first attempt at a broad query is fine when that's faster than asking, but say what you searched for and invite the user to redirect you.

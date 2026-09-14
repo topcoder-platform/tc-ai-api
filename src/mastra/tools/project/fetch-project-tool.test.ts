@@ -34,12 +34,13 @@ const minimalContext = {
  * Installs a global fetch spy that resolves with the given JSON body.
  * Returns the spy so tests can assert call arguments (URL, headers).
  */
-function mockFetchResponse(data: Record<string, unknown>) {
+function mockFetchResponse(data: Record<string, unknown>, headers: Record<string, string> = {}) {
     return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: true,
         status: 200,
+        headers: { get: (key: string) => headers[key] ?? null },
         json: async () => data,
-    } as Response);
+    } as unknown as Response);
 }
 
 /**
@@ -49,8 +50,9 @@ function mockFetchError(status: number) {
     return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: false,
         status,
+        headers: { get: () => null },
         json: async () => ({}),
-    } as Response);
+    } as unknown as Response);
 }
 
 function baseApiResponse(overrides: Record<string, unknown> = {}) {
@@ -184,6 +186,27 @@ describe('fetchProjectTool — name resolution', () => {
 
         expect(result.project.id).toBe('1');
         expect(result.matches.map((m: any) => m.id)).toEqual(['2']);
+    });
+
+    it('reports the total match count from the X-Total header', async () => {
+        mockFetchResponse(
+            [baseApiResponse({ id: 1, name: 'skproject1' }), baseApiResponse({ id: 2, name: 'skproject12' })] as any,
+            { 'X-Total': '137' },
+        );
+
+        const result = await executeTool({ projectId: 'skproject1' });
+
+        expect(result.totalMatches).toBe(137);
+        expect(result.matches).toHaveLength(1);
+    });
+
+    it('falls back to the returned page size when X-Total is absent or unparseable', async () => {
+        mockFetchResponse([baseApiResponse({ id: 1, name: 'skproject1' })] as any);
+        expect((await executeTool({ projectId: 'skproject1' })).totalMatches).toBe(1);
+
+        vi.restoreAllMocks();
+        mockFetchResponse([baseApiResponse({ id: 1, name: 'skproject1' })] as any, { 'X-Total': 'n/a' });
+        expect((await executeTool({ projectId: 'skproject1' })).totalMatches).toBe(1);
     });
 
     it('throws when the name search returns no projects', async () => {
