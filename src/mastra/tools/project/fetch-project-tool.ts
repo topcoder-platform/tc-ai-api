@@ -70,6 +70,10 @@ export const fetchProjectTool = withAccessPolicy(createTool({
         const logger = context.mastra?.getLogger?.();
         const identifier = inputData.projectId.trim();
 
+        if (identifier.length === 0) {
+             throw new Error('projectId must not be empty');
+         }
+
         if (!isNumericId(identifier)) {
             logger?.info('Resolving project by name: {name}', { name: identifier });
             return await searchProjectsByName(identifier, context.requestContext);
