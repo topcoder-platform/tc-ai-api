@@ -57,7 +57,7 @@ export const fetchProjectTool = withAccessPolicy(createTool({
             'Numeric project id, or a project name when the id is not known (a non-numeric value is '
             + 'searched by name, case-insensitive, matching any project whose name contains it)',
         ),
-        fields: z.string().optional().describe('Optional comma-separated field list to narrow the response'),
+        fields: z.string().optional().describe('Optional comma-separated field list to narrow the response (only used for numeric id lookups)'),
     }),
     outputSchema: z.object({
         project: PROJECT_SHAPE,
