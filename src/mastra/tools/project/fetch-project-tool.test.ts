@@ -136,6 +136,67 @@ describe('fetchProjectTool — response mapping', () => {
     });
 });
 
+describe('fetchProjectTool — name resolution', () => {
+    it('searches by name when the input is not numeric', async () => {
+        const fetchSpy = mockFetchResponse([baseApiResponse({ id: 17423, name: 'skproject1' })] as any);
+
+        const result = await executeTool({ projectId: 'skproject1' });
+
+        const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        expect(url).toMatch(/\/v6\/projects\?name=skproject1&perPage=\d+$/);
+        expect(result.resolvedBy).toBe('name');
+        expect(result.project.id).toBe('17423');
+        expect(result.project.name).toBe('skproject1');
+        expect(result.matches).toBeUndefined();
+    });
+
+    it('reports resolvedBy "id" for a numeric input', async () => {
+        mockFetchResponse(baseApiResponse());
+        const result = await executeTool({ projectId: '17423' });
+        expect(result.resolvedBy).toBe('id');
+    });
+
+    it('accepts a { data: [...] } list envelope', async () => {
+        mockFetchResponse({ data: [baseApiResponse({ id: 17423, name: 'skproject1' })] });
+        const result = await executeTool({ projectId: 'skproject1' });
+        expect(result.project.id).toBe('17423');
+    });
+
+    it('prefers an exact (case-insensitive) name match and returns the rest as matches', async () => {
+        mockFetchResponse([
+            baseApiResponse({ id: 1, name: 'skproject1 archive' }),
+            baseApiResponse({ id: 2, name: 'SKProject1' }),
+        ] as any);
+
+        const result = await executeTool({ projectId: 'skproject1' });
+
+        expect(result.project.id).toBe('2');
+        expect(result.matches.map((m: any) => m.id)).toEqual(['1']);
+    });
+
+    it('falls back to the first hit when no name matches exactly', async () => {
+        mockFetchResponse([
+            baseApiResponse({ id: 1, name: 'skproject1 archive' }),
+            baseApiResponse({ id: 2, name: 'skproject1 legacy' }),
+        ] as any);
+
+        const result = await executeTool({ projectId: 'skproject1' });
+
+        expect(result.project.id).toBe('1');
+        expect(result.matches.map((m: any) => m.id)).toEqual(['2']);
+    });
+
+    it('throws when the name search returns no projects', async () => {
+        mockFetchResponse([] as any);
+        await expect(executeTool({ projectId: 'skproject1' })).rejects.toThrow(/No project found matching name/);
+    });
+
+    it('throws with the HTTP status when the name search fails', async () => {
+        mockFetchError(403);
+        await expect(executeTool({ projectId: 'skproject1' })).rejects.toThrow(/403/);
+    });
+});
+
 describe('fetchProjectTool — error handling', () => {
     it('throws with the HTTP status when the response is not ok', async () => {
         mockFetchError(404);
