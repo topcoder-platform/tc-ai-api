@@ -5,6 +5,14 @@ const PROVIDER_NAME = process.env.CHALLENGE_PARSER_AI_PROVIDER || 'AWSBedrock';
 const MODEL_ID = process.env.CHALLENGE_PARSER_AI_MODEL_ID || 'us.anthropic.claude-sonnet-5';
 const AGENT_ID = 'challenge-parser-agent';
 
+// Requirements extraction emits one object per requirement (id, title, a
+// detail-preserving description, priority, nested constraints) plus the group
+// map, so a large spec easily produces tens of thousands of output tokens.
+// Without an explicit budget Bedrock applies the model's default maxTokens and
+// the response is cut off mid-JSON (finishReason "length"), which surfaces
+// downstream as "missing fields" rather than as truncation.
+const MAX_OUTPUT_TOKENS = Number(process.env.CHALLENGE_PARSER_MAX_OUTPUT_TOKENS || 32_000);
+
 /**
  * Master agent responsible for parsing Topcoder challenge specifications.
  *
@@ -19,6 +27,13 @@ export const challengeParserAgent = new Agent({
    id: AGENT_ID,
    name: 'Challenge Specification Parser',
    model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
+   // `defaultOptions` is the agent-level default that `generate()` deep-merges
+   // into every call's options.
+   defaultOptions: {
+      modelSettings: {
+         maxOutputTokens: MAX_OUTPUT_TOKENS,
+      },
+   },
    instructions: {
       role: 'system',
       content: `You are an expert Topcoder challenge specification analyst.
