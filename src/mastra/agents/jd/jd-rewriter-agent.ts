@@ -5,10 +5,23 @@ const PROVIDER_NAME = process.env.JD_REWRITER_AI_PROVIDER || 'AWSBedrock';
 const MODEL_ID = process.env.JD_REWRITER_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const AGENT_ID = 'jd-rewriter-agent';
 
+// The rewrite emits every structured section AND a full Markdown posting
+// assembled from them, so the output is long enough to hit a provider default
+// maxTokens and be cut off mid-JSON. Budget it explicitly — see the same note
+// on challenge-parser-agent.
+const MAX_OUTPUT_TOKENS = Number(process.env.JD_REWRITER_MAX_OUTPUT_TOKENS || 16_000);
+
 export const jdRewriterAgent = new Agent({
    id: AGENT_ID,
    name: 'Job Description Rewriter',
    model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
+   // `defaultOptions` is the agent-level default that `generate()` deep-merges
+   // into every call's options.
+   defaultOptions: {
+      modelSettings: {
+         maxOutputTokens: MAX_OUTPUT_TOKENS,
+      },
+   },
    instructions: {
       role: 'system',
       content: `You are an expert technical recruiter and job description writer for Topcoder.

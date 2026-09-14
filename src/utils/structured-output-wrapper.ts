@@ -229,7 +229,7 @@ function isLikelyMojoOrGemini(agent: any): boolean {
  * direct parse first, then a fenced ```json ... ``` block, then the widest
  * `{ ... }` span in the text (handles leading/trailing commentary).
  */
-function extractJsonObject(text: string): unknown | null {
+export function extractJsonObject(text: string): unknown | null {
     const candidates: string[] = [text];
 
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -249,6 +249,195 @@ function extractJsonObject(text: string): unknown | null {
         }
     }
     return null;
+}
+
+/**
+ * A point in a truncated JSON document where the document can be cut and then
+ * closed to yield syntactically valid JSON: `index` is the cut offset (exclusive)
+ * and `closers` the still-open brackets/braces, outermost first.
+ */
+interface JsonCutPoint {
+    index: number;
+    closers: string[];
+}
+
+/** Lexer state left over at the end of a (possibly truncated) JSON document. */
+interface JsonScanResult {
+    cutPoints: JsonCutPoint[];
+    /** Containers still open at end of text, outermost first. */
+    openAtEnd: string[];
+    /** Whether the text ends inside a string literal. */
+    inString: boolean;
+    /** Whether the text ends on a dangling backslash inside a string. */
+    escaped: boolean;
+}
+
+/**
+ * Scans a (possibly truncated) JSON document and records every offset at which
+ * a value has just been completed: immediately before a separating comma, and
+ * immediately after a nested `}` / `]`. Cutting at such an offset and appending
+ * the outstanding closers always produces valid JSON, because neither token can
+ * appear in the middle of a value.
+ */
+function scanJson(json: string): JsonScanResult {
+    const cutPoints: JsonCutPoint[] = [];
+    const stack: string[] = [];
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < json.length; i++) {
+        const char = json[i];
+
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (char === '\\') escaped = true;
+            else if (char === '"') inString = false;
+            continue;
+        }
+
+        if (char === '"') {
+            inString = true;
+        } else if (char === '{' || char === '[') {
+            stack.push(char === '{' ? '}' : ']');
+        } else if (char === '}' || char === ']') {
+            stack.pop();
+            // Only a nested close completes a value *within* a container; the
+            // outermost close ends the document and needs no repair.
+            if (stack.length > 0) cutPoints.push({ index: i + 1, closers: [...stack] });
+        } else if (char === ',' && stack.length > 0) {
+            cutPoints.push({ index: i, closers: [...stack] });
+        }
+    }
+
+    return { cutPoints, openAtEnd: stack, inString, escaped };
+}
+
+/**
+ * Closes whatever is still open at the very end of the text: terminates a
+ * dangling string and appends the outstanding closers.
+ *
+ * Unlike a cut point this cannot prove the trailing value was finished — `1` may
+ * be a truncated `1234`, `"Build a CLI` a truncated sentence — so the result may
+ * be valid JSON carrying a corrupted last value. It exists because it is the
+ * *only* repair available when truncation lands right after a primitive or
+ * inside a string (`{"a": 1`, `{"a": "x`), where no cut point was ever recorded.
+ * Callers must therefore try it last, after every provable cut point.
+ *
+ * Returns null when nothing is open (the document is already complete), when
+ * there is no trailing value to salvage, or when closing does not yield
+ * parseable JSON (e.g. the text ends at `{"a": `).
+ */
+function buildEndOfTextRepair(body: string, scan: JsonScanResult): string | null {
+    if (scan.openAtEnd.length === 0 && !scan.inString) return null;
+
+    const withoutDanglingEscape = scan.escaped ? body.slice(0, -1) : body;
+    const trimmed = withoutDanglingEscape.trimEnd();
+
+    // Nothing was written after the last opener/separator, so there is no
+    // trailing value to rescue and closing would only fabricate an empty
+    // container. `{"requirements": [` must stay a loud truncation failure, not
+    // become a successful extraction of zero requirements.
+    if (!scan.inString && /[[{,:]$/.test(trimmed)) return null;
+    const repair =
+        withoutDanglingEscape
+        + (scan.inString ? '"' : '')
+        + [...scan.openAtEnd].reverse().join('');
+
+    try {
+        JSON.parse(repair);
+    } catch {
+        return null;
+    }
+    return repair;
+}
+
+// Bounds the backward walk over cut points. Truncation almost always lands
+// inside the last element or two, so the valid cut is near the end; scanning the
+// whole document would be quadratic in its length for no practical gain.
+const MAX_REPAIR_ATTEMPTS = 200;
+
+/**
+ * Repair candidates for a truncated JSON document, in the order they should be
+ * tried: provably-complete cut points first, longest (most data retained) first,
+ * each dropping whatever trailing fragment was cut off mid-write; then, last, the
+ * best-effort end-of-text close described on `buildEndOfTextRepair`.
+ *
+ * Every returned candidate is parseable JSON.
+ */
+export function buildTruncatedJsonRepairs(text: string, limit = MAX_REPAIR_ATTEMPTS): string[] {
+    const start = text.indexOf('{');
+    if (start === -1) return [];
+
+    const body = text.slice(start);
+    const scan = scanJson(body);
+    const endOfTextRepair = buildEndOfTextRepair(body, scan);
+
+    // Reserve the last slot for the end-of-text candidate so a document with
+    // more cut points than `limit` does not crowd out the only repair that can
+    // salvage a trailing primitive.
+    const cutPointLimit = endOfTextRepair ? Math.max(0, limit - 1) : limit;
+
+    // A nested `}` and the comma that follows it describe the same cut, so
+    // dedupe: identical candidates would burn the attempt budget re-parsing and
+    // re-validating a string that has already been rejected.
+    const repairs = new Set<string>();
+
+    for (let i = scan.cutPoints.length - 1; i >= 0 && repairs.size < cutPointLimit; i--) {
+        const { index, closers } = scan.cutPoints[i];
+        repairs.add(body.slice(0, index) + closers.reverse().join(''));
+    }
+
+    if (endOfTextRepair) repairs.add(endOfTextRepair);
+
+    return [...repairs];
+}
+
+/**
+ * Recovers a schema-valid object from free-form model text.
+ *
+ * First tries an exact parse. If that fails — or parses but does not satisfy the
+ * schema, as happens when the response was cut off mid-JSON — walks the repair
+ * candidates from longest to shortest and returns the first that validates. The
+ * schema check is what makes the walk terminate on the right candidate: a cut
+ * that leaves a half-written array element behind fails validation, so the walk
+ * continues until that element is dropped entirely.
+ */
+export function recoverObjectFromText<Schema extends z.ZodTypeAny>(
+    text: string,
+    schema: Schema,
+): { data: z.infer<Schema>; repaired: boolean } | null {
+    const exact = extractJsonObject(text);
+    if (exact !== null) {
+        const parsed = schema.safeParse(exact);
+        if (parsed.success) return { data: parsed.data, repaired: false };
+    }
+
+    for (const repair of buildTruncatedJsonRepairs(text)) {
+        let candidate: unknown;
+        try {
+            candidate = JSON.parse(repair);
+        } catch {
+            continue;
+        }
+        const parsed = schema.safeParse(candidate);
+        if (parsed.success) return { data: parsed.data, repaired: true };
+    }
+
+    return null;
+}
+
+/**
+ * True when the provider stopped generating because the output token budget ran
+ * out. The response then holds a JSON prefix rather than a JSON document, so no
+ * other structured-output strategy can help — only a larger `maxOutputTokens`
+ * (see each agent's `modelSettings`) or less output per call.
+ */
+export function isTruncatedByLength(response: unknown): boolean {
+    return (
+        !!response
+        && typeof response === 'object'
+        && (response as { finishReason?: unknown }).finishReason === 'length'
+    );
 }
 
 export function isStructuredOutputCompatibilityError(error: unknown): boolean {
@@ -361,6 +550,7 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
     // strategy here is single-turn, so none can hit that replay failure.
 
     let lastAttemptError: unknown = null;
+    let truncatedAttempt: { response: any; strategy: StructuredOutputStrategy } | null = null;
 
     for (const attempt of attempts) {
         try {
@@ -384,8 +574,22 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
                 tcAILogger.warn(
                     `[json-wrapper:structured-output] Section "${sectionName}" attempt ` +
                     `"${attempt.strategy}" resolved without a structured object ` +
-                    `(finishReason: ${response?.finishReason ?? 'unknown'}); trying next strategy`,
+                    `(finishReason: ${response?.finishReason ?? 'unknown'})`,
                 );
+
+                if (isTruncatedByLength(response)) {
+                    // Out of output tokens, not out of compatible strategies:
+                    // every remaining attempt sends the same prompt to the same
+                    // model under the same budget and would truncate at the same
+                    // point, so stop burning calls and go straight to recovery.
+                    tcAILogger.error(
+                        `[json-wrapper:structured-output] Section "${sectionName}" output was TRUNCATED ` +
+                        '(finishReason "length") — skipping remaining strategies and attempting JSON repair',
+                    );
+                    truncatedAttempt = { response, strategy: attempt.strategy };
+                    break;
+                }
+
                 continue;
             }
 
@@ -409,6 +613,10 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
         }
     }
 
+    if (truncatedAttempt) {
+        return recoverOrThrow(truncatedAttempt.response, truncatedAttempt.strategy, schema, sectionName);
+    }
+
     tcAILogger.warn(
         `[json-wrapper:structured-output] Section "${sectionName}" exhausted structured output strategies; ` +
         'falling back to plain-text generation for JSON recovery',
@@ -421,28 +629,56 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
         );
     }
 
-    const response = await agent.generate(prompt);
+    // Carry `generateOptions` through — it holds the caller's call settings
+    // (token budget, temperature, …), which the last attempt needs just as much
+    // as the structured ones did.
+    const response = generateOptions
+        ? await agent.generate(prompt, generateOptions)
+        : await agent.generate(prompt);
 
+    return recoverOrThrow(response, 'plain-text', schema, sectionName);
+}
+
+/**
+ * Final step of every path that reaches the wrapper without a structured
+ * object: recover one from the raw text if possible, and otherwise fail loudly —
+ * with the truncation case named explicitly, since a bare "no structured output"
+ * reads like a model formatting problem when it is really a token budget one.
+ */
+function recoverOrThrow<Schema extends z.ZodTypeAny>(
+    response: any,
+    strategy: StructuredOutputStrategy,
+    schema: Schema,
+    sectionName: string,
+): GenerateWithStructuredOutputFallbackResult {
     if (!response?.object && typeof response?.text === 'string') {
-        const rawJson = extractJsonObject(response.text);
-        const parsed = rawJson !== null ? schema.safeParse(rawJson) : null;
-        if (parsed?.success) {
+        const recovered = recoverObjectFromText(response.text, schema);
+        if (recovered) {
             tcAILogger.info(
                 `[json-wrapper:structured-output] Section "${sectionName}" recovered a valid object ` +
-                'from plain-text output',
+                `from ${recovered.repaired ? 'TRUNCATED (repaired, trailing data dropped)' : 'plain-text'} output`,
             );
-            response.object = parsed.data;
+            response.object = recovered.data;
         } else {
             tcAILogger.error(
-                `[json-wrapper:structured-output] Section "${sectionName}" plain-text JSON recovery failed ` +
-                `(finishReason: ${response?.finishReason ?? 'unknown'}); ` +
+                `[json-wrapper:structured-output] Section "${sectionName}" JSON recovery failed ` +
+                `(strategy: ${strategy}, finishReason: ${response?.finishReason ?? 'unknown'}, ` +
+                `text length: ${response.text.length}); ` +
                 `raw text (truncated): ${response.text.slice(0, 500)}`,
             );
         }
     }
 
+    if (!response?.object && isTruncatedByLength(response)) {
+        throw new Error(
+            `Section "${sectionName}": model output was truncated by the output token limit ` +
+            '(finishReason "length") and could not be repaired into a schema-valid object. ' +
+            "Raise the agent's defaultOptions.modelSettings.maxOutputTokens or split the extraction into smaller calls.",
+        );
+    }
+
     return {
         response,
-        strategy: 'plain-text',
+        strategy,
     };
 }
