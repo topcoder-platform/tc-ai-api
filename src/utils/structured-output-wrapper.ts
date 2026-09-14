@@ -261,6 +261,17 @@ interface JsonCutPoint {
     closers: string[];
 }
 
+/** Lexer state left over at the end of a (possibly truncated) JSON document. */
+interface JsonScanResult {
+    cutPoints: JsonCutPoint[];
+    /** Containers still open at end of text, outermost first. */
+    openAtEnd: string[];
+    /** Whether the text ends inside a string literal. */
+    inString: boolean;
+    /** Whether the text ends on a dangling backslash inside a string. */
+    escaped: boolean;
+}
+
 /**
  * Scans a (possibly truncated) JSON document and records every offset at which
  * a value has just been completed: immediately before a separating comma, and
@@ -268,7 +279,7 @@ interface JsonCutPoint {
  * the outstanding closers always produces valid JSON, because neither token can
  * appear in the middle of a value.
  */
-function collectJsonCutPoints(json: string): JsonCutPoint[] {
+function scanJson(json: string): JsonScanResult {
     const cutPoints: JsonCutPoint[] = [];
     const stack: string[] = [];
     let inString = false;
@@ -298,7 +309,46 @@ function collectJsonCutPoints(json: string): JsonCutPoint[] {
         }
     }
 
-    return cutPoints;
+    return { cutPoints, openAtEnd: stack, inString, escaped };
+}
+
+/**
+ * Closes whatever is still open at the very end of the text: terminates a
+ * dangling string and appends the outstanding closers.
+ *
+ * Unlike a cut point this cannot prove the trailing value was finished — `1` may
+ * be a truncated `1234`, `"Build a CLI` a truncated sentence — so the result may
+ * be valid JSON carrying a corrupted last value. It exists because it is the
+ * *only* repair available when truncation lands right after a primitive or
+ * inside a string (`{"a": 1`, `{"a": "x`), where no cut point was ever recorded.
+ * Callers must therefore try it last, after every provable cut point.
+ *
+ * Returns null when nothing is open (the document is already complete), when
+ * there is no trailing value to salvage, or when closing does not yield
+ * parseable JSON (e.g. the text ends at `{"a": `).
+ */
+function buildEndOfTextRepair(body: string, scan: JsonScanResult): string | null {
+    if (scan.openAtEnd.length === 0 && !scan.inString) return null;
+
+    const withoutDanglingEscape = scan.escaped ? body.slice(0, -1) : body;
+    const trimmed = withoutDanglingEscape.trimEnd();
+
+    // Nothing was written after the last opener/separator, so there is no
+    // trailing value to rescue and closing would only fabricate an empty
+    // container. `{"requirements": [` must stay a loud truncation failure, not
+    // become a successful extraction of zero requirements.
+    if (!scan.inString && /[[{,:]$/.test(trimmed)) return null;
+    const repair =
+        withoutDanglingEscape
+        + (scan.inString ? '"' : '')
+        + [...scan.openAtEnd].reverse().join('');
+
+    try {
+        JSON.parse(repair);
+    } catch {
+        return null;
+    }
+    return repair;
 }
 
 // Bounds the backward walk over cut points. Truncation almost always lands
@@ -307,24 +357,39 @@ function collectJsonCutPoints(json: string): JsonCutPoint[] {
 const MAX_REPAIR_ATTEMPTS = 200;
 
 /**
- * Repair candidates for a truncated JSON document, longest (most data retained)
- * first. Each candidate drops whatever trailing fragment was cut off mid-write
- * and closes the containers that were still open.
+ * Repair candidates for a truncated JSON document, in the order they should be
+ * tried: provably-complete cut points first, longest (most data retained) first,
+ * each dropping whatever trailing fragment was cut off mid-write; then, last, the
+ * best-effort end-of-text close described on `buildEndOfTextRepair`.
+ *
+ * Every returned candidate is parseable JSON.
  */
 export function buildTruncatedJsonRepairs(text: string, limit = MAX_REPAIR_ATTEMPTS): string[] {
     const start = text.indexOf('{');
     if (start === -1) return [];
 
     const body = text.slice(start);
-    const cutPoints = collectJsonCutPoints(body);
-    const repairs: string[] = [];
+    const scan = scanJson(body);
+    const endOfTextRepair = buildEndOfTextRepair(body, scan);
 
-    for (let i = cutPoints.length - 1; i >= 0 && repairs.length < limit; i--) {
-        const { index, closers } = cutPoints[i];
-        repairs.push(body.slice(0, index) + closers.reverse().join(''));
+    // Reserve the last slot for the end-of-text candidate so a document with
+    // more cut points than `limit` does not crowd out the only repair that can
+    // salvage a trailing primitive.
+    const cutPointLimit = endOfTextRepair ? Math.max(0, limit - 1) : limit;
+
+    // A nested `}` and the comma that follows it describe the same cut, so
+    // dedupe: identical candidates would burn the attempt budget re-parsing and
+    // re-validating a string that has already been rejected.
+    const repairs = new Set<string>();
+
+    for (let i = scan.cutPoints.length - 1; i >= 0 && repairs.size < cutPointLimit; i--) {
+        const { index, closers } = scan.cutPoints[i];
+        repairs.add(body.slice(0, index) + closers.reverse().join(''));
     }
 
-    return repairs;
+    if (endOfTextRepair) repairs.add(endOfTextRepair);
+
+    return [...repairs];
 }
 
 /**

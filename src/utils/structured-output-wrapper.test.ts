@@ -95,6 +95,65 @@ describe('buildTruncatedJsonRepairs', () => {
         expect(buildTruncatedJsonRepairs('I cannot answer that.')).toEqual([]);
     });
 
+    it.each([
+        ['after a primitive, with no cut point available', '{"a": 1', { a: 1 }],
+        ['inside a string', '{"a": "x', { a: 'x' }],
+        ['on a dangling escape inside a string', '{"a": "x\\', { a: 'x' }],
+        ['after a nested value with no comma yet', '{"a": {"b": true', { a: { b: true } }],
+        ['after a complete array element', '{"a": ["x"', { a: ['x'] }],
+    ])('closes the open containers when truncation lands %s', (_label, text, expected) => {
+        const repairs = buildTruncatedJsonRepairs(text);
+
+        expect(repairs.length).toBeGreaterThan(0);
+        expect(JSON.parse(repairs[repairs.length - 1])).toEqual(expected);
+    });
+
+    it('prefers provable cut points over the best-effort end-of-text close', () => {
+        // `"desc": "part` may be a truncated sentence, so every cut that keeps
+        // only provably-complete values must be tried before trusting it.
+        const repairs = buildTruncatedJsonRepairs('{"a": [{"id": "A"}, {"id": "B", "desc": "part');
+
+        expect(JSON.parse(repairs[0])).toEqual({ a: [{ id: 'A' }, { id: 'B' }] });
+        expect(JSON.parse(repairs[repairs.length - 1])).toEqual({
+            a: [{ id: 'A' }, { id: 'B', desc: 'part' }],
+        });
+    });
+
+    it.each([
+        ['a key with no value yet', '{"a": [{"id": "A"}, {"id": '],
+        ['a separating comma', '{"a": [{"id": "A"}, '],
+        ['an opening bracket', '{"a": [{"id": "A"}, ['],
+    ])('omits the end-of-text candidate when the text ends at %s', (_label, text) => {
+        // Nothing to salvage beyond what the cut points already cover.
+        expect(buildTruncatedJsonRepairs(text)).toEqual(['{"a": [{"id": "A"}]}']);
+    });
+
+    it('does not fabricate an empty container for a document truncated before any data', () => {
+        // Recovering `{"requirements": []}` here would turn a truncation into a
+        // silent zero-requirement success.
+        expect(buildTruncatedJsonRepairs('{"requirements": [')).toEqual([]);
+        expect(
+            recoverObjectFromText('{"requirements": [', z.object({ requirements: z.array(z.string()) })),
+        ).toBeNull();
+    });
+
+    it('deduplicates the identical cuts a nested close and its trailing comma produce', () => {
+        const repairs = buildTruncatedJsonRepairs('{"a": [{"id": "A"}, {"id": "B"}, {"id":');
+
+        expect(new Set(repairs).size).toBe(repairs.length);
+    });
+
+    it('recovers a schema-valid object when truncation lands after a primitive', () => {
+        // The whole document is one object whose last field is a primitive, so
+        // there is no cut point at all — only the end-of-text close works.
+        const schema = z.object({ total: z.number(), label: z.string() });
+
+        expect(recoverObjectFromText('{"label": "x", "total": 7', schema)).toEqual({
+            data: { label: 'x', total: 7 },
+            repaired: true,
+        });
+    });
+
     it('respects the candidate limit', () => {
         expect(buildTruncatedJsonRepairs(truncateAt(completeDocument, 0.9), 2)).toHaveLength(2);
     });
