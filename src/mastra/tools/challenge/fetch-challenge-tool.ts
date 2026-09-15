@@ -90,6 +90,30 @@ export const fetchChallengeTool = withAccessPolicy(createTool({
                     reviewType: z.string().optional(),
                 })
                 .optional(),
+            winners: z
+                .array(
+                    z.object({
+                        userId: z.number(),
+                        handle: z.string(),
+                        placement: z.number(),
+                    }),
+                )
+                .optional(),
+            phases: z
+                .array(
+                    z.object({
+                        id: z.string().optional(),
+                        phaseId: z.string().optional(),
+                        name: z.string(),
+                        isOpen: z.boolean().optional(),
+                        duration: z.number().optional(),
+                        scheduledStartDate: z.string().optional(),
+                        scheduledEndDate: z.string().optional(),
+                        actualStartDate: z.string().optional(),
+                        actualEndDate: z.string().optional(),
+                    }),
+                )
+                .optional(),
         }),
     }),
     execute: async (inputData, context) => {
@@ -150,6 +174,8 @@ const fetchChallenge = async (challengeId: string, requestContext: RequestContex
             overview: data.overview ?? undefined,
             task: data.task ?? undefined,
             legacy: data.legacy ?? undefined,
+            winners: data.winners ?? undefined,
+            phases: data.phases ?? undefined,
         },
     };
 };

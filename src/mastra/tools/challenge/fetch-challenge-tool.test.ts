@@ -174,6 +174,74 @@ describe('fetchChallengeTool — mapping passes both additive fields through', (
 });
 
 // ---------------------------------------------------------------------------
+// winners and phases fields
+// ---------------------------------------------------------------------------
+
+describe('fetchChallengeTool — winners and phases fields', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        m2mTokenMock.mockResolvedValue('fake-m2m-token');
+    });
+
+    it('returns winners when the API response includes a winners array', async () => {
+        mockFetchResponse(baseApiResponse({
+            winners: [
+                { userId: 23278999, handle: 'codejam', placement: 1 },
+                { userId: 40671293, handle: 'kalpitk', placement: 2 },
+            ],
+        }));
+
+        const result = await executeTool(CHALLENGE_UUID);
+
+        expect(result?.challenge.winners).toEqual([
+            { userId: 23278999, handle: 'codejam', placement: 1 },
+            { userId: 40671293, handle: 'kalpitk', placement: 2 },
+        ]);
+    });
+
+    it('omits winners when the API response does not include winners', async () => {
+        mockFetchResponse(baseApiResponse());
+
+        const result = await executeTool(CHALLENGE_UUID);
+
+        expect(result?.challenge.winners).toBeUndefined();
+    });
+
+    it('returns phases when the API response includes a phases array', async () => {
+        mockFetchResponse(baseApiResponse({
+            phases: [
+                {
+                    id: 'phase-1',
+                    phaseId: 'phase-type-1',
+                    name: 'Submission',
+                    isOpen: false,
+                    duration: 300,
+                    scheduledStartDate: '2026-01-01T00:00:00.000Z',
+                    scheduledEndDate: '2026-01-08T00:00:00.000Z',
+                    actualStartDate: '2026-01-01T00:00:00.000Z',
+                    actualEndDate: '2026-01-08T00:00:00.000Z',
+                    constraints: [],
+                },
+            ],
+        }));
+
+        const result = await executeTool(CHALLENGE_UUID);
+
+        expect(result?.challenge.phases).toEqual([
+            expect.objectContaining({ name: 'Submission', isOpen: false }),
+        ]);
+    });
+
+    it('omits phases when the API response does not include phases', async () => {
+        mockFetchResponse(baseApiResponse());
+
+        const result = await executeTool(CHALLENGE_UUID);
+
+        expect(result?.challenge.phases).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // VAL-INGEST-057: app-version: 2.0.0 header preserved
 // ---------------------------------------------------------------------------
 
