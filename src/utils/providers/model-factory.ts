@@ -1,5 +1,5 @@
 import { ollama } from './ollama';
-import { createBedrockProvider } from './bedrock';
+import { createBedrockChatModel } from './bedrock';
 import { tcAILogger } from '../logger';
 import { openai } from './openai';
 
@@ -19,7 +19,7 @@ export function createModel(providerName: string, modelName: string, agentId?: s
             });
 
         case 'AWSBedrock':
-            return createBedrockProvider(agentId)(modelName);
+            return createBedrockChatModel(modelName, agentId);
 
         case 'OpenAI':
             return openai(modelName);

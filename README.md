@@ -78,16 +78,23 @@ tc-ai-api/
 │   │   ├── scorers/
 │   │   │   └── skills-matching-scorers.ts        # Evaluation scorers
 │   │   └── public/                               # Static assets (empty)
+│   ├── config/
+│   │   └── tool-auth-fallback.config.ts  # Per-tool M2M fallback opt-in (off by default)
 │   └── utils/
 │       ├── index.ts              # Barrel re-exports
 │       ├── logger.ts             # Pino logger configuration
+│       ├── server-routes.ts      # API_PREFIX / CHAT_ROUTE_PATH — shared by auth + middleware
+│       ├── tc-api-client.ts      # Requestor-token-first TC_API_BASE client, with M2M fallback
 │       ├── auth/
-│       │   └── index.ts          # Auth0 composite auth setup
+│       │   ├── index.ts          # Auth0 composite auth setup (protected paths, mapUserToResourceId)
+│       │   └── m2m.service.ts    # Service M2M token acquisition
 │       ├── middleware/
 │       │   ├── index.ts          # Middleware registration
 │       │   └── resourceIdMiddleware.ts  # Resource isolation middleware
 │       └── providers/
 │           └── ollama.ts         # Ollama AI provider config
+├── docs/
+│   └── adr/                      # Architecture decision records
 ├── Dockerfile                    # Production container image
 ├── appStartUp.sh                 # Container entrypoint
 ├── package.json
@@ -114,6 +121,12 @@ tc-ai-api/
 | `AUTH0_M2M_DOMAIN`                  | Yes\*    | —                                      | Auth0 domain for M2M JWT validation                              |
 | `AUTH0_M2M_AUDIENCE`                | Yes\*    | —                                      | Auth0 audience for M2M tokens                                    |
 | `DISABLE_AUTH`                      | No       | `false`                                | Set to `"true"` to disable all authentication (dev mode)         |
+| `M2M_AUTH_CLIENT_ID`                | No\*\*   | —                                       | Client id for tc-ai-api's own service M2M credential (`M2MService`) |
+| `M2M_AUTH_CLIENT_SECRET`            | No\*\*   | —                                       | Client secret for tc-ai-api's own service M2M credential            |
+| `M2M_AUTH_URL`                      | No       | `https://topcoder-dev.auth0.com/oauth/token` | Token endpoint used to obtain the service M2M token             |
+| `M2M_AUTH_DOMAIN`                   | No       | `topcoder-dev.auth0.com`               | Auth0 domain for the service M2M credential                        |
+| `M2M_AUTH_AUDIENCE`                 | No       | `https://m2m.topcoder-dev.com/`        | Auth0 audience for the service M2M credential                      |
+| `M2M_AUTH_PROXY_SERVER_URL`         | No       | `https://auth0proxy.topcoder-dev.com/token` | Proxy used to request the service M2M token                    |
 | `JD_MAX_CHARS`                      | No       | `6000`                                 | Max character length for job description preprocessing           |
 | `SKILL_MATCHING_FUZZY_MATCH_SIZE`   | No       | `3`                                    | Number of candidates returned per fuzzy-match query              |
 | `SKILL_MATCHING_CONCURRENCY`        | No       | `5`                                    | Concurrency limit for parallel skill-matching requests           |
@@ -122,14 +135,22 @@ tc-ai-api/
 | `RAG_EMBEDDING_PROVIDER`            | No       | `TC-Ollama`                            | Embedding provider for challenge RAG (`TC-Ollama` \| `AWSBedrock`) |
 | `RAG_EMBEDDING_MODEL_ID`            | No       | `nomic-embed-text`                     | Embedding model id (768d locally; `amazon.titan-embed-text-v2:0`, 1024d, in prod) |
 | `VECTOR_INDEX_NAME`                 | No       | `challenge_embeddings`                 | Vector table name (SQL-identifier validated) — override per environment when reindexing |
-| `VECTOR_SEARCH_THRESHOLD`           | No       | `0.5`                                  | Minimum similarity score, applied after retrieval                |
+| `VECTOR_SEARCH_THRESHOLD`           | No       | `0.25`                                 | Minimum similarity score, applied after retrieval                |
 | `RAG_CHUNK_MAX_SIZE`                | No       | `512`                                  | Max characters per chunk before recursive splitting               |
 | `RAG_CHUNK_OVERLAP`                 | No       | `50`                                   | Character overlap between recursively-split chunks                |
 | `RAG_TOP_K`                         | No       | `10`                                   | Default result count for challenge vector search                  |
 | `CHALLENGE_SEARCH_AI_PROVIDER`      | No       | `AWSBedrock`                           | Model provider for `challenge-search-agent`                       |
 | `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-4-5`        | Model id for `challenge-search-agent`                              |
+| `BEDROCK_PROMPT_CACHE_ENABLED`      | No       | `true`                                 | Global kill switch for Bedrock prompt caching (see below)         |
+| `BEDROCK_PROMPT_CACHE_TTL`          | No       | `5m`                                   | Bedrock cache checkpoint TTL — `5m` or `1h`                       |
+| `ACCESS_CONTROL_DEFAULT_POLICY`     | No       | `public`                               | Global fallback policy for any agent/workflow/tool with no explicit policy — `public` or `deny` |
+| `ACCESS_CONTROL_ROLES_CLAIM`        | No       | `https://<TC_API_BASE domain>/roles`   | JWT claim key carrying member role names — override only if a tenant diverges from the convention |
+| `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_MODE` | No | —                              | Per-target override: `public` or `deny`. See [Access control](#access-control) |
+| `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_ROLES` | No | —                             | Per-target override: comma-separated member roles (implies `restricted`) |
+| `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_SCOPES` | No | —                            | Per-target override: comma-separated M2M scopes (implies `restricted`) |
 
 > \* Auth0 variables are required unless `DISABLE_AUTH=true`.
+> \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are only exercised if a tool is explicitly opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) — no tool is today, so these aren't required for the currently-shipped behavior, only for future fallback use.
 
 ---
 
@@ -147,11 +168,17 @@ export const mastra = new Mastra({
   observability: new Observability({...}),  // OpenTelemetry
   server: {
     port: 3000,
-    auth: apiAuthLayer,              // CompositeAuth (Auth0)
-    middleware: middlewareConfig,     // resourceIdMiddleware
+    apiPrefix: API_PREFIX,            // '/v6/ai' — built-in Mastra routes live here
+    auth: apiAuthLayer,               // CompositeAuth (Auth0)
+    middleware: middlewareConfig,     // resourceIdMiddleware, registered per-route (see below)
+    apiRoutes: [
+      chatRoute({ path: CHAT_ROUTE_PATH }),  // '/chat/:agentId' — NOT under apiPrefix
+    ],
   },
 });
 ```
+
+`API_PREFIX` and `CHAT_ROUTE_PATH` come from `src/utils/server-routes.ts` — the single source of truth both the auth config and the middleware paths are built from, so they can't drift out of sync (see [Authentication & Middleware](#authentication--middleware)).
 
 ### NPM Scripts
 
@@ -198,27 +225,121 @@ postgresql://<user>:<password>@<host>:<port>/<database>?schema=<schema>
 
 ## Authentication & Middleware
 
+> See [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md) for the design rationale behind the outbound tool-call token flow described below.
+
 ### Auth0 Composite Authentication
 
-Authentication is handled by `CompositeAuth` from `@mastra/core/server`, which evaluates incoming JWTs against **two** Auth0 tenants:
+Authentication is handled by `CompositeAuth` from `@mastra/core/server` (`src/utils/auth/index.ts`), which evaluates incoming JWTs against **two** Auth0 tenants, in order:
 
 1. **Member tokens** — issued by `AUTH0_DOMAIN` with audience `AUTH0_AUDIENCE`
 2. **M2M (machine-to-machine) tokens** — issued by `AUTH0_M2M_DOMAIN` with audience `AUTH0_M2M_AUDIENCE`
 
-A request is authorized if it passes validation against **either** tenant.
+A request is authorized if it passes validation against **either** tenant. Both providers declare `protected: ['/v6/ai/*', '/v6/ai-chat/*', '/v6/ai-api/*']` (the server's `apiPrefix` plus each custom-route base path — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default. `/v6/ai-chat/*` has to be listed explicitly because `chatRoute()` is registered outside `apiPrefix` and never sets `requiresAuth`, so Mastra's `isProtectedPath` check would otherwise skip it — including its authorization step (see [Access control](#access-control)).
+
+Both providers also set `mapUserToResourceId`, deriving the caller's Topcoder user id from the JWT claim `https://<domain>/userId` (member tokens) or `sub` (M2M tokens) — see `tcUserIdClaimKey()` / `mapUserToResourceId` in `src/utils/auth/index.ts`. Mastra's core auth flow stores that value under `MASTRA_RESOURCE_ID_KEY` in the request context automatically, and it takes precedence over any client-supplied `resourceId`/`memory.resource` — this is what actually enforces per-user memory/thread isolation; the `Resource ID Middleware` below is a belt-and-suspenders check on top of it, not the primary mechanism.
+
+The same core auth flow also stores the **raw bearer token** that authenticated the request under `MASTRA_AUTH_TOKEN_KEY` in the request context. This is the "requestor token" referenced throughout this section and in ADR 0002 — see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) below.
 
 Authentication can be fully disabled by setting `DISABLE_AUTH=true` (useful for local development).
 
 ### Resource ID Middleware
 
-When auth is enabled, the `resourceIdMiddleware` intercepts all `/api/*` requests and:
+`resourceIdMiddleware` (`src/utils/middleware/resourceIdMiddleware.ts`) is a secondary, explicit check on top of `mapUserToResourceId` above. When auth is enabled it's registered against the two real route surfaces the server actually exposes (`src/utils/server-routes.ts` is the single source of truth for both):
 
-1. Extracts the authenticated `user` object from the request context.
+- `${API_PREFIX}/*` (i.e. `/v6/ai/*`) — the built-in Mastra routes (agents, workflows, memory, threads)
+- `${CHAT_ROUTE_BASE_PATH}/*` (i.e. `/v6/ai-chat/*`) — `chatRoute()`, which is registered *outside* `apiPrefix` (custom API routes aren't prefixed by Mastra), so it needs its own entry
+
+For each matching request it:
+
+1. Extracts the authenticated `user` object from the request context (or authenticates the bearer/`apiKey` token itself if the framework hasn't populated it yet).
 2. Derives the Topcoder domain from `TC_API_BASE` (e.g., `topcoder-dev.com`).
 3. Reads the user ID from the JWT claim `https://<domain>/userId`, falling back to `sub` for M2M tokens.
-4. Sets `MASTRA_RESOURCE_ID_KEY` in the request context, scoping all subsequent Mastra operations (memory, threads, state) to that user.
+4. Sets `MASTRA_RESOURCE_ID_KEY` in the request context (redundant with `mapUserToResourceId`, but fails the request with a `401` if no user/id can be resolved at all).
+5. Logs `'Auth resolved for request'` at `info` level with `authType` (`member`/`m2m`) and the resolved `resourceId`, for auth verification during rollout.
 
 This ensures **resource isolation** — each user's agent memory and workflow state are segregated.
+
+### Access control
+
+> See [ADR 0004](docs/adr/0004-role-based-access-for-agents-workflows-tools.md) for the design rationale.
+
+Authentication answers *"is this a valid caller?"*; access control answers *"may **this** caller invoke **this** agent / workflow / tool / admin route?"*. All are off the same policy core in `src/utils/auth/access-control.ts`.
+
+**Policy model** — every target resolves to exactly one policy:
+
+| Mode | Meaning |
+| --- | --- |
+| `public` | Any authenticated caller (the default) |
+| `deny` | Nobody, regardless of role or scope |
+| `restricted` | Member callers must hold one of `roles`; M2M callers must hold one of `scopes` |
+
+`restricted` keeps the two dimensions **separate**: a member token is checked only against `roles`, an M2M token only against `scopes`. A policy that configures just one dimension therefore implicitly denies the other credential type.
+
+**Three-layer resolution**, per `(category, targetId)`, resolved lazily and memoised:
+
+1. **Env override** — `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_MODE` / `_ROLES` / `_SCOPES`
+2. **Code default** — `DEFAULT_ACCESS_POLICIES` in `src/config/access-control.config.ts`
+3. **Global default** — `ACCESS_CONTROL_DEFAULT_POLICY` (`public` unless set to `deny`)
+
+`<CATEGORY>` is `AGENT`, `WORKFLOW`, `TOOL` or `ROUTE`. `<TARGET_KEY>` is the resource's own **`.id`**, upper-snake-cased — `challenge-bulk-ingestion` → `CHALLENGE_BULK_INGESTION`, `skillsMatchingAgent` → `SKILLS_MATCHING_AGENT`. Always the `.id` passed to `new Agent`/`createWorkflow`/`createTool`, **never** the object-property name it's registered under in `src/mastra/index.ts` — 9 of the 10 registrations differ, and a policy keyed on the wrong one silently never matches. An invalid `_MODE` throws an actionable error on first resolution rather than falling back silently.
+
+Because Mastra's `getAgentById`/`getWorkflowById` fall back to the registry key, **both spellings reach the same resource over HTTP** — `/v6/ai/workflows/challenge-ingestion/start` and `/v6/ai/workflows/challengeIngestionWorkflow/start` are the same workflow. `TARGET_ID_ALIASES` maps every differing registry key to its canonical `.id`, and `resolveAccessPolicy()` canonicalises through it before any lookup, so a restriction can't be bypassed by addressing the target the other way. **Adding a restricted policy for a resource whose registry key differs from its `.id` means adding its alias entry too**; the unit tests assert both spellings resolve identically.
+
+**Shipped defaults.** Only two targets are restricted out of the box — both rewrite the shared challenge vector index:
+
+```
+challenge-ingestion        roles: [administrator]  scopes: [challengesRAG:admin]   (workflow)
+challenge-bulk-ingestion   roles: [administrator]  scopes: [challengesRAG:admin]   (workflow)
+rag-challenges             roles: [administrator]  scopes: [challengesRAG:admin]   (route)
+```
+
+Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
+
+**Three enforcement points:**
+
+- **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
+- **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Currently one entry: `/v6/ai-api/rag/challenges` → `rag-challenges`, restricted to `administrator` / `challengesRAG:admin` out of the box.
+- **Tools** — tools have no HTTP route of their own, so `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the `user` already on `RequestContext` and throws `ToolAccessDeniedError` on denial — surfaced to the LLM as a failed tool call, or to a workflow step as a rejected `execute()`.
+
+Nested, in-process invocations (`challenge-bulk-ingestion` → `challenge-ingestion`, `challenge-context` → `challenge-parser-agent`) are **not** re-gated: they never re-enter the HTTP router, and you can't reach them without passing the outer check first.
+
+Every denial logs one `tcAILogger.warn` line with the category, target id and whether a user was present.
+
+**Common operations, all zero-code-change:**
+
+```bash
+# Loosen ingestion for a staging environment
+ACCESS_POLICY_WORKFLOW_CHALLENGE_INGESTION_MODE="public"
+
+# Lock down a currently-open workflow
+ACCESS_POLICY_WORKFLOW_CHALLENGE_SEARCH_ROLES="administrator,copilot"
+
+# Temporarily hard-block a tool
+ACCESS_POLICY_TOOL_SEARCH_CHALLENGES_MODE="deny"
+
+# Flip the whole system to closed-by-default
+ACCESS_CONTROL_DEFAULT_POLICY="deny"
+```
+
+Access control is inert when `DISABLE_AUTH=true` — there is no authenticated caller to check.
+
+### Requestor Token Propagation to Topcoder Platform Tools
+
+Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authorized as the **requesting user**, not a shared service account, by default. The mechanism (`src/utils/tc-api-client.ts`, `callTcApi()`):
+
+1. Reads the requestor's own token from `context.requestContext.get(MASTRA_AUTH_TOKEN_KEY)` — the same value the core auth flow set (see above). This works uniformly for a TC member JWT or an M2M JWT; the client makes no distinction between token types, it just forwards whatever authenticated the caller of `tc-ai-api`.
+2. Calls the Topcoder platform endpoint with `Authorization: Bearer <requestor token>`.
+3. Optionally, **only for a tool id explicitly listed as `true`** in `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`, off/empty by default), retries **once** with tc-ai-api's own service M2M token (`M2MService.getM2MToken()`) if the requestor-token attempt came back `401`/`403`. Every fallback attempt is logged at `warn` level with the tool id and status code.
+
+| Tool | Auth |
+| --- | --- |
+| `fetch-challenge-by-id` | Requestor token only — no fallback configured |
+| `search-challenges` | Requestor token only — no fallback configured |
+| `fetch-project-by-id` | Requestor token only — no fallback configured |
+| `standardized-skills-fuzzy-match` | Unauthenticated (public endpoint) — unaffected by this mechanism |
+| `standardized-skills-semantic-search` | Unauthenticated (public endpoint) — unaffected by this mechanism |
+
+`TOOL_M2M_FALLBACK_CONFIG` currently has **no entries** — every tool above uses only whichever token the requestor authenticated with. The fallback path exists as reusable infrastructure for a future tool that needs it (see ADR 0002's "Resolution of open questions" for why the three existing Challenge/Project tools deliberately ship without a safety net: correctness of authorization was prioritized over availability).
 
 ---
 
@@ -273,6 +394,8 @@ Four agents are registered in `src/mastra/index.ts`, all built via the shared `c
 | `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | — | — (structured-output rewriter) |
 
 Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_MODEL_ID` env vars (e.g. `SKILLS_EXTRACTOR_AI_PROVIDER`, `CHALLENGE_PARSER_AI_PROVIDER`, `CHALLENGE_SEARCH_AI_PROVIDER`, `JD_REWRITER_AI_PROVIDER`).
+
+**Bedrock prompt caching:** every agent's static system-prompt instructions are cached automatically via AWS Bedrock prompt caching, applied centrally by `createBedrockChatModel` (`src/utils/providers/bedrock.ts`) — no per-agent code. This cuts cost and time-to-first-token for the (often large) system-prompt portion on every call after the first cached one. It's gated by an allowlist of confirmed cache-capable model IDs (current-generation Claude 3.5+/Sonnet 4-5/Haiku 4.5 and Amazon Nova), so overriding an agent's model to something else (e.g. an older Claude 3 model, or Titan) degrades gracefully to no caching rather than erroring. Set `BEDROCK_PROMPT_CACHE_ENABLED=false` to disable it globally, or `BEDROCK_PROMPT_CACHE_TTL=1h` to trade a higher cache-write cost for a longer idle window between requests (default `5m`). Cache read/write token counts are logged at `debug` level per call (`[Bedrock cache] agent=... model=... cacheReadTokens=... cacheWriteTokens=...`).
 
 ### `skillsMatchingAgent`
 
@@ -331,7 +454,7 @@ Rewrites a raw/rough job description into Topcoder's canonical structured format
 
 ## Tools
 
-Six tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zod input/output schema. The four Challenge/Project tools authenticate via `M2MService` (M2M JWT); the two Skills tools call unauthenticated public endpoints.
+Six tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zod input/output schema. The three Challenge/Project tools call `TC_API_BASE` authorized as the requesting user (see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools)); the two Skills tools call unauthenticated public endpoints.
 
 | Tool ID | Purpose | Called by |
 | --- | --- | --- |
@@ -369,7 +492,7 @@ Performs vector-based semantic search against the skills taxonomy. Returns match
 | Property   | Value                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | **ID**     | `fetch-challenge-by-id`                                             |
-| **API**    | `GET {TC_API_BASE}/v6/challenges/:challengeId` (M2M)                |
+| **API**    | `GET {TC_API_BASE}/v6/challenges/:challengeId` (requestor token)    |
 | **Input**  | `{ challengeId: uuid }`                                             |
 | **Output** | Full challenge object — `name`, `description`, `privateDescription`, `descriptionFormat`, `status`, `track`, `type`, `tags`, `skills`, `projectId`, `groups`, timeline dates, `prizeSets`, `reviewers`, `discussions`, `overview`, `task`, `legacy` |
 
@@ -380,7 +503,7 @@ Fetches one challenge's full detail, including the reviewer-only `privateDescrip
 | Property   | Value                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | **ID**     | `search-challenges`                                                  |
-| **API**    | `GET {TC_API_BASE}/v6/challenges` (M2M)                              |
+| **API**    | `GET {TC_API_BASE}/v6/challenges` (requestor token)                  |
 | **Input**  | `{ projectId?, projectIds?, status?, approvalStatus?, types?, tracks?, tags?, groups?, updatedDateStart?, updatedDateEnd?, ids?, page?, perPage?, sortBy?, sortOrder? }` |
 | **Output** | `{ challenges: [...], total, page, perPage }`                       |
 
@@ -401,7 +524,7 @@ The shared retrieval primitive behind both the search agent and the deterministi
 | Property   | Value                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | **ID**     | `fetch-project-by-id`                                                |
-| **API**    | `GET {TC_API_BASE}/v6/projects/:projectId` (M2M)                     |
+| **API**    | `GET {TC_API_BASE}/v6/projects/:projectId` (requestor token)         |
 | **Input**  | `{ projectId: string, fields?: string }`                            |
 | **Output** | `{ project: { id, name?, status?, type?, billingAccountId?, directProjectId?, techStack? } }` |
 
@@ -500,6 +623,28 @@ pnpm run sync -- --status ACTIVE --updated-since 2026-08-01 --concurrency 5
 ```
 
 Both CLIs invoke the same workflows the API exposes (via `mastra.getWorkflowById(...).createRun().start(...)`), so the CLI and API paths cannot drift onto separate implementations. `ingest-challenges.ts` writes per-run logs to `logs/ingestion-<timestamp>/{output.log,error.log,report.json}` (git-ignored).
+
+### Index administration API
+
+Two custom routes for inspecting and pruning what the index currently holds — the backend for the **TopScout RAG** admin page. Both are **administrator-only** (`route`/`rag-challenges` policy, see [Access control](#access-control)).
+
+```
+GET    /v6/ai-api/rag/challenges                 list indexed challenges
+DELETE /v6/ai-api/rag/challenges/:challengeId    remove one challenge's vectors
+```
+
+> **Why `/v6/ai-api/rag` and not `/v6/ai/rag`?** Mastra reserves its `apiPrefix` exclusively for built-in routes and **refuses to start** if a custom `apiRoutes` entry is registered at or beneath it — `validateCustomRoutePaths()` throws during `createHonoServer`, so the container crash-loops rather than failing a request. Custom routes therefore sit beside the prefix (`/v6/ai-chat`, `/v6/ai-api/*`) rather than under it, which is also why each base path needs its own entry in `apiAuthLayer`'s `protected` list. Their paths are absolute — Mastra mounts an `apiRoutes` entry at its literal `path`, unlike built-ins which it registers with `{ prefix: apiPrefix }`. `src/utils/routes/rag-index.routes.test.ts` asserts the collision rule, so a bad path fails a test instead of a deploy.
+
+`GET` aggregates `challenge_embeddings` by `metadata->>'challengeId'` — the ingestion path writes one row per *chunk*, while an operator thinks in *challenges*. Query params: `page` (1-based, default 1), `perPage` (default 25, max 100), `projectId`, `track`, `type`, `search` (case-insensitive substring on challenge name **or** id). Empty/whitespace params are treated as absent.
+
+The response body is a **bare JSON array**, with pagination in `X-Page` / `X-Per-Page` / `X-Total` / `X-Total-Pages` response headers — the Topcoder platform convention (already listed in this server's CORS `exposeHeaders`, so browsers can read them):
+
+```json
+[{ "challengeId": "…", "name": "…", "type": "Challenge", "track": "Development",
+   "projectId": "17423", "chunks": 9, "ingestedAt": "2026-08-25T10:00:00.000Z" }]
+```
+
+Retrieval goes through PgVector's similarity API, which can't express "list distinct challenges, filtered and paginated", so these two queries run directly on the shared `PgVector.pool`. Every filter value is a bound parameter; the only interpolated identifiers are `VECTOR_INDEX_NAME` and `MASTRA_DB_SCHEMA`, both validated by `validateSqlIdentifier()`. `DELETE` counts the challenge's chunks, then removes them via `deleteVectors({ filter: { challengeId } })` (so metadata-filter translation stays in `@mastra/pg`), and responds `{ challengeId, deletedChunks }` — or **404** when the challenge holds no vectors, rather than reporting a successful no-op.
 
 ### Retrieval
 
@@ -627,29 +772,69 @@ sequenceDiagram
 sequenceDiagram
     participant Client
     participant Server as Mastra HTTP Server
-    participant CompositeAuth as CompositeAuth
+    participant CoreAuth as Mastra core auth flow
     participant MemberAuth as Auth0 (Member)
     participant M2MAuth as Auth0 (M2M)
     participant ResMiddleware as resourceIdMiddleware
 
-    Client->>Server: Request with Authorization: Bearer <JWT>
-    Server->>CompositeAuth: Validate token
+    Client->>Server: Request to /v6/ai/* or /chat/:agentId<br/>Authorization: Bearer <JWT>
+    Server->>CoreAuth: checkRouteAuth() — CompositeAuth
 
     alt Member Token
-        CompositeAuth->>MemberAuth: Verify JWT (domain: auth.topcoder-dev.com)
-        MemberAuth-->>CompositeAuth: ✓ Valid — user claims
+        CoreAuth->>MemberAuth: Verify JWT (domain: AUTH0_DOMAIN)
+        MemberAuth-->>CoreAuth: ✓ Valid — user claims
     else M2M Token
-        CompositeAuth->>M2MAuth: Verify JWT (domain: topcoder-dev.auth0.com)
-        M2MAuth-->>CompositeAuth: ✓ Valid — M2M claims
+        CoreAuth->>M2MAuth: Verify JWT (domain: AUTH0_M2M_DOMAIN)
+        M2MAuth-->>CoreAuth: ✓ Valid — M2M claims
     end
 
-    CompositeAuth-->>Server: Authenticated user object
+    CoreAuth->>CoreAuth: mapUserToResourceId(user)<br/>→ set MASTRA_RESOURCE_ID_KEY
+    CoreAuth->>CoreAuth: Store raw token<br/>→ set MASTRA_AUTH_TOKEN_KEY
+    CoreAuth-->>Server: Authenticated — requestContext populated
 
-    Server->>ResMiddleware: /api/* interceptor
-    ResMiddleware->>ResMiddleware: Extract userId from<br/>https://topcoder-dev.com/userId<br/>or fallback to 'sub' claim
-    ResMiddleware->>ResMiddleware: Set MASTRA_RESOURCE_ID_KEY
+    Server->>ResMiddleware: /v6/ai/* or /chat/* interceptor
+    ResMiddleware->>ResMiddleware: Extract userId from<br/>https://<domain>/userId<br/>or fallback to 'sub' claim
+    ResMiddleware->>ResMiddleware: Confirm/set MASTRA_RESOURCE_ID_KEY<br/>log authType + resourceId
     ResMiddleware-->>Server: Continue to handler
 ```
+
+### Topcoder Platform Tool Call — Requestor Token Flow
+
+`MASTRA_AUTH_TOKEN_KEY`, set once during authentication above, is threaded automatically by Mastra core all the way from the HTTP request into every tool a triggered agent run calls — no extra plumbing required. This is what lets `callTcApi()` forward the requestor's own token instead of a shared service credential:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ChatRoute as chatRoute() handler
+    participant Agent as Mastra Agent
+    participant Tool as fetch-challenge-by-id /<br/>search-challenges /<br/>fetch-project-by-id
+    participant TcApiClient as callTcApi()
+    participant TC as Topcoder Platform API
+    participant M2M as M2MService (fallback only)
+
+    Client->>ChatRoute: POST /chat/:agentId<br/>Authorization: Bearer <requestor JWT>
+    Note over ChatRoute: MASTRA_AUTH_TOKEN_KEY already set<br/>on requestContext by core auth
+    ChatRoute->>Agent: stream(messages, { requestContext })
+    Agent->>Tool: execute(inputData, { requestContext })
+    Tool->>TcApiClient: callTcApi({ toolId, url, requestContext })
+    TcApiClient->>TcApiClient: token = requestContext.get(MASTRA_AUTH_TOKEN_KEY)
+    TcApiClient->>TC: GET/POST ... Authorization: Bearer <requestor JWT>
+
+    alt 2xx / non-401/403
+        TC-->>TcApiClient: Response
+    else 401 or 403 AND toolId listed in TOOL_M2M_FALLBACK_CONFIG
+        TcApiClient->>TcApiClient: log warn (toolId, status)
+        TcApiClient->>M2M: getM2MToken()
+        M2M-->>TcApiClient: service M2M token
+        TcApiClient->>TC: Retry once — Authorization: Bearer <M2M token>
+        TC-->>TcApiClient: Response
+    end
+
+    TcApiClient-->>Tool: Response
+    Tool-->>Agent: Mapped result
+```
+
+`fetch-challenge-by-id`, `search-challenges`, and `fetch-project-by-id` are **not** listed in `TOOL_M2M_FALLBACK_CONFIG` today, so for them the "else" branch never fires — a 401/403 from the requestor's own token is returned as-is.
 
 ### Agent Interaction — Term Extraction Detail
 
@@ -704,21 +889,32 @@ The service communicates with the following external systems:
 
 These are **unauthenticated** calls (no bearer token forwarded). The API base URL is configured via `TC_API_BASE`.
 
-### 2. Ollama LLM API
+### 2. Topcoder Challenges & Projects API (v6)
+
+| Endpoint                                   | Method | Purpose                            | Called By              |
+| ------------------------------------------- | ------ | ------------------------------------ | ----------------------- |
+| `{TC_API_BASE}/v6/challenges/:challengeId` | `GET`  | Fetch full challenge detail          | `fetchChallengeTool`   |
+| `{TC_API_BASE}/v6/challenges`              | `GET`  | Filtered/paginated challenge search  | `searchChallengesTool` |
+| `{TC_API_BASE}/v6/projects/:projectId`     | `GET`  | Resolve a `projectId` reference      | `fetchProjectTool`     |
+
+Authorized as the **requesting user** — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No M2M fallback is configured for these three today.
+
+### 3. Ollama LLM API
 
 | Endpoint                    | Method | Purpose                                         | Called By                          |
 | --------------------------- | ------ | ----------------------------------------------- | ---------------------------------- |
 | `{OLLAMA_API_URL}/api/chat` | `POST` | Streaming chat completion with `mistral:latest` | `skillsMatchingAgent` (via AI SDK) |
 | `{OLLAMA_API_URL}/api/chat` | `POST` | Evaluation model inference                      | Evaluation scorers                 |
 
-### 3. Auth0
+### 4. Auth0
 
-| Endpoint                                           | Purpose                            |
-| -------------------------------------------------- | ---------------------------------- |
-| `https://{AUTH0_DOMAIN}/.well-known/jwks.json`     | JWKS for member token verification |
-| `https://{AUTH0_M2M_DOMAIN}/.well-known/jwks.json` | JWKS for M2M token verification    |
+| Endpoint                                                   | Purpose                                                                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `https://{AUTH0_DOMAIN}/.well-known/jwks.json`             | JWKS for member token verification                                                                                                  |
+| `https://{AUTH0_M2M_DOMAIN}/.well-known/jwks.json`         | JWKS for M2M token verification                                                                                                     |
+| `{M2M_AUTH_URL}` (proxied via `M2M_AUTH_PROXY_SERVER_URL`) | Issues tc-ai-api's own service M2M token (`M2MService`) — used only as an unconfigured fallback credential, not the default for any tool today |
 
-### 4. PostgreSQL
+### 5. PostgreSQL
 
 | Purpose                                 | Connection                                          |
 | --------------------------------------- | --------------------------------------------------- |

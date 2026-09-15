@@ -42,10 +42,19 @@ export function getChallengeVectorStore(): PgVector {
 
 /**
  * Idempotently ensures the challenge vector index exists with the correct
- * dimension. Enforces the D7 dimension guard: if the index already exists
- * with a different dimension than the configured embedding model, throws
- * an actionable error naming both dimensions and pointing at
+ * dimension, and that its schema is up to date (e.g. the @mastra/pg 1.22+
+ * `namespace` column/constraint migration, which only runs from inside
+ * createIndex()). Enforces the D7 dimension guard: if the index already
+ * exists with a different dimension than the configured embedding model,
+ * throws an actionable error naming both dimensions and pointing at
  * VECTOR_INDEX_NAME/reindex as remediation.
+ *
+ * createIndex() is called unconditionally (not just when the index is
+ * missing) — it is safe to call every time: table/index creation is
+ * CREATE TABLE/INDEX IF NOT EXISTS, and its embedded schema migrations are
+ * themselves idempotent. Calling it is the only way to pick up schema
+ * changes @mastra/pg ships for tables that already existed before the
+ * change (see the namespace-column incident this guards against).
  *
  * @returns The shared PgVector instance
  */
@@ -66,30 +75,23 @@ export async function ensureChallengeIndex(): Promise<PgVector> {
         // Index/table doesn't exist — describeIndex threw
     }
 
-    if (existingDimension !== null) {
-        // Index exists — D7 dimension guard
-        if (existingDimension !== configuredDimension) {
-            throw new Error(
-                `Dimension mismatch: vector index "${indexName}" has ` +
-                `dimension ${existingDimension}, but the configured embedding ` +
-                `model (${config.embedding.provider}/${config.embedding.modelId}) ` +
-                `requires dimension ${configuredDimension}. ` +
-                `Set VECTOR_INDEX_NAME to use a new index name, or reindex ` +
-                `the existing index to match the configured model dimension.`,
-            );
-        }
-        // Index exists with correct dimension — idempotent, nothing to do
-        tcAILogger.info(
-            `[challenge-vector-store] Index "${indexName}" already exists ` +
-            `with correct dimension ${configuredDimension}`,
+    if (existingDimension !== null && existingDimension !== configuredDimension) {
+        throw new Error(
+            `Dimension mismatch: vector index "${indexName}" has ` +
+            `dimension ${existingDimension}, but the configured embedding ` +
+            `model (${config.embedding.provider}/${config.embedding.modelId}) ` +
+            `requires dimension ${configuredDimension}. ` +
+            `Set VECTOR_INDEX_NAME to use a new index name, or reindex ` +
+            `the existing index to match the configured model dimension.`,
         );
-        return store;
     }
 
-    // Index doesn't exist — create it with HNSW, cosine, and metadata indexes
     tcAILogger.info(
-        `[challenge-vector-store] Creating index "${indexName}" ` +
-        `with dimension ${configuredDimension}`,
+        existingDimension !== null
+            ? `[challenge-vector-store] Index "${indexName}" already exists ` +
+              `with correct dimension ${configuredDimension} — verifying schema`
+            : `[challenge-vector-store] Creating index "${indexName}" ` +
+              `with dimension ${configuredDimension}`,
     );
 
     await store.createIndex({

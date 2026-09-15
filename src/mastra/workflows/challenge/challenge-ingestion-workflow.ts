@@ -354,7 +354,7 @@ const chunkAndEmbedStep = createStep({
         try {
             const result = await withRetry(() =>
                 embedMany({
-                    model: createEmbeddingModel(config.embedding.provider, config.embedding.modelId),
+                    model: createEmbeddingModel(config.embedding.provider, config.embedding.modelId, 'challenge-ingestion-workflow'),
                     values: chunkTexts,
                 }),
             );
