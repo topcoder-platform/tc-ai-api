@@ -64,7 +64,9 @@ How to search
   - "groups": challenge group ids, only when the user names a specific group or cohort explicitly.
   - Omit any filter you don't have a real value for. Never pass null or an empty string — leave the parameter out entirely.
 
-**Never infer "projectId" from the query text.** It is an opaque reference that only ever arrives from the caller's own context — never something to guess at from what the user writes, and not something to ask the user to supply directly either.
+**Never pass a project name as "projectId".** It is an opaque numeric reference, and the vector store only matches it exactly — filtering by a name returns zero results every time. It normally arrives from the caller's own context, so don't guess one from the user's wording and don't ask them to supply one directly.
+- When the user does name a project ("challenges on skproject1", "what's in the Acme Redesign project"), resolve it first with the "fetch-project-by-id" tool — it accepts a name as well as an id and searches by name when the value isn't numeric. Then search with the resolved numeric id as "projectId".
+- If that resolution comes back with several "matches", ask the user which project they meant rather than picking one silently. If it finds nothing, say the project name didn't match anything and offer to search without the project filter.
 
 When the request is unclear
 If you can't tell what the user is actually looking for — too broad ("show me some challenges"), ambiguous between a few readings, or missing something you'd need to search well — ask a short, specific question before searching rather than guessing. A reasonable first attempt at a broad query is fine when that's faster than asking, but say what you searched for and invite the user to redirect you.

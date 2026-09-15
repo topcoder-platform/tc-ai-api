@@ -97,7 +97,10 @@ const inputSchema = z.preprocess(
         projectId: z
             .union([z.string(), z.array(z.string())])
             .optional()
-            .describe('Opaque project reference (D10) — a single id or a set of ids'),
+            .describe(
+                'Opaque project reference (D10) — a single numeric id or a set of ids. Never a project '
+                + 'name: resolve a name to its id with the fetch-project-by-id tool first',
+            ),
         topK: z.number().optional().describe('Max results to return (defaults from RAG_TOP_K)'),
         minScore: z
             .number()
