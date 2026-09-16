@@ -47,6 +47,10 @@ const bulkInputSchema = z.object({
         .string()
         .optional()
         .describe('Only ingest challenges updated on or after this date (incremental sync)'),
+    updatedDateEnd: z
+        .string()
+        .optional()
+        .describe('Only ingest challenges updated on or before this date (bounds a backfill window)'),
     dryRun: z
         .boolean()
         .optional()
@@ -174,6 +178,7 @@ const collectChallengesStep = createStep({
             tags,
             groups,
             updatedDateStart,
+            updatedDateEnd,
             dryRun = false,
             perPage = DEFAULT_PER_PAGE,
             maxPages = DEFAULT_MAX_PAGES,
@@ -188,7 +193,8 @@ const collectChallengesStep = createStep({
             `status: ${effectiveStatus.join(',')}, projectId: ${projectId ?? 'any'}, ` +
             `types: ${types?.join(',') || 'any'}, tracks: ${tracks?.join(',') || 'any'}, ` +
             `tags: ${tags?.join(',') || 'any'}, groups: ${groups?.join(',') || 'any'}, ` +
-            `updatedDateStart: ${updatedDateStart ?? 'none'}, perPage: ${effectivePerPage}, ` +
+            `updatedDateStart: ${updatedDateStart ?? 'none'}, ` +
+            `updatedDateEnd: ${updatedDateEnd ?? 'none'}, perPage: ${effectivePerPage}, ` +
             `maxPages: ${effectiveMaxPages}, dryRun: ${dryRun}`,
         );
 
@@ -213,6 +219,7 @@ const collectChallengesStep = createStep({
                             tags,
                             groups,
                             updatedDateStart,
+                            updatedDateEnd,
                             page,
                             perPage: effectivePerPage,
                         },

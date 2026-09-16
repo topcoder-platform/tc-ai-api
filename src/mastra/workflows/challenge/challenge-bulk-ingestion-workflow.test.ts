@@ -195,7 +195,7 @@ describe('collect-challenges step', () => {
         expect(tasks.map((task) => task.challengeId)).toEqual(['a', 'b', 'c']);
     });
 
-    it('forwards projectId, types, tracks, tags, groups and updatedDateStart filters', async () => {
+    it('forwards projectId, types, tracks, tags, groups and the updatedDate window', async () => {
         mocks.searchExecute.mockResolvedValueOnce(page([], 1, 20));
 
         await runStep<ChallengeTask[]>(collectChallengesStep, {
@@ -207,6 +207,7 @@ describe('collect-challenges step', () => {
                 tags: ['React'],
                 groups: ['group-a'],
                 updatedDateStart: '2026-01-01T00:00:00.000Z',
+                updatedDateEnd: '2026-01-31T23:59:59.999Z',
             },
         });
 
@@ -217,7 +218,18 @@ describe('collect-challenges step', () => {
             tags: ['React'],
             groups: ['group-a'],
             updatedDateStart: '2026-01-01T00:00:00.000Z',
+            updatedDateEnd: '2026-01-31T23:59:59.999Z',
         });
+    });
+
+    it('omits updatedDateEnd when the operator did not set one', async () => {
+        mocks.searchExecute.mockResolvedValueOnce(page([], 1, 20));
+
+        await runStep<ChallengeTask[]>(collectChallengesStep, {
+            inputData: { status: ['ACTIVE'], updatedDateStart: '2026-01-01T00:00:00.000Z' },
+        });
+
+        expect(mocks.searchExecute.mock.calls[0][0].updatedDateEnd).toBeUndefined();
     });
 
     it('paginates until a short page is returned', async () => {
