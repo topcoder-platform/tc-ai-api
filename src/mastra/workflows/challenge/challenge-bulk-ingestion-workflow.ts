@@ -253,9 +253,10 @@ const collectChallengesStep = createStep({
                     tasks.push({ challengeId, name: challenge.name ?? '', dryRun });
                 }
 
-                // `total` from the tool is the CURRENT page length (the v6
-                // endpoint returns a bare array), so a short or empty page is
-                // the only reliable end-of-results signal.
+                // A short or empty page is the end-of-results signal. `total`
+                // (X-Total) is the all-pages count, but it is a per-status
+                // total while `seen` de-duplicates across statuses, so the
+                // page length stays the signal that this pass is done.
                 if (challenges.length === 0 || challenges.length < effectivePerPage) {
                     break;
                 }

@@ -67,3 +67,20 @@ function fetchWithToken(url: string, init: RequestInit | undefined, token: strin
         },
     });
 }
+
+/**
+ * Reads the total result count from a v6 list endpoint's `X-Total` pagination
+ * header. Every v6 list route sets it (see `setResHeaders` in the API
+ * services); the body only ever carries the current page, so without this a
+ * caller cannot tell a complete result set from the first page of many.
+ *
+ * @returns The total, or undefined when the header is missing or unparseable.
+ */
+export function readTotalHeader(response: Response): number | undefined {
+    const raw = response.headers?.get?.('X-Total');
+    if (raw === null || raw === undefined || raw.trim() === '') {
+        return undefined;
+    }
+    const total = Number(raw);
+    return Number.isFinite(total) ? total : undefined;
+}

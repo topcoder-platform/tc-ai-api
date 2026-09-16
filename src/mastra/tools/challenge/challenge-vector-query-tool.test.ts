@@ -260,6 +260,30 @@ describe('challengeVectorQueryTool — semantic query path', () => {
         expect(mocks.logger.warn).toHaveBeenCalledWith(expect.stringContaining('below threshold'));
     });
 
+    it('flags truncation and counts distinct challenges when the topK ceiling is hit', async () => {
+        mocks.storeQuery.mockResolvedValue([
+            hit({ metadata: { ...hit().metadata, challengeId: 'challenge-1', chunkIndex: 1 } }),
+            hit({ metadata: { ...hit().metadata, challengeId: 'challenge-1', chunkIndex: 2 } }),
+            hit({ metadata: { ...hit().metadata, challengeId: 'challenge-2' } }),
+        ]);
+
+        const result = await executeTool({ query: 'test', topK: 3 });
+
+        expect(result.count).toBe(3);
+        expect(result.challengeCount).toBe(2);
+        expect(result.truncated).toBe(true);
+        expect(result.topK).toBe(3);
+    });
+
+    it('does not flag truncation when fewer results than topK come back', async () => {
+        mocks.storeQuery.mockResolvedValue([hit()]);
+
+        const result = await executeTool({ query: 'test', topK: 10 });
+
+        expect(result.truncated).toBe(false);
+        expect(result.challengeCount).toBe(1);
+    });
+
     it('respects an explicit topK override', async () => {
         mocks.storeQuery.mockResolvedValue([]);
         await executeTool({ query: 'test', topK: 3 });

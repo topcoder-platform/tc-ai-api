@@ -15,7 +15,7 @@ import { createTool } from '@mastra/core/tools';
 import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/request-context';
-import { callTcApi } from '../../../utils/tc-api-client';
+import { callTcApi, readTotalHeader } from '../../../utils/tc-api-client';
 
 const TOOL_ID = 'fetch-project-by-id';
 const BASE_URL = `${process.env.TC_API_BASE}/v6/projects`;
@@ -155,20 +155,6 @@ function mapProject(data: any, fallbackId: string) {
  * name match wins when one is present; otherwise the first hit is returned as
  * the best match and the remainder are surfaced as `matches`.
  */
-/**
- * Reads the total match count from the list endpoint's pagination headers.
- * The response body only carries the first page, so without this a caller
- * can't tell "one match" from "the first of hundreds".
- */
-function readTotalHeader(response: Response): number | undefined {
-    const raw = response.headers?.get?.('X-Total');
-    if (raw === null || raw === undefined || raw.trim() === '') {
-        return undefined;
-    }
-    const total = Number(raw);
-    return Number.isFinite(total) ? total : undefined;
-}
-
 const searchProjectsByName = async (name: string, requestContext: RequestContext | undefined) => {
     const url = `${BASE_URL}?name=${encodeURIComponent(name)}&perPage=${NAME_SEARCH_PER_PAGE}`;
 

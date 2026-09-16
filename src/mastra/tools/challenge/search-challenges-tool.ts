@@ -1,7 +1,8 @@
 // Challenge API: GET /v6/challenges
 // Searches Topcoder challenges with filters via the v6 Challenges API.
 // The v6 endpoint returns a bare JSON array (not a paginated envelope);
-// this tool wraps it into { challenges, total, page, perPage } for callers.
+// this tool wraps it into { challenges, total, page, perPage } for callers,
+// reading the all-pages `total` from the X-Total response header.
 //
 // Authorized as the requestor by default (their own token is forwarded
 // as-is); no M2M fallback configured for this tool — see
@@ -10,7 +11,7 @@ import { createTool } from '@mastra/core/tools';
 import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/request-context';
-import { callTcApi } from '../../../utils/tc-api-client';
+import { callTcApi, readTotalHeader } from '../../../utils/tc-api-client';
 
 const TOOL_ID = 'search-challenges';
 const BASE_URL = `${process.env.TC_API_BASE}/v6/challenges`;
@@ -52,7 +53,10 @@ export const searchChallengesTool = withAccessPolicy(createTool({
     }),
     outputSchema: z.object({
         challenges: z.array(challengeSummarySchema),
-        total: z.number(),
+        total: z.number().describe(
+            'Total challenges matching the filters across all pages (from X-Total) — may exceed '
+            + 'the number of entries in "challenges", which is one page',
+        ),
         page: z.number(),
         perPage: z.number(),
     }),
@@ -170,7 +174,10 @@ const searchChallenges = async (input: SearchChallengesInput, requestContext: Re
 
     const data = await response.json();
 
-    // v6 challenges API returns a bare JSON array, not a paginated envelope
+    // v6 challenges API returns a bare JSON array, not a paginated envelope —
+    // the count across all pages only exists in the X-Total header. Falling
+    // back to the page length would understate the total for any filter that
+    // matches more than one page, which reads as "that's all of them".
     const challengeArray: any[] = Array.isArray(data) ? data : [];
 
     const page = input.page ?? 1;
@@ -178,7 +185,7 @@ const searchChallenges = async (input: SearchChallengesInput, requestContext: Re
 
     return {
         challenges: challengeArray.map(mapChallenge),
-        total: challengeArray.length,
+        total: readTotalHeader(response) ?? challengeArray.length,
         page,
         perPage,
     };

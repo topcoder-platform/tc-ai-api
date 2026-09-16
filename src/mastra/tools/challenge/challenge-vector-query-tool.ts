@@ -52,7 +52,19 @@ export type ChallengeVectorQueryResult = z.infer<typeof resultSchema>;
 
 const outputSchema = z.object({
     success: z.boolean().describe('Indicates if the query was successful.'),
-    count: z.number().optional().describe('Number of relevant results found.'),
+    count: z.number().optional().describe('Number of relevant chunks returned (not distinct challenges).'),
+    challengeCount: z
+        .number()
+        .optional()
+        .describe('Number of distinct challenges the returned chunks belong to.'),
+    truncated: z
+        .boolean()
+        .optional()
+        .describe(
+            'True when the search hit the topK ceiling, so more matching challenges exist than were '
+            + 'returned. The result is a top-ranked sample, never a complete list.',
+        ),
+    topK: z.number().optional().describe('The ceiling that was applied to this search.'),
     results: z.array(resultSchema).optional().describe('Ranked chunks with their score and metadata.'),
     error: z.string().optional().describe('Error message if the query failed.'),
 });
@@ -254,9 +266,30 @@ export const challengeVectorQueryTool = withAccessPolicy(createTool({
                 );
             }
 
+            // topK bounds CHUNKS, and a challenge contributes one chunk per
+            // description section, so a full page is both fewer challenges
+            // than it looks and a sign that matches were cut off. Neither is
+            // visible from the results alone — say so explicitly rather than
+            // letting a capped page read as the complete set.
+            const truncated = results.length >= topK;
+            const challengeCount = new Set(
+                relevant.map((r) => r.metadata?.challengeId).filter(Boolean),
+            ).size;
+
+            if (truncated) {
+                tcAILogger.info(
+                    `[challenge-vector-query] Hit the topK ceiling (${topK}): returning ` +
+                    `${challengeCount} distinct challenges from ${relevant.length} chunks; ` +
+                    'more matches exist.',
+                );
+            }
+
             return {
                 success: true,
                 count: relevant.length,
+                challengeCount,
+                truncated,
+                topK,
                 results: relevant.map((r) => ({
                     text: r.metadata?.text,
                     score: r.score,

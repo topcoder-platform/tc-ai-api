@@ -34,12 +34,13 @@ const minimalContext = {
  * Installs a global fetch spy that resolves with the given JSON body.
  * Returns the spy so tests can assert call arguments (URL, headers).
  */
-function mockFetchResponse(data: unknown) {
+function mockFetchResponse(data: unknown, headers: Record<string, string> = {}) {
     return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: true,
         status: 200,
+        headers: { get: (key: string) => headers[key] ?? null },
         json: async () => data,
-    } as Response);
+    } as unknown as Response);
 }
 
 /**
@@ -49,8 +50,9 @@ function mockFetchError(status: number) {
     return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: false,
         status,
+        headers: { get: () => null },
         json: async () => ({}),
-    } as Response);
+    } as unknown as Response);
 }
 
 /**
@@ -271,6 +273,23 @@ describe('searchChallengesTool — bare-array response handling', () => {
         expect(result.total).toBe(3);
         expect(result.page).toBe(1);
         expect(result.perPage).toBe(10);
+    });
+
+    it('reports the all-pages total from the X-Total header', async () => {
+        mockFetchResponse(
+            [baseChallenge({ id: 'c1' }), baseChallenge({ id: 'c2' })],
+            { 'X-Total': '153' },
+        );
+
+        const result = await executeTool({ page: 1, perPage: 2 });
+
+        expect(result.challenges).toHaveLength(2);
+        expect(result.total).toBe(153);
+    });
+
+    it('falls back to the page length when X-Total is missing or unparseable', async () => {
+        mockFetchResponse([baseChallenge({ id: 'c1' })], { 'X-Total': 'many' });
+        expect((await executeTool({ page: 1, perPage: 10 })).total).toBe(1);
     });
 
     it('handles an empty bare array response', async () => {
