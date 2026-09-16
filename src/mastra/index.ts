@@ -69,6 +69,13 @@ export const mastra = new Mastra({
       chatRoute({
         path: CHAT_ROUTE_PATH,
         version: 'v7',
+        // Emits periodic SSE comment pings during quiet stretches (e.g. a
+        // tool call producing no tokens yet) so the ALB/proxy idle timeout
+        // doesn't silently reset the connection before the agent has
+        // anything to stream. Without this, a long silent gap looks
+        // identical to a dead connection to everything sitting between the
+        // client and this service.
+        heartbeatMs: 15_000,
       }),
       // RAG index admin API (list/delete indexed challenges) — administrator
       // only, see ADR 0004's `route` policy category.
