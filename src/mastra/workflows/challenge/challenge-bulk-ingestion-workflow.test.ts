@@ -90,13 +90,24 @@ function summary(id: string, overrides: Record<string, unknown> = {}) {
     };
 }
 
-/** A search page result as returned by searchChallengesTool. */
-function page(challenges: Record<string, unknown>[], pageNumber: number, perPage: number) {
+/**
+ * A search page result as returned by searchChallengesTool. `pageLength`
+ * defaults to the visible challenge count and is passed explicitly when a
+ * page had group-restricted entries excluded from it.
+ */
+function page(
+    challenges: Record<string, unknown>[],
+    pageNumber: number,
+    perPage: number,
+    pageLength = challenges.length,
+) {
     return {
         challenges,
         total: challenges.length,
         page: pageNumber,
         perPage,
+        pageLength,
+        excludedGroupRestricted: pageLength - challenges.length,
     };
 }
 
@@ -230,6 +241,22 @@ describe('collect-challenges step', () => {
         });
 
         expect(mocks.searchExecute.mock.calls[0][0].updatedDateEnd).toBeUndefined();
+    });
+
+    it('keeps paginating when a full page was emptied by group exclusion', async () => {
+        // A page of nothing but group-restricted challenges arrives empty but
+        // full — stopping there would skip every later page.
+        mocks.searchExecute
+            .mockResolvedValueOnce(page([], 1, 2, 2))
+            .mockResolvedValueOnce(page([summary('a'), summary('b')], 2, 2, 2))
+            .mockResolvedValueOnce(page([summary('c')], 3, 2, 1));
+
+        const tasks = await runStep<ChallengeTask[]>(collectChallengesStep, {
+            inputData: { status: ['ACTIVE'], perPage: 2 },
+        });
+
+        expect(mocks.searchExecute).toHaveBeenCalledTimes(3);
+        expect(tasks.map((task) => task.challengeId)).toEqual(['a', 'b', 'c']);
     });
 
     it('paginates until a short page is returned', async () => {
