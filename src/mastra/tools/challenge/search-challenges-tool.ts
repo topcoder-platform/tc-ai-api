@@ -32,7 +32,10 @@ const challengeSummarySchema = z.object({
 export const searchChallengesTool = withAccessPolicy(createTool({
     id: TOOL_ID,
     description:
-        'Searches Topcoder challenges via the v6 Challenges API, authorized as the requesting user, with filter support (projectId, status, types, tracks, tags, groups, dates, pagination)',
+        'Searches Topcoder challenges via the v6 Challenges API, authorized as the requesting user, ' +
+        'with filter support (projectId, status, types, tracks, tags, groups, dates, pagination). ' +
+        'Without an explicit groups filter, only public challenges are returned — group-restricted ' +
+        'ones are excluded rather than inherited from the caller\'s own group access.',
     inputSchema: z.object({
         projectId: z.string().optional(),
         projectIds: z.array(z.string()).optional(),
@@ -41,7 +44,13 @@ export const searchChallengesTool = withAccessPolicy(createTool({
         types: z.array(z.string()).optional(),
         tracks: z.array(z.string()).optional(),
         tags: z.array(z.string()).optional(),
-        groups: z.array(z.string()).optional(),
+        groups: z
+            .array(z.string())
+            .optional()
+            .describe(
+                'Challenge group ids. When omitted, group-restricted challenges are excluded '
+                + 'entirely and only public (no group) challenges are returned',
+            ),
         updatedDateStart: z.string().optional(),
         updatedDateEnd: z.string().optional(),
         ids: z.array(z.string()).optional(),
@@ -55,6 +64,14 @@ export const searchChallengesTool = withAccessPolicy(createTool({
         total: z.number(),
         page: z.number(),
         perPage: z.number(),
+        pageLength: z.number().describe(
+            'How many challenges the API returned for this page, before group-restricted ones '
+            + 'were excluded. Paginate on this, not on the length of "challenges"',
+        ),
+        excludedGroupRestricted: z.number().describe(
+            'Challenges dropped from this page because they belong to a group and no group filter '
+            + 'was requested',
+        ),
     }),
     execute: async (inputData, context) => {
         const logger = context.mastra?.getLogger?.();
@@ -148,6 +165,22 @@ function mapChallenge(raw: any) {
     };
 }
 
+/**
+ * True when a challenge is visible to everyone, i.e. carries no group.
+ *
+ * Group-restricted challenges are excluded whenever the caller did not ask
+ * for a specific group. The v6 API cannot express "no group": with no `groups`
+ * criteria it returns public challenges PLUS every group the caller can reach,
+ * and for an admin or machine token it applies no group filter at all
+ * (`shouldApplyGroupVisibilityFilter` is false — see searchChallenges in
+ * challenge-api-v6). Inheriting the caller's group reach would mean whatever
+ * that operator could see gets ingested and then answered to everyone, so the
+ * exclusion happens here instead.
+ */
+function isPublicChallenge(challenge: { groups?: string[] }): boolean {
+    return !challenge.groups?.length;
+}
+
 const searchChallenges = async (input: SearchChallengesInput, requestContext: RequestContext | undefined) => {
     const params = buildQueryParams(input);
     const url = `${BASE_URL}?${params.toString()}`;
@@ -176,10 +209,18 @@ const searchChallenges = async (input: SearchChallengesInput, requestContext: Re
     const page = input.page ?? 1;
     const perPage = input.perPage ?? 20;
 
+    const mapped = challengeArray.map(mapChallenge);
+    const visible = input.groups?.length ? mapped : mapped.filter(isPublicChallenge);
+
     return {
-        challenges: challengeArray.map(mapChallenge),
-        total: challengeArray.length,
+        challenges: visible,
+        total: visible.length,
         page,
         perPage,
+        // The raw page length is the only reliable end-of-pagination signal:
+        // after exclusion a full page can look short, which would stop a
+        // caller paginating while matches remain.
+        pageLength: challengeArray.length,
+        excludedGroupRestricted: mapped.length - visible.length,
     };
 };

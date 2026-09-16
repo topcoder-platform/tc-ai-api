@@ -70,7 +70,10 @@ function baseChallenge(overrides: Record<string, unknown> = {}) {
         tags: ['tag1', 'tag2'],
         skills: [{ id: 's1', name: 'React' }],
         projectId: 12345,
-        groups: ['acme'],
+        // Public by default: a challenge with a group is excluded unless the
+        // caller asked for that group, which would hide it from every test
+        // that is really about field mapping.
+        groups: [],
         ...overrides,
     };
 }
@@ -280,6 +283,60 @@ describe('searchChallengesTool — bare-array response handling', () => {
 
         expect(result.challenges).toHaveLength(0);
         expect(result.total).toBe(0);
+    });
+});
+
+describe('searchChallengesTool — group-restricted exclusion', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        m2mTokenMock.mockResolvedValue('fake-m2m-token');
+    });
+
+    it('drops challenges carrying a group when no groups filter was supplied', async () => {
+        mockFetchResponse([
+            baseChallenge({ id: 'public-1' }),
+            baseChallenge({ groups: ['acme'], id: 'restricted-1' }),
+            baseChallenge({ groups: ['acme', 'beta'], id: 'restricted-2' }),
+        ]);
+
+        const result = await executeTool({ page: 1, perPage: 10 });
+
+        expect(result.challenges.map((c: any) => c.id)).toEqual(['public-1']);
+        expect(result.excludedGroupRestricted).toBe(2);
+    });
+
+    it('keeps group-restricted challenges when a groups filter was supplied', async () => {
+        mockFetchResponse([
+            baseChallenge({ id: 'public-1' }),
+            baseChallenge({ groups: ['acme'], id: 'restricted-1' }),
+        ]);
+
+        const result = await executeTool({ groups: ['acme'], page: 1, perPage: 10 });
+
+        expect(result.challenges.map((c: any) => c.id)).toEqual(['public-1', 'restricted-1']);
+        expect(result.excludedGroupRestricted).toBe(0);
+    });
+
+    it('treats a missing groups field as public', async () => {
+        mockFetchResponse([{ ...baseChallenge(), groups: undefined }]);
+
+        const result = await executeTool({ page: 1, perPage: 10 });
+
+        expect(result.challenges).toHaveLength(1);
+        expect(result.excludedGroupRestricted).toBe(0);
+    });
+
+    it('reports the raw page length so callers can still paginate', async () => {
+        mockFetchResponse([
+            baseChallenge({ groups: ['acme'], id: 'restricted-1' }),
+            baseChallenge({ groups: ['acme'], id: 'restricted-2' }),
+        ]);
+
+        const result = await executeTool({ page: 1, perPage: 2 });
+
+        expect(result.challenges).toHaveLength(0);
+        expect(result.pageLength).toBe(2);
+        expect(result.excludedGroupRestricted).toBe(2);
     });
 });
 
@@ -497,7 +554,7 @@ describe('searchChallengesTool — challenge field mapping', () => {
     it('preserves groups array', async () => {
         mockFetchResponse([baseChallenge({ groups: ['team-a', 'team-b'] })]);
 
-        const result = await executeTool({ page: 1, perPage: 10 });
+        const result = await executeTool({ groups: ['team-a'], page: 1, perPage: 10 });
 
         expect(result.challenges[0].groups).toEqual(['team-a', 'team-b']);
     });
