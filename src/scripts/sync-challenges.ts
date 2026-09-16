@@ -10,6 +10,7 @@
  * Usage:
  *   pnpm run sync -- --project-id 17423 [--dry-run]
  *   pnpm run sync -- --status ACTIVE --updated-since 2026-08-01 --concurrency 5
+ *   pnpm run sync -- --updated-since 2026-08-01 --updated-until 2026-08-31
  */
 
 import { parseArgs } from 'node:util';
@@ -23,6 +24,7 @@ interface CliOptions {
     types?: string[];
     tracks?: string[];
     updatedSince?: string;
+    updatedUntil?: string;
     dryRun: boolean;
     concurrency?: number;
 }
@@ -36,6 +38,7 @@ function parseOptions(argv: string[]): CliOptions {
             types: { type: 'string', multiple: true },
             tracks: { type: 'string', multiple: true },
             'updated-since': { type: 'string' },
+            'updated-until': { type: 'string' },
             'dry-run': { type: 'boolean', default: false },
             concurrency: { type: 'string' },
         },
@@ -47,6 +50,7 @@ function parseOptions(argv: string[]): CliOptions {
         types: values.types,
         tracks: values.tracks,
         updatedSince: values['updated-since'],
+        updatedUntil: values['updated-until'],
         dryRun: Boolean(values['dry-run']),
         concurrency: values.concurrency ? Number(values.concurrency) : undefined,
     };
@@ -87,6 +91,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     console.log(`   types: ${options.types?.join(',') || 'any'}`);
     console.log(`   tracks: ${options.tracks?.join(',') || 'any'}`);
     console.log(`   updatedDateStart: ${options.updatedSince ?? 'none (full sync)'}`);
+    console.log(`   updatedDateEnd: ${options.updatedUntil ?? 'none (up to now)'}`);
     console.log(`   mode: ${options.dryRun ? 'DRY RUN' : 'LIVE'}`);
 
     const workflow = mastra.getWorkflowById(BULK_WORKFLOW_ID) as unknown as WorkflowHandle | undefined;
@@ -102,6 +107,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
             types: options.types,
             tracks: options.tracks,
             updatedDateStart: options.updatedSince,
+            updatedDateEnd: options.updatedUntil,
             dryRun: options.dryRun,
             concurrency: options.concurrency,
         },

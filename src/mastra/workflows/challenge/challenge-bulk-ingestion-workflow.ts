@@ -47,6 +47,10 @@ const bulkInputSchema = z.object({
         .string()
         .optional()
         .describe('Only ingest challenges updated on or after this date (incremental sync)'),
+    updatedDateEnd: z
+        .string()
+        .optional()
+        .describe('Only ingest challenges updated on or before this date (bounds a backfill window)'),
     dryRun: z
         .boolean()
         .optional()
@@ -174,6 +178,7 @@ const collectChallengesStep = createStep({
             tags,
             groups,
             updatedDateStart,
+            updatedDateEnd,
             dryRun = false,
             perPage = DEFAULT_PER_PAGE,
             maxPages = DEFAULT_MAX_PAGES,
@@ -188,13 +193,15 @@ const collectChallengesStep = createStep({
             `status: ${effectiveStatus.join(',')}, projectId: ${projectId ?? 'any'}, ` +
             `types: ${types?.join(',') || 'any'}, tracks: ${tracks?.join(',') || 'any'}, ` +
             `tags: ${tags?.join(',') || 'any'}, groups: ${groups?.join(',') || 'any'}, ` +
-            `updatedDateStart: ${updatedDateStart ?? 'none'}, perPage: ${effectivePerPage}, ` +
+            `updatedDateStart: ${updatedDateStart ?? 'none'}, ` +
+            `updatedDateEnd: ${updatedDateEnd ?? 'none'}, perPage: ${effectivePerPage}, ` +
             `maxPages: ${effectiveMaxPages}, dryRun: ${dryRun}`,
         );
 
         const tasks: z.infer<typeof challengeTaskSchema>[] = [];
         const seen = new Set<string>();
         let pagesFetched = 0;
+        let excludedGroupRestricted = 0;
 
         // `status` is a scalar enum in the v6 API (a list is rejected with HTTP
         // 400), so each status gets its own paginated pass; `seen` de-duplicates
@@ -213,6 +220,7 @@ const collectChallengesStep = createStep({
                             tags,
                             groups,
                             updatedDateStart,
+                            updatedDateEnd,
                             page,
                             perPage: effectivePerPage,
                         },
@@ -240,6 +248,11 @@ const collectChallengesStep = createStep({
                 }
 
                 const challenges = result.challenges ?? [];
+                // Group-restricted challenges are dropped by the search tool
+                // when no group filter was requested, so `challenges` can be
+                // shorter than the page actually was.
+                const pageLength = result.pageLength ?? challenges.length;
+                excludedGroupRestricted += result.excludedGroupRestricted ?? 0;
 
                 for (const challenge of challenges) {
                     const challengeId = challenge?.id;
@@ -253,10 +266,12 @@ const collectChallengesStep = createStep({
                     tasks.push({ challengeId, name: challenge.name ?? '', dryRun });
                 }
 
-                // `total` from the tool is the CURRENT page length (the v6
-                // endpoint returns a bare array), so a short or empty page is
-                // the only reliable end-of-results signal.
-                if (challenges.length === 0 || challenges.length < effectivePerPage) {
+                // A short or empty page is the only reliable end-of-results
+                // signal (the v6 endpoint returns a bare array, so there is no
+                // total). It must be judged on the raw page length: a full page
+                // of group-restricted challenges filters down to zero, which
+                // would otherwise stop pagination with matches still to come.
+                if (pageLength === 0 || pageLength < effectivePerPage) {
                     break;
                 }
 
@@ -272,7 +287,11 @@ const collectChallengesStep = createStep({
 
         tcAILogger.info(
             `[challenge-bulk-ingestion:collect-challenges] Collected ${tasks.length} challenges ` +
-            `across ${pagesFetched} page(s) / ${effectiveStatus.length} status pass(es)`,
+            `across ${pagesFetched} page(s) / ${effectiveStatus.length} status pass(es)` +
+            (excludedGroupRestricted > 0
+                ? `; excluded ${excludedGroupRestricted} group-restricted challenge(s) ` +
+                  '(no groups filter was supplied)'
+                : ''),
         );
 
         return tasks;
