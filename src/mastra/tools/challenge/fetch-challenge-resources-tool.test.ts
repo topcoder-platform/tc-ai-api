@@ -271,9 +271,15 @@ describe('fetchChallengeResourcesTool — shouldForceM2M', () => {
     });
 
     it('uses M2M when no user is on requestContext', async () => {
+        // RBAC would deny a missing user before execute runs — DISABLE_AUTH isolates
+        // the outbound credential branch (ADR 0005: fail toward M2M when !user).
+        process.env.DISABLE_AUTH = 'true';
         const fetchSpy = mockApi();
 
-        await executeTool({ challengeId: CHALLENGE_UUID, role: 'registrants' }, undefined);
+        await fetchChallengeResourcesTool.execute?.(
+            { challengeId: CHALLENGE_UUID, role: 'registrants' },
+            buildContext(undefined),
+        );
 
         const resourcesCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/resources'));
         const [, init] = resourcesCall as [string, RequestInit];
