@@ -54,7 +54,12 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
             scopes: ['challengesRAG:admin'],
         },
     },
-    tool: {},
+    tool: {
+        'fetch-challenge-resources': {
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager'],
+        },
+    },
     route: {
         // The RAG index admin API (list/delete indexed challenges) mutates the
         // same shared vector index as the ingestion workflows above, so it

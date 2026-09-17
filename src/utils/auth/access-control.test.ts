@@ -246,6 +246,13 @@ describe('resolveAccessPolicy', () => {
         expect(resolveAccessPolicy('tool', 'challenge-vector-query')).toEqual({ mode: 'public' });
     });
 
+    it('resolves fetch-challenge-resources to the baked-in restricted policy with no env set', () => {
+        expect(resolveAccessPolicy('tool', 'fetch-challenge-resources')).toEqual({
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager'],
+        });
+    });
+
     it('honours ACCESS_CONTROL_DEFAULT_POLICY=deny as the global default', () => {
         process.env.ACCESS_CONTROL_DEFAULT_POLICY = 'deny';
         expect(resolveAccessPolicy('agent', 'challenge-search-agent')).toEqual({ mode: 'deny' });
