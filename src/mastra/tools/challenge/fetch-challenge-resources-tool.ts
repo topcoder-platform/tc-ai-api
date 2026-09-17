@@ -104,13 +104,13 @@ const fetchChallengeResources = async (
         );
     }
 
-    const all: Array<{
+    const all: {
         memberId: string | number;
         memberHandle: string;
         roleId: string;
         roleName: string;
         created?: string;
-    }> = await response.json();
+    }[] = await response.json();
     const totalHeader = Number(response.headers.get('x-total') ?? all.length);
 
     let roleIds: Set<string> | undefined;
