@@ -285,13 +285,16 @@ Authentication answers *"is this a valid caller?"*; access control answers *"may
 
 Because Mastra's `getAgentById`/`getWorkflowById` fall back to the registry key, **both spellings reach the same resource over HTTP** — `/v6/ai/workflows/challenge-ingestion/start` and `/v6/ai/workflows/challengeIngestionWorkflow/start` are the same workflow. `TARGET_ID_ALIASES` maps every differing registry key to its canonical `.id`, and `resolveAccessPolicy()` canonicalises through it before any lookup, so a restriction can't be bypassed by addressing the target the other way. **Adding a restricted policy for a resource whose registry key differs from its `.id` means adding its alias entry too**; the unit tests assert both spellings resolve identically.
 
-**Shipped defaults.** Only two targets are restricted out of the box — both rewrite the shared challenge vector index:
+**Shipped defaults.** Three targets are restricted out of the box:
 
 ```
-challenge-ingestion        roles: [administrator]  scopes: [challengesRAG:admin]   (workflow)
-challenge-bulk-ingestion   roles: [administrator]  scopes: [challengesRAG:admin]   (workflow)
-rag-challenges             roles: [administrator]  scopes: [challengesRAG:admin]   (route)
+challenge-ingestion        roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
+challenge-bulk-ingestion   roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
+rag-challenges             roles: [administrator]                  scopes: [challengesRAG:admin]   (route)
+fetch-challenge-resources  roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 ```
+
+The first three all rewrite the shared challenge vector index. `fetch-challenge-resources` (ADR 0005) is different: it's `restricted` to match the RBAC platform-ui already enforces one layer up on the only UI surface that reaches it, not because the underlying data is sensitive to write.
 
 Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
 
@@ -330,16 +333,18 @@ Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authoriz
 1. Reads the requestor's own token from `context.requestContext.get(MASTRA_AUTH_TOKEN_KEY)` — the same value the core auth flow set (see above). This works uniformly for a TC member JWT or an M2M JWT; the client makes no distinction between token types, it just forwards whatever authenticated the caller of `tc-ai-api`.
 2. Calls the Topcoder platform endpoint with `Authorization: Bearer <requestor token>`.
 3. Optionally, **only for a tool id explicitly listed as `true`** in `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`, off/empty by default), retries **once** with tc-ai-api's own service M2M token (`M2MService.getM2MToken()`) if the requestor-token attempt came back `401`/`403`. Every fallback attempt is logged at `warn` level with the tool id and status code.
+4. A tool can instead force the M2M token proactively, bypassing the requestor-token attempt entirely, by passing `forceM2M: true` to `callTcApi()` — added in ADR 0005 for `fetch-challenge-resources`, whose upstream API silently degrades by credential rather than erroring, so there's no `401`/`403` for the reactive fallback in point 3 to react to. `forceM2M` defaults to falsy; every other tool below omits it and is unaffected.
 
 | Tool | Auth |
 | --- | --- |
 | `fetch-challenge-by-id` | Requestor token only — no fallback configured |
 | `search-challenges` | Requestor token only — no fallback configured |
 | `fetch-project-by-id` | Requestor token only — no fallback configured |
+| `fetch-challenge-resources` | Requestor token when the caller is `administrator`; tc-ai-api's own M2M token (`forceM2M`) for any other RBAC-allowed caller (e.g. `Talent Manager`) — see [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) |
 | `standardized-skills-fuzzy-match` | Unauthenticated (public endpoint) — unaffected by this mechanism |
 | `standardized-skills-semantic-search` | Unauthenticated (public endpoint) — unaffected by this mechanism |
 
-`TOOL_M2M_FALLBACK_CONFIG` currently has **no entries** — every tool above uses only whichever token the requestor authenticated with. The fallback path exists as reusable infrastructure for a future tool that needs it (see ADR 0002's "Resolution of open questions" for why the three existing Challenge/Project tools deliberately ship without a safety net: correctness of authorization was prioritized over availability).
+`TOOL_M2M_FALLBACK_CONFIG` currently has **no entries** — none of the tools above use the reactive fallback-on-401/403 path. The fallback path exists as reusable infrastructure for a future tool that needs it (see ADR 0002's "Resolution of open questions" for why the three original Challenge/Project tools deliberately ship without a safety net: correctness of authorization was prioritized over availability). `fetch-challenge-resources`'s credential selection is the proactive `forceM2M` branch instead (ADR 0005), driven by the caller's RBAC-checked role rather than an upstream error response.
 
 ---
 
@@ -390,7 +395,7 @@ Four agents are registered in `src/mastra/index.ts`, all built via the shared `c
 | --- | --- | --- | --- | --- |
 | `skillsMatchingAgent` | `skillsMatchingAgent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | PostgreSQL-backed | — (workflow calls skill tools directly) |
 | `challengeParserAgent` | `challenge-parser-agent` | AWSBedrock `us.anthropic.claude-sonnet-5` | — | — (structured-output extractor) |
-| `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool` |
+| `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool` |
 | `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | — | — (structured-output rewriter) |
 
 Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_MODEL_ID` env vars (e.g. `SKILLS_EXTRACTOR_AI_PROVIDER`, `CHALLENGE_PARSER_AI_PROVIDER`, `CHALLENGE_SEARCH_AI_PROVIDER`, `JD_REWRITER_AI_PROVIDER`).
@@ -435,9 +440,11 @@ Reads a full challenge specification (public + private description, skills, meta
 | **ID**     | `challenge-search-agent`                                       |
 | **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5')` by default |
 | **Memory** | In-memory only (`Memory({ options: { lastMessages: 10 } })`) — no persistent storage backend, unlike `skillsMatchingAgent` |
-| **Tools**  | `challengeVectorQueryTool`, `fetchProjectTool`                 |
+| **Tools**  | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool` |
 
 Answers natural-language questions about indexed Topcoder challenges. Infers `skills`/`type`/`track`/`groups` filters from the query and calls `challenge-vector-query`; never infers `projectId` from query text (it must arrive from the caller's context — see [Challenges Vector RAG](#challenges-vector-rag)). Grounds every answer solely in tool results. For callers needing raw ranked results with no LLM latency/cost/non-determinism, the `challenge-search` workflow shares the same underlying tool.
+
+Can also answer "who's on this challenge" questions — copilot, reviewers, registrants, managers, observers — via `fetchChallengeResourcesTool` (ADR 0005). That tool is `restricted` (see [Access control](#access-control)): only callers with the `administrator` or `Talent Manager` role can invoke it, matching the RBAC platform-ui already enforces on the customer-portal page that hosts this agent.
 
 ### `jdRewriterAgent`
 
@@ -454,7 +461,7 @@ Rewrites a raw/rough job description into Topcoder's canonical structured format
 
 ## Tools
 
-Six tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zod input/output schema. The three Challenge/Project tools call `TC_API_BASE` authorized as the requesting user (see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools)); the two Skills tools call unauthenticated public endpoints.
+Seven tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zod input/output schema. The four Challenge/Project tools call `TC_API_BASE` authorized as the requesting user by default (see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools)); the two Skills tools call unauthenticated public endpoints.
 
 | Tool ID | Purpose | Called by |
 | --- | --- | --- |
@@ -464,6 +471,7 @@ Six tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zo
 | `search-challenges` | Paginated/filtered challenge search | `challenge-bulk-ingestion-workflow` |
 | `challenge-vector-query` | Semantic + metadata-filtered vector search | `challengeSearchAgent`, `challenge-search` workflow |
 | `fetch-project-by-id` | Resolve a `projectId` reference to project detail | `challengeSearchAgent` (on-demand enrichment) |
+| `fetch-challenge-resources` | List a challenge's resources (copilot/reviewers/registrants/managers/observers) | `challengeSearchAgent` — **restricted**: `administrator`/`Talent Manager` only (ADR 0005) |
 
 ### `standardized-skills-fuzzy-match`
 
@@ -529,6 +537,18 @@ The shared retrieval primitive behind both the search agent and the deterministi
 | **Output** | `{ project: { id, name?, status?, type?, billingAccountId?, directProjectId?, techStack? } }` |
 
 Retrieval-time enrichment only (not used by ingestion): resolves the opaque `projectId` a challenge-search hit carries into project name/status/tech stack, under the caller's own authorization.
+
+### `fetch-challenge-resources`
+
+| Property   | Value                                                              |
+| ---------- | -------------------------------------------------------------------- |
+| **ID**     | `fetch-challenge-resources`                                          |
+| **API**    | `GET {TC_API_BASE}/v6/resources?challengeId=...` (requestor token for `administrator`, tc-ai-api's own M2M token otherwise) |
+| **Input**  | `{ challengeId: uuid, role?: 'copilot' \| 'reviewers' \| 'registrants' \| 'managers' \| 'observers' \| 'all', roleId?: uuid }` |
+| **Output** | `{ challengeId, role, resources: [{ memberId, memberHandle, roleId, roleName, created? }], total, truncated }` |
+| **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) |
+
+Lists who's on a challenge by role. `role` is a caller-facing category resolved server-side (`src/config/challenge-resource-roles.config.ts`) to the actual, possibly multi-valued, set of upstream resource-role names it covers (e.g. `reviewers` spans `Reviewer`, `Iterative Reviewer`, `Final Reviewer`, and several more) — the model never has to guess or supply a raw `roleId` UUID unless it already has one from a prior lookup, in which case `roleId` takes precedence. `truncated: true` means the challenge has more than 1000 total resources and the response is a partial list, not the full set. See [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) for why credential selection branches on the caller's role instead of reacting to a `401`/`403` (the upstream API silently returns an empty result for privileged roles when unauthenticated/under-privileged, rather than erroring).
 
 ---
 
@@ -836,6 +856,8 @@ sequenceDiagram
 
 `fetch-challenge-by-id`, `search-challenges`, and `fetch-project-by-id` are **not** listed in `TOOL_M2M_FALLBACK_CONFIG` today, so for them the "else" branch never fires — a 401/403 from the requestor's own token is returned as-is.
 
+`fetch-challenge-resources` (ADR 0005) doesn't fit this diagram: its upstream API returns `200` with a silently empty result for an under-privileged caller rather than a `401`/`403`, so there's nothing for the reactive fallback above to react to. It instead decides the credential *before* calling `callTcApi()` — `forceM2M: true` unless the caller is `administrator` — via `shouldForceM2M`, then calls once with whichever credential it picked. See [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) Decision 3/4.
+
 ### Agent Interaction — Term Extraction Detail
 
 ```mermaid
@@ -896,8 +918,10 @@ These are **unauthenticated** calls (no bearer token forwarded). The API base UR
 | `{TC_API_BASE}/v6/challenges/:challengeId` | `GET`  | Fetch full challenge detail          | `fetchChallengeTool`   |
 | `{TC_API_BASE}/v6/challenges`              | `GET`  | Filtered/paginated challenge search  | `searchChallengesTool` |
 | `{TC_API_BASE}/v6/projects/:projectId`     | `GET`  | Resolve a `projectId` reference      | `fetchProjectTool`     |
+| `{TC_API_BASE}/v6/resources?challengeId=`  | `GET`  | List a challenge's resources, optionally filtered by `roleId` | `fetchChallengeResourcesTool` |
+| `{TC_API_BASE}/v6/resource-roles`          | `GET`  | Resolve a caller-facing role category to resource-role ids (memoized per process) | `fetchChallengeResourcesTool` |
 
-Authorized as the **requesting user** — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No M2M fallback is configured for these three today.
+Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallengesTool`/`fetchProjectTool` — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No reactive M2M fallback is configured for these three. `fetchChallengeResourcesTool` branches instead (`forceM2M`, [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md)): the requestor's own token only when they're `administrator`, tc-ai-api's service M2M token otherwise.
 
 ### 3. Ollama LLM API
 

@@ -200,6 +200,53 @@ describe('callTcApi — no requestor token', () => {
     });
 });
 
+describe('callTcApi — forceM2M', () => {
+    it('uses the M2M token even when a requestor token is present', async () => {
+        const fetchSpy = mockFetchResponse(200);
+
+        await callTcApi({
+            toolId: 'some-tool',
+            url: 'https://api.example.com/v6/resources',
+            requestContext: requestContextWithToken('requestor-token'),
+            forceM2M: true,
+        });
+
+        const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-m2m-token');
+        expect(m2mTokenMock).toHaveBeenCalledOnce();
+    });
+
+    it('succeeds with M2M when forceM2M is true and no requestor token is available', async () => {
+        const fetchSpy = mockFetchResponse(200);
+
+        const response = await callTcApi({
+            toolId: 'not-listed-tool',
+            url: 'https://api.example.com/v6/resources',
+            requestContext: requestContextWithToken(undefined),
+            forceM2M: true,
+        });
+
+        expect(response.status).toBe(200);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-m2m-token');
+    });
+
+    it('does not use forceM2M when the option is omitted', async () => {
+        const fetchSpy = mockFetchResponse(200);
+
+        await callTcApi({
+            toolId: 'some-tool',
+            url: 'https://api.example.com/v6/thing',
+            requestContext: requestContextWithToken('requestor-token'),
+        });
+
+        const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer requestor-token');
+        expect(m2mTokenMock).not.toHaveBeenCalled();
+    });
+});
+
 describe('callTcApi — default headers', () => {
     it('sends Content-Type and app-version headers alongside Authorization', async () => {
         const fetchSpy = mockFetchResponse(200);

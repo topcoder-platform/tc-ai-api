@@ -142,6 +142,7 @@ Nothing in this codebase reads a roles or scope claim today. The only comparable
 | Tool | `challengeVectorQueryTool` | `challenge-vector-query` | Agent-callable (`challengeSearchAgent`); also called directly by `challenge-search` workflow steps |
 | Tool | `fetchChallengeTool` | `fetch-challenge-by-id` | Agent-callable (`challengeSearchAgent`) |
 | Tool | `fetchProjectTool` | `fetch-project-by-id` | Agent-callable (`challengeSearchAgent`) |
+| Tool | `fetchChallengeResourcesTool` | `fetch-challenge-resources` | Agent-callable (`challengeSearchAgent`) — **default-restricted (ADR 0005)**: `roles: ['administrator', 'Talent Manager']`, no `scopes` (M2M denied) |
 | Tool | `searchChallengesTool` | `search-challenges` | Workflow-internal only (`challenge-bulk-ingestion` step) — not agent-exposed |
 | Tool | `standardizedSkillsFuzzyTool` | `standardized-skills-fuzzy-match` | Workflow-internal only (`skill-extraction-workflow` step) |
 | Tool | `standardizedSkillsSemanticTool` | `standardized-skills-semantic-search` | Workflow-internal only (`skill-extraction-workflow` step) |
