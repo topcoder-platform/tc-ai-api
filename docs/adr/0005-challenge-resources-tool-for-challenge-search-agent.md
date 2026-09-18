@@ -1,6 +1,6 @@
 # ADR 0005 — Challenge resources tool (copilot / reviewers / registrants / managers / observers) for `challengeSearchAgent`
 
-- **Status:** Proposed
+- **Status:** **Accepted — implemented** (implemented on this branch as designed; see *Implementation notes* at the end)
 - **Date:** 2026-09-16
 - **Target branch:** `develop`
 - **Related:** [ADR 0001](0001-integrate-challenges-vector-rag.md) (D10 — server-side scope enforcement), [ADR 0002](0002-tc-api-requestor-token-with-m2m-fallback.md) (requestor-token-first `callTcApi`, per-tool M2M fallback registry — **extended by this ADR**, see Decision 4), [ADR 0004](0004-role-based-access-for-agents-workflows-tools.md) (agent/workflow/tool RBAC layer — this ADR's tool must be wired into it, not bypass it), `src/mastra/tools/challenge/fetch-challenge-tool.ts` and `src/mastra/tools/project/fetch-project-tool.ts` (direct structural precedent), `src/mastra/agents/challenge/challenge-search-agent.ts` (the agent this tool is added to), platform-ui `src/apps/customer-portal/src/customer-portal.routes.tsx` (the RBAC gate on the UI surface this tool is reached through)
@@ -410,3 +410,17 @@ export async function callTcApi({ toolId, url, init, requestContext, forceM2M }:
 - **Confirm `'Talent Manager'` is the literal string in a decoded member JWT's roles claim**, the same way ADR 0004 confirmed `'administrator'` — spot-check against a real Talent Manager's token during Phase 5, not assumed identical to platform-ui's `UserRole.talentManager` enum value just because the label matches.
 - **Partial dev spot-check done:** `GET https://api.topcoder-dev.com/v6/resource-roles` confirmed `200` unauthenticated (same shape as prod). `GET .../v6/resources?challengeId=...` against dev returned `404` using the *prod* challenge id from this ADR's examples — expected, since dev and prod don't share challenge data, not evidence of an auth difference — but the resources endpoint's dev behavior against a real *dev* challenge id was not independently confirmed. Use a real dev challenge id for this check in Phase 5's manual smoke test.
 - **No new Auth0 provisioning required** (unlike ADR 0004's `challengesRAG:admin`) — this policy only checks the existing member `roles` claim, and configures no `scopes`, so there's nothing to create on the M2M audience for this specific change.
+
+## Implementation notes (added at implementation time)
+
+Shipped on this branch matching Decisions 1–6 as designed, no code-level deviations found on review:
+
+- `src/config/challenge-resource-roles.config.ts` — the five-category registry, byte-for-byte as drafted in Decision 1.
+- `src/utils/tc-resource-roles-cache.ts` — fetch-once/memoize/don't-cache-failures for `GET /v6/resource-roles`, matching Decision 2, including the shared-in-flight-promise behavior for concurrent first callers.
+- `src/mastra/tools/challenge/fetch-challenge-resources-tool.ts` — the tool, wrapped in `withAccessPolicy(...)`, `roleId` winning over `role` when both are supplied, `truncated` derived from `X-Total` vs. the returned page size, and `shouldForceM2M` matching Decision 3's fail-toward-M2M default (forces M2M whenever the caller isn't positively `administrator`, including when no user is on the request context at all).
+- `src/utils/tc-api-client.ts` — `forceM2M` added as a purely additive `CallTcApiOptions` field (Decision 4); every existing call site that omits it is unaffected.
+- `src/mastra/agents/challenge/challenge-search-agent.ts` — tool wired into the `tools` map with the NLP → category instructions section (Decision 5).
+- `src/config/access-control.config.ts` — `tool['fetch-challenge-resources']` restricted to `roles: ['administrator', 'Talent Manager']`, no `scopes` (Decision 6); `docs/adr/0004-...md`'s Resource inventory table carries the matching row.
+- Test coverage lands where the Implementation plan called for it: `tc-resource-roles-cache.test.ts`, `tc-api-client.test.ts` (`forceM2M` + regression coverage for every other tool), and `fetch-challenge-resources-tool.test.ts` (category/roleId filtering, multi-role categories, `truncated`, `shouldForceM2M`, and `withAccessPolicy` denial).
+
+**Prerequisites above that still need a live-deployment check, not resolved by this implementation pass:** the authenticated-vs-unauthenticated `roleId` diff, the real dev-challenge-id smoke test, and the decoded-JWT spot-check for the literal `'Talent Manager'` claim string. None of these block merging the code — they're the Phase 5 manual smoke tests this ADR always scoped as a deploy-time step, not a design gap — but they haven't been run from this session and should be tracked as a follow-up before leaning on `forceM2M`/the restricted policy in production.
