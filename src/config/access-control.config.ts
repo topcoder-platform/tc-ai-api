@@ -59,6 +59,16 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
             mode: 'restricted',
             roles: ['administrator', 'Talent Manager'],
         },
+        // Was public — restricted per ADR 0007, since it now also surfaces a
+        // project's client/billing identity, not just project detail.
+        'fetch-project-by-id': {
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager'],
+        },
+        'fetch-client-projects': {
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager'],
+        },
     },
     route: {
         // The RAG index admin API (list/delete indexed challenges) mutates the
