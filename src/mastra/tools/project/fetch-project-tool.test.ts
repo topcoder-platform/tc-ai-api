@@ -15,9 +15,14 @@ vi.mock('../../../utils/auth/m2m.service', () => ({
 }));
 
 import { fetchProjectTool } from './fetch-project-tool';
+import { ToolAccessDeniedError } from '../../../utils/auth/access-control';
+
+const ROLES_CLAIM = 'https://topcoder.com/roles';
+const USERID_CLAIM = 'https://topcoder.com/userId';
 
 // Minimal context for execute — the tool uses context.mastra?.getLogger?.()
-// (optional) and context.requestContext (to read the requestor's token).
+// (optional) and context.requestContext (to read the requestor's token and,
+// since ADR 0007, the RBAC-checked user — must carry an allowed role).
 const minimalContext = {
     mastra: undefined,
     requestContext: {
@@ -25,7 +30,7 @@ const minimalContext = {
             key === MASTRA_AUTH_TOKEN_KEY
                 ? 'fake-requestor-token'
                 : key === 'user'
-                    ? { sub: 'test-user' }
+                    ? { sub: 'test-user', [USERID_CLAIM]: '88774433', [ROLES_CLAIM]: ['administrator'] }
                     : undefined,
     },
 } as any;
@@ -201,5 +206,152 @@ describe('fetchProjectTool — error handling', () => {
     it('throws with the HTTP status when the response is not ok', async () => {
         mockFetchError(404);
         await expect(executeTool({ projectId: '17423' })).rejects.toThrow(/404/);
+    });
+});
+
+/**
+ * Installs a global fetch spy that routes GET /v6/billing-accounts/:id
+ * separately from the project fetch/search call, so enrichment behavior can
+ * be tested independently of the base project lookup. See ADR 0007.
+ */
+function mockFetchByUrl(responses: {
+    projectOrSearch?: unknown;
+    projectStatus?: number;
+    billingAccount?: Record<string, unknown>;
+    billingAccountStatus?: number;
+    billingAccountThrows?: boolean;
+}) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.includes('/billing-accounts/')) {
+            if (responses.billingAccountThrows) {
+                throw new Error('network down');
+            }
+            return {
+                ok: responses.billingAccountStatus === undefined || responses.billingAccountStatus < 400,
+                status: responses.billingAccountStatus ?? 200,
+                json: async () => responses.billingAccount ?? {},
+            } as Response;
+        }
+        return {
+            ok: responses.projectStatus === undefined || responses.projectStatus < 400,
+            status: responses.projectStatus ?? 200,
+            json: async () => responses.projectOrSearch,
+        } as Response;
+    });
+}
+
+describe('fetchProjectTool — client enrichment', () => {
+    it('enriches the project with client and subcontractingEndCustomer from its billing account', async () => {
+        mockFetchByUrl({
+            projectOrSearch: baseApiResponse(),
+            billingAccount: {
+                id: 98765,
+                client: { id: '71000535', name: 'Wipro Limited (NA subcontracting)', codeName: 'CUS-275117' },
+                subcontractingEndCustomer: 'Ford India',
+            },
+        });
+
+        const result = await executeTool({ projectId: '17423' });
+
+        expect(result.project.client).toEqual({
+            id: '71000535',
+            name: 'Wipro Limited (NA subcontracting)',
+            codeName: 'CUS-275117',
+        });
+        expect(result.project.subcontractingEndCustomer).toBe('Ford India');
+    });
+
+    it('never escalates to M2M for the billing-account enrichment call', async () => {
+        const fetchSpy = mockFetchByUrl({
+            projectOrSearch: baseApiResponse(),
+            billingAccount: { id: 98765, client: { id: '1', name: 'X' } },
+        });
+
+        await executeTool({ projectId: '17423' });
+
+        const billingCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/billing-accounts/'));
+        const [, init] = billingCall as [string, RequestInit];
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-requestor-token');
+        expect(m2mTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('skips enrichment when the project has no billingAccountId', async () => {
+        const fetchSpy = mockFetchByUrl({ projectOrSearch: baseApiResponse({ billingAccountId: null }) });
+
+        const result = await executeTool({ projectId: '17423' });
+
+        expect(result.project.client).toBeUndefined();
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails soft (no error, no client) when the billing-account call is non-2xx', async () => {
+        mockFetchByUrl({ projectOrSearch: baseApiResponse(), billingAccountStatus: 404 });
+
+        const result = await executeTool({ projectId: '17423' });
+
+        expect(result.project.client).toBeUndefined();
+        expect(result.project.id).toBe('17423');
+    });
+
+    it('fails soft (no error, no client) when the billing-account call throws', async () => {
+        mockFetchByUrl({ projectOrSearch: baseApiResponse(), billingAccountThrows: true });
+
+        const result = await executeTool({ projectId: '17423' });
+
+        expect(result.project.client).toBeUndefined();
+        expect(result.project.id).toBe('17423');
+    });
+
+    it('enriches only the primary project, not the matches list', async () => {
+        const fetchSpy = mockFetchByUrl({
+            projectOrSearch: [
+                baseApiResponse({ id: 1, name: 'skproject1 archive', billingAccountId: 111 }),
+                baseApiResponse({ id: 2, name: 'SKProject1', billingAccountId: 222 }),
+            ],
+            billingAccount: { id: 222, client: { id: '9', name: 'Best Match Client' } },
+        });
+
+        const result = await executeTool({ projectId: 'skproject1' });
+
+        expect(result.project.id).toBe('2');
+        expect(result.project.client).toEqual({ id: '9', name: 'Best Match Client' });
+        expect(result.matches[0].client).toBeUndefined();
+
+        const billingCalls = fetchSpy.mock.calls.filter(([url]) => String(url).includes('/billing-accounts/'));
+        expect(billingCalls).toHaveLength(1);
+    });
+});
+
+describe('fetchProjectTool — RBAC', () => {
+    function contextForUser(user: Record<string, unknown> | undefined) {
+        return {
+            mastra: undefined,
+            requestContext: {
+                get: (key: string) => {
+                    if (key === MASTRA_AUTH_TOKEN_KEY) return 'fake-requestor-token';
+                    if (key === 'user') return user;
+                    return undefined;
+                },
+            },
+        } as any;
+    }
+
+    it('denies callers without administrator or Talent Manager (ADR 0007 — was public)', async () => {
+        mockFetchResponse(baseApiResponse());
+        const user = { sub: 'auth0|1', [USERID_CLAIM]: '1', [ROLES_CLAIM]: ['copilot'] };
+
+        await expect(
+            fetchProjectTool.execute?.({ projectId: '17423' } as any, contextForUser(user)),
+        ).rejects.toBeInstanceOf(ToolAccessDeniedError);
+    });
+
+    it('allows Talent Manager callers through RBAC', async () => {
+        mockFetchResponse(baseApiResponse());
+        const user = { sub: 'auth0|1', [USERID_CLAIM]: '1', [ROLES_CLAIM]: ['Talent Manager'] };
+
+        await expect(
+            fetchProjectTool.execute?.({ projectId: '17423' } as any, contextForUser(user)),
+        ).resolves.toMatchObject({ resolvedBy: 'id' });
     });
 });

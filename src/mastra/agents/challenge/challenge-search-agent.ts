@@ -5,6 +5,7 @@ import { Memory } from '@mastra/memory';
 import { fetchProjectTool } from '../../tools/project/fetch-project-tool';
 import { fetchChallengeTool } from '../../tools/challenge/fetch-challenge-tool';
 import { fetchChallengeResourcesTool } from '../../tools/challenge/fetch-challenge-resources-tool';
+import { fetchClientProjectsTool } from '../../tools/client/fetch-client-projects-tool';
 import { resolveTcDomain } from '../../../utils/auth/tc-domain';
 
 const PROVIDER_NAME = process.env.CHALLENGE_SEARCH_AI_PROVIDER || 'AWSBedrock';
@@ -72,10 +73,16 @@ How to search
 When the request is unclear
 If you can't tell what the user is actually looking for — too broad ("show me some challenges"), ambiguous between a few readings, or missing something you'd need to search well — ask a short, specific question before searching rather than guessing. A reasonable first attempt at a broad query is fine when that's faster than asking, but say what you searched for and invite the user to redirect you.
 
+Finding a client's work across projects
+When the user asks about a *client or customer* by name rather than a specific project — "find me all the work done for client XYZ", "show me everything we've delivered for customer ABC", "what have we done for Acme" — use the "fetch-client-projects" tool instead of guessing a project name. Pass "name" with the client's name as given, or "codeName" if the user gives something that looks like a client code (e.g. "CUS-173826").
+- Present the result grouped by client → billing account → project, linking each project the same way projects are linked below.
+- If any "...Truncated" flag comes back true, say there may be more than what's shown rather than presenting the list as exhaustive.
+- Don't pick a project for the user — ask which one they want to explore, then resolve it with "fetch-project-by-id" and use "challenge-vector-query"'s "projectId" filter (see "Keep projects separate" below) to look at its work.
+
 Keep projects separate
 Every result carries a "projectId" in its metadata. Challenges from different projects are different engagements for different customers — the work, context, and skills involved can be completely unrelated even when the text looks similar. Never merge or summarize results across projects as if they were one pool:
 - When results span more than one project, group your answer by project rather than presenting one flat list.
-- Use the "fetch-project-by-id" tool to resolve a projectId to its name when that would make the grouping clearer (e.g. labeling "Project: Acme Storefront Redesign" instead of a bare id) — only for projects that actually showed up in results, not speculatively.
+- Use the "fetch-project-by-id" tool to resolve a projectId to its name when that would make the grouping clearer (e.g. labeling "Project: Acme Storefront Redesign" instead of a bare id) — only for projects that actually showed up in results, not speculatively. It also returns the project's "client" and "subcontractingEndCustomer" when its billing account has them — use those for "who's the client on this project" style questions, and treat their absence as "not visible/not set", not as an error.
 - Every time you mention a project — by its bare id or by its resolved name/title — link it, the same way challenge titles are linked (see "Answering" below): \`[Acme Storefront Redesign](${PROJECT_DETAILS_BASE_URL}/17423)\` or, if you haven't resolved a name, \`[17423](${PROJECT_DETAILS_BASE_URL}/17423)\`. Never mention a project as bare, unlinked text.
 - If the user's question only makes sense answered within a single project's scope (e.g. "what's already been done here"), make sure you aren't quietly blending in matches from other projects.
 
@@ -110,6 +117,7 @@ Whenever you mention a specific member by handle — most commonly a challenge's
         fetchProjectTool,
         fetchChallengeTool,
         fetchChallengeResourcesTool,
+        fetchClientProjectsTool,
     },
     // Opts this agent out of the Mastra-instance-level `aiWorkspace`
     // (src/mastra/workspaces/ai.workspace.ts), which otherwise gets injected
