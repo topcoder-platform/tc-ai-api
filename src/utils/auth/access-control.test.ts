@@ -162,6 +162,18 @@ describe('checkAccess', () => {
         ).toBe(true);
     });
 
+    it('restricted matches roles case-insensitively', () => {
+        expect(
+            checkAccess(toAuthenticatedCaller(memberUser(['Administrator'])), restricted),
+        ).toBe(true);
+        expect(
+            checkAccess(
+                toAuthenticatedCaller(memberUser(['talent manager'])),
+                { mode: 'restricted', roles: ['Talent Manager'] },
+            ),
+        ).toBe(true);
+    });
+
     it('restricted denies a member without a matching role', () => {
         expect(checkAccess(toAuthenticatedCaller(memberUser(['copilot'])), restricted)).toBe(false);
     });

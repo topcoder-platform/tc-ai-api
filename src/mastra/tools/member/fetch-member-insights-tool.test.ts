@@ -526,14 +526,17 @@ describe('fetchMemberInsightsTool — shouldForceM2M', () => {
         expect(m2mTokenMock).not.toHaveBeenCalled();
     });
 
-    it('uses M2M token for Talent Manager without administrator', async () => {
+    it('forwards requestor token for Talent Manager (member-api sensitive-data role)', async () => {
         const fetchSpy = mockMembersApi();
         await executeTool({ handle: HANDLE }, memberUser(['Talent Manager']));
         const profileCall = fetchSpy.mock.calls.find(([url]) =>
             String(url).match(/\/members\/Ghostar(\?|$)/),
         );
         const [, init] = profileCall as [string, RequestInit];
-        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-m2m-token');
+        expect((init.headers as Record<string, string>).Authorization).toBe(
+            'Bearer fake-requestor-token',
+        );
+        expect(m2mTokenMock).not.toHaveBeenCalled();
     });
 });
 

@@ -1,7 +1,11 @@
 // Members API: GET /v6/members/* — profile, stats, special roles, optional history.
 // See docs/adr/0006-member-insights-tool-for-challenge-search-agent.md.
 import { createTool } from '@mastra/core/tools';
-import { withAccessPolicy, toAuthenticatedCaller } from '../../../utils/auth/access-control';
+import {
+    withAccessPolicy,
+    toAuthenticatedCaller,
+    callerHasAnyRole,
+} from '../../../utils/auth/access-control';
 import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/request-context';
 import { callTcApi } from '../../../utils/tc-api-client';
@@ -9,6 +13,7 @@ import { callTcApi } from '../../../utils/tc-api-client';
 const TOOL_ID = 'fetch-member-insights';
 const MEMBERS_BASE_URL = `${process.env.TC_API_BASE}/v6/members`;
 const ADMIN_ROLE = 'administrator';
+const TALENT_MANAGER_ROLE = 'Talent Manager';
 const HISTORY_CAP = 20;
 const ROLE_CHALLENGES_CAP = 20;
 
@@ -242,12 +247,19 @@ export const fetchMemberInsightsTool = withAccessPolicy(
     }),
 );
 
+/**
+ * Forward the requestor JWT for administrators and Talent Managers. Member-api
+ * treats both as privileged for profile/stats (`SENSITIVE_DATA_ROLES` / admin).
+ * Forcing service M2M for Talent Manager breaks when tc-ai-api M2M credentials
+ * are unset or lack `read:user_profiles` — unlike Resources API (ADR 0005).
+ */
 function shouldForceM2M(requestContext: RequestContext | undefined): boolean {
     const user = requestContext?.get('user') as Record<string, unknown> | undefined;
     if (!user) {
         return true;
     }
-    return !toAuthenticatedCaller(user).roles.includes(ADMIN_ROLE);
+    const { roles } = toAuthenticatedCaller(user);
+    return !callerHasAnyRole(roles, [ADMIN_ROLE, TALENT_MANAGER_ROLE]);
 }
 
 function toIso(value: unknown): string | undefined {
