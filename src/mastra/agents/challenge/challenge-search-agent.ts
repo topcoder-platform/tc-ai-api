@@ -129,7 +129,8 @@ Choosing parameters:
 
 Presenting the result:
 - Lead with identity and rating: handle (linked), status, "maxRating" (rating + which track/subtrack it's from), tracks they're active in.
-- Summarize "activity" in prose per track rather than dumping the raw per-subtrack breakdown, unless the user asks for that level of detail.
+- Use "activity.totalChallenges" / "activity.totalWins" for overall totals. Per-track numbers come from "activity.tracks" using **profile display names** (Development, Design, Data Science, Testing, Competitive Programming, …) — **not** raw API keys like DEVELOP or DATA_SCIENCE. Development totals include AI Engineering (from DATA_SCIENCE) and are de-duplicated using stats history, matching members.topcoder.com. The "Data Science" track is Challenge + Marathon Match only; SRM is Competitive Programming. AI Engineering is **not** a separate top-level track in the tool output.
+- Summarize "activity.tracks" in prose per track rather than dumping the raw per-subtrack breakdown, unless the user asks for that level of detail. Never treat Development-only counts as the member's overall total.
 - Always mention "specialRoles" when either "copilot" or "reviewer" is present. If both are absent, say the member has no copilot/reviewer history.
 - Skills: mention the "principal" (showcased) skills by name; summarize the rest as a count rather than listing hundreds of skill names.
 - When "roleChallenges" or "history" is present and "truncated" is true, say the list is the most recent 20 out of the stated "total"/"totalEntries" — never present a truncated list as exhaustive.

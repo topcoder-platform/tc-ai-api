@@ -96,6 +96,11 @@ interface MockOptions {
     history?: unknown;
 }
 
+/** Base tool call always fetches GET /members/{handle}/stats/history (may be []). */
+function mockEmptyStatsHistoryResponse(): Response {
+    return { ok: true, status: 200, json: async () => [] } as Response;
+}
+
 function mockMembersApi(options: MockOptions = {}) {
     return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
         const url = String(input);
@@ -153,42 +158,46 @@ function mockMembersApi(options: MockOptions = {}) {
         }
 
         if (url.includes('/stats/history')) {
+            const historyBody = options.history ?? {
+                userId: USER_ID,
+                groupId: 10,
+                handle: HANDLE,
+                handleLower: HANDLE.toLowerCase(),
+                DEVELOP: {
+                    subTracks: [
+                        {
+                            id: 'Task',
+                            name: 'Task',
+                            history: Array.from({ length: 15 }, (_, i) => ({
+                                challengeId: `d-${i}`,
+                                challengeName: `Dev ${i}`,
+                                placement: 1,
+                                ratingDate: `2024-01-${String(i + 1).padStart(2, '0')}`,
+                                mostRecent: i === 14,
+                            })),
+                        },
+                    ],
+                },
+                DESIGN: {
+                    subTracks: [
+                        {
+                            id: 'Logo',
+                            name: 'Logo',
+                            history: Array.from({ length: 10 }, (_, i) => ({
+                                challengeId: `ds-${i}`,
+                                challengeName: `Design ${i}`,
+                                placement: 2,
+                                ratingDate: `2023-12-${String(i + 1).padStart(2, '0')}`,
+                                mostRecent: false,
+                            })),
+                        },
+                    ],
+                },
+            };
             return {
                 ok: true,
                 status: 200,
-                json: async () =>
-                    options.history ?? {
-                        DEVELOP: {
-                            subTracks: [
-                                {
-                                    id: 'Task',
-                                    name: 'Task',
-                                    history: Array.from({ length: 15 }, (_, i) => ({
-                                        challengeId: `d-${i}`,
-                                        challengeName: `Dev ${i}`,
-                                        placement: 1,
-                                        ratingDate: `2024-01-${String(i + 1).padStart(2, '0')}`,
-                                        mostRecent: i === 14,
-                                    })),
-                                },
-                            ],
-                        },
-                        DESIGN: {
-                            subTracks: [
-                                {
-                                    id: 'Logo',
-                                    name: 'Logo',
-                                    history: Array.from({ length: 10 }, (_, i) => ({
-                                        challengeId: `ds-${i}`,
-                                        challengeName: `Design ${i}`,
-                                        placement: 2,
-                                        ratingDate: `2023-12-${String(i + 1).padStart(2, '0')}`,
-                                        mostRecent: false,
-                                    })),
-                                },
-                            ],
-                        },
-                    },
+                json: async () => (Array.isArray(historyBody) ? historyBody : [historyBody]),
             } as Response;
         }
 
@@ -304,6 +313,9 @@ describe('fetchMemberInsightsTool — base call', () => {
         const fetchSpy = mockMembersApi();
         fetchSpy.mockImplementation(async (input) => {
             const url = String(input);
+            if (url.includes('/stats/history')) {
+                return mockEmptyStatsHistoryResponse();
+            }
             if (url.includes('/stats') && !url.includes('/roles') && !url.includes('/history')) {
                 return {
                     ok: true,
@@ -322,13 +334,16 @@ describe('fetchMemberInsightsTool — base call', () => {
 
         const result = await executeTool({ handle: HANDLE });
         expect(result.activity.totalChallenges).toBe(100);
-        expect(result.activity.tracks.DEVELOP).toBeDefined();
+        expect(result.activity.tracks.Development).toBeDefined();
     });
 
     it('omits null profile fields so output schema validation passes', async () => {
         const fetchSpy = mockMembersApi();
         fetchSpy.mockImplementation(async (input) => {
             const url = String(input);
+            if (url.includes('/stats/history')) {
+                return mockEmptyStatsHistoryResponse();
+            }
             if (url.includes('/members/') && !url.includes('/stats')) {
                 return {
                     ok: true,
@@ -360,6 +375,9 @@ describe('fetchMemberInsightsTool — base call', () => {
         const fetchSpy = mockMembersApi();
         fetchSpy.mockImplementation(async (input) => {
             const url = String(input);
+            if (url.includes('/stats/history')) {
+                return mockEmptyStatsHistoryResponse();
+            }
             if (url.includes('/stats') && !url.includes('/roles') && !url.includes('/history')) {
                 return {
                     ok: false,
@@ -406,7 +424,8 @@ describe('fetchMemberInsightsTool — base call', () => {
         expect(result.member.email).toBe('ghost@example.com');
         expect(result.member.phones?.[0].number).toBe('+610479187242');
         expect(result.activity.totalChallenges).toBe(100);
-        expect(result.activity.tracks.DATA_SCIENCE.subTracks).toHaveLength(2);
+        expect(result.activity.tracks['Data Science']!.subTracks).toHaveLength(1);
+        expect(result.activity.tracks['Competitive Programming']!.subTracks).toHaveLength(1);
         expect(result.specialRoles.copilot?.challengeCount).toBe(25);
     });
 
@@ -465,13 +484,16 @@ describe('fetchMemberInsightsTool — role challenges', () => {
         const fetchSpy = mockMembersApi();
         fetchSpy.mockImplementation(async (input) => {
             const url = String(input);
+            if (url.includes('/stats/history')) {
+                return mockEmptyStatsHistoryResponse();
+            }
             if (url.includes('/stats/roles') && !url.includes('/challenges')) {
                 return { ok: true, status: 200, json: async () => ({ reviewer: { challengeCount: 0 } }) } as Response;
             }
             if (url.includes('/stats/roles/reviewer/challenges')) {
                 throw new Error('role challenges should not be called');
             }
-            if (url.includes('/stats') && !url.includes('/roles')) {
+            if (url.includes('/stats') && !url.includes('/roles') && !url.includes('/history')) {
                 return { ok: true, status: 200, json: async () => MOCK_STATS } as Response;
             }
             if (url.includes('/members/') && !url.includes('/stats')) {
@@ -490,6 +512,59 @@ describe('fetchMemberInsightsTool — role challenges', () => {
         expect(
             fetchSpy.mock.calls.some(([url]) => String(url).includes('/stats/roles/reviewer/challenges')),
         ).toBe(false);
+    });
+});
+
+describe('mergeAndCapHistory', () => {
+    it('unwraps GET /stats/history array envelope (same shape as /stats)', () => {
+        const merged = mergeAndCapHistory([
+            {
+                userId: 88782573,
+                groupId: 10,
+                handle: 'disna56',
+                DEVELOP: {
+                    subTracks: [
+                        {
+                            id: 'Challenge',
+                            name: 'Challenge',
+                            history: [
+                                {
+                                    challengeId: '1c22a8c4-2899-4f4d-b2d5-828f8941b6c7',
+                                    challengeName: 'No Ai dev ch to check issues',
+                                    ratingDate: 1789982801106,
+                                    mostRecent: true,
+                                },
+                                {
+                                    challengeId: '116ee698-dbcc-432d-a75c-92769d55be03',
+                                    challengeName: 'Winner issue check AI ch',
+                                    placement: 1,
+                                    ratingDate: 1789981961428,
+                                },
+                            ],
+                        },
+                    ],
+                },
+                DATA_SCIENCE: {
+                    'AI Engineering': {
+                        history: [
+                            {
+                                challengeId: 'd84d7a7d-793f-4fd2-ae5e-04a7fbe8d5de',
+                                challengeName: 'Season 2 AIEL',
+                                placement: 1,
+                                ratingDate: 1787204759558,
+                            },
+                        ],
+                    },
+                },
+            },
+        ]);
+
+        expect(merged!.totalEntries).toBe(3);
+        expect(merged!.entries.map((e) => e.subTrack).sort()).toEqual([
+            'AI Engineering',
+            'Challenge',
+            'Challenge',
+        ]);
     });
 });
 

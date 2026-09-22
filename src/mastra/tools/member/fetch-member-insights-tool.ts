@@ -9,6 +9,8 @@ import {
 import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/request-context';
 import { callTcApi } from '../../../utils/tc-api-client';
+import { mapProfileAlignedActivityTracks } from './member-stats-profile-mapper';
+import { unwrapStatsHistoryPayload, type StatsHistoryPayload } from './member-stats-track-summary';
 
 const TOOL_ID = 'fetch-member-insights';
 const MEMBERS_BASE_URL = `${process.env.TC_API_BASE}/v6/members`;
@@ -86,8 +88,14 @@ const memberInsightsOutputSchema = z.object({
         }),
     }),
     activity: z.object({
+        /** Top-level totals from the stats API (all tracks combined). */
         totalChallenges: z.number(),
         totalWins: z.number(),
+        /**
+         * Per-track breakdown aligned with the member profile page (Development, Data Science, …),
+         * not raw API keys (DEVELOP, DATA_SCIENCE). Data Science here is Challenge + Marathon only;
+         * AI Engineering / AI appear as separate tracks when present.
+         */
         tracks: z.record(
             z.string(),
             z.object({
@@ -412,18 +420,14 @@ export function unwrapMemberStatsPayload(stats: unknown): Record<string, unknown
     return {};
 }
 
-function mapActivity(stats: Record<string, unknown>): MemberInsights['activity'] {
-    const tracks: MemberInsights['activity']['tracks'] = {};
-    for (const [key, value] of Object.entries(stats)) {
-        if (!TRACK_STAT_KEYS.has(key) || typeof value !== 'object' || value == null) {
-            continue;
-        }
-        tracks[key] = normalizeTrack(value as Record<string, unknown>);
-    }
+function mapActivity(
+    stats: Record<string, unknown>,
+    statsHistory?: StatsHistoryPayload,
+): MemberInsights['activity'] {
     return {
         totalChallenges: Number(stats.challenges) || 0,
         totalWins: Number(stats.wins) || 0,
-        tracks,
+        tracks: mapProfileAlignedActivityTracks(stats, statsHistory),
     };
 }
 
@@ -515,6 +519,13 @@ async function readMemberStatsJson(response: Response, handle: string): Promise<
     return readJsonOrThrow(response, `stats for ${handle}`);
 }
 
+async function readMemberStatsHistoryJson(response: Response, handle: string): Promise<unknown> {
+    if (response.status === 404) {
+        return [];
+    }
+    return readJsonOrThrow(response, `stats history for ${handle}`);
+}
+
 export async function resolveMemberHandle(
     input: { handle?: string; userId?: string | number },
     requestContext: RequestContext | undefined,
@@ -551,9 +562,13 @@ export function mergeAndCapHistory(
     trackIdFilter?: string,
 ): MemberInsights['history'] {
     const rows: HistoryRow[] = [];
+    const unwrapped = unwrapStatsHistoryPayload(historyPayload);
 
-    if (historyPayload && typeof historyPayload === 'object' && !Array.isArray(historyPayload)) {
-        for (const [trackKey, trackNode] of Object.entries(historyPayload as Record<string, unknown>)) {
+    if (unwrapped && typeof unwrapped === 'object') {
+        for (const [trackKey, trackNode] of Object.entries(unwrapped)) {
+            if (['userId', 'groupId', 'handle', 'handleLower'].includes(trackKey)) {
+                continue;
+            }
             if (!TRACK_STAT_KEYS.has(trackKey)) {
                 continue;
             }
@@ -596,7 +611,7 @@ export function mergeAndCapHistory(
                         track: trackKey,
                         subTrack: String(st.name ?? st.id ?? ''),
                         placement: Number(h.placement) || 0,
-                        ratingDate: String(h.ratingDate ?? h.eventDate ?? h.date ?? ''),
+                        ratingDate: toIso(h.ratingDate ?? h.eventDate ?? h.date) ?? '',
                         mostRecent: Boolean(h.mostRecent),
                     });
                 }
@@ -666,17 +681,20 @@ async function fetchMemberInsights(
     const handle = await resolveMemberHandle(input, requestContext, forceM2M);
     const encodedHandle = encodeURIComponent(handle);
 
-    const [profileRes, statsRes, rolesRes] = await Promise.all([
+    const [profileRes, statsRes, rolesRes, statsHistoryRes] = await Promise.all([
         apiGet({ url: `${MEMBERS_BASE_URL}/${encodedHandle}`, requestContext, forceM2M }),
         apiGet({ url: `${MEMBERS_BASE_URL}/${encodedHandle}/stats`, requestContext, forceM2M }),
         apiGet({ url: `${MEMBERS_BASE_URL}/${encodedHandle}/stats/roles`, requestContext, forceM2M }),
+        apiGet({ url: `${MEMBERS_BASE_URL}/${encodedHandle}/stats/history`, requestContext, forceM2M }),
     ]);
 
-    const [profile, stats, rolesRaw] = await Promise.all([
+    const [profile, stats, rolesRaw, statsHistoryRaw] = await Promise.all([
         readJsonOrThrow(profileRes, `handle ${handle}`),
         readMemberStatsJson(statsRes, handle),
         readJsonOrThrow(rolesRes, `special roles for ${handle}`),
+        readMemberStatsHistoryJson(statsHistoryRes, handle),
     ]);
+    const statsHistoryPayload = unwrapStatsHistoryPayload(statsHistoryRaw);
 
     const specialRoles = mapSpecialRoles(rolesRaw as Record<string, { challengeCount?: number }>);
 
@@ -691,7 +709,7 @@ async function fetchMemberInsights(
 
     const result: MemberInsights = {
         member,
-        activity: mapActivity(statsRecord),
+        activity: mapActivity(statsRecord, statsHistoryPayload),
         specialRoles,
     };
 
@@ -719,12 +737,12 @@ async function fetchMemberInsights(
     }
 
     if (input.includeHistory) {
-        let historyUrl = `${MEMBERS_BASE_URL}/${encodedHandle}/stats/history`;
+        let historyPayload: unknown = statsHistoryRaw;
         if (input.trackId) {
-            historyUrl += `?trackId=${encodeURIComponent(input.trackId)}`;
+            const historyUrl = `${MEMBERS_BASE_URL}/${encodedHandle}/stats/history?trackId=${encodeURIComponent(input.trackId)}`;
+            const historyRes = await apiGet({ url: historyUrl, requestContext, forceM2M });
+            historyPayload = await readMemberStatsHistoryJson(historyRes, handle);
         }
-        const historyRes = await apiGet({ url: historyUrl, requestContext, forceM2M });
-        const historyPayload = await readJsonOrThrow(historyRes, `history for ${handle}`);
         result.history = mergeAndCapHistory(historyPayload, input.trackId);
     }
 
