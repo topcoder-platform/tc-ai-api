@@ -17,6 +17,16 @@ export interface CallTcApiOptions {
     /** `Authorization` and default headers are added by this client — do not set them here. */
     init?: RequestInit;
     requestContext: RequestContext | undefined;
+    /**
+     * When true, skips requestor-token forwarding entirely and always uses
+     * tc-ai-api's own service M2M token — regardless of TOOL_M2M_FALLBACK_CONFIG
+     * and regardless of whether a requestor token is present. For a caller a
+     * tool's own RBAC policy allows through, but whose own token may not carry
+     * the TC-platform-level visibility the call needs (see ADR 0005). Distinct
+     * from the existing fallback-on-401/403 behavior below, which is reactive;
+     * this is a proactive, tool-decided override.
+     */
+    forceM2M?: boolean;
 }
 
 /**
@@ -29,7 +39,17 @@ export interface CallTcApiOptions {
  *
  * See docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md.
  */
-export async function callTcApi({ toolId, url, init, requestContext }: CallTcApiOptions): Promise<Response> {
+export async function callTcApi({
+    toolId,
+    url,
+    init,
+    requestContext,
+    forceM2M,
+}: CallTcApiOptions): Promise<Response> {
+    if (forceM2M) {
+        return fetchWithToken(url, init, await m2mService.getM2MToken());
+    }
+
     const requestorToken = requestContext?.get(MASTRA_AUTH_TOKEN_KEY) as string | undefined;
     const fallbackEnabled = TOOL_M2M_FALLBACK_CONFIG[toolId] === true;
 

@@ -285,13 +285,18 @@ Authentication answers *"is this a valid caller?"*; access control answers *"may
 
 Because Mastra's `getAgentById`/`getWorkflowById` fall back to the registry key, **both spellings reach the same resource over HTTP** — `/v6/ai/workflows/challenge-ingestion/start` and `/v6/ai/workflows/challengeIngestionWorkflow/start` are the same workflow. `TARGET_ID_ALIASES` maps every differing registry key to its canonical `.id`, and `resolveAccessPolicy()` canonicalises through it before any lookup, so a restriction can't be bypassed by addressing the target the other way. **Adding a restricted policy for a resource whose registry key differs from its `.id` means adding its alias entry too**; the unit tests assert both spellings resolve identically.
 
-**Shipped defaults.** Only two targets are restricted out of the box — both rewrite the shared challenge vector index:
+**Shipped defaults.** Five targets are restricted out of the box:
 
 ```
-challenge-ingestion        roles: [administrator]  scopes: [challengesRAG:admin]   (workflow)
-challenge-bulk-ingestion   roles: [administrator]  scopes: [challengesRAG:admin]   (workflow)
-rag-challenges             roles: [administrator]  scopes: [challengesRAG:admin]   (route)
+challenge-ingestion        roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
+challenge-bulk-ingestion   roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
+rag-challenges             roles: [administrator]                  scopes: [challengesRAG:admin]   (route)
+fetch-challenge-resources  roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
+fetch-project-by-id        roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
+fetch-client-projects      roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 ```
+
+The first three all rewrite the shared challenge vector index. The last three (`fetch-challenge-resources`, `fetch-project-by-id`, `fetch-client-projects`) are different: they're `restricted` to match the RBAC platform-ui already enforces one layer up on the only UI surface that reaches them, not because the underlying data is sensitive to write. `fetch-project-by-id` was `public` before [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md) — it's now restricted because it also surfaces a project's client/billing identity, not just project detail.
 
 Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
 
@@ -330,16 +335,19 @@ Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authoriz
 1. Reads the requestor's own token from `context.requestContext.get(MASTRA_AUTH_TOKEN_KEY)` — the same value the core auth flow set (see above). This works uniformly for a TC member JWT or an M2M JWT; the client makes no distinction between token types, it just forwards whatever authenticated the caller of `tc-ai-api`.
 2. Calls the Topcoder platform endpoint with `Authorization: Bearer <requestor token>`.
 3. Optionally, **only for a tool id explicitly listed as `true`** in `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`, off/empty by default), retries **once** with tc-ai-api's own service M2M token (`M2MService.getM2MToken()`) if the requestor-token attempt came back `401`/`403`. Every fallback attempt is logged at `warn` level with the tool id and status code.
+4. A tool can instead force the M2M token proactively, bypassing the requestor-token attempt entirely, by passing `forceM2M: true` to `callTcApi()` — added in ADR 0005 for `fetch-challenge-resources`, whose upstream API silently degrades by credential rather than erroring, so there's no `401`/`403` for the reactive fallback in point 3 to react to. `forceM2M` defaults to falsy; every other tool below omits it and is unaffected.
 
 | Tool | Auth |
 | --- | --- |
 | `fetch-challenge-by-id` | Requestor token only — no fallback configured |
 | `search-challenges` | Requestor token only — no fallback configured |
-| `fetch-project-by-id` | Requestor token only — no fallback configured |
+| `fetch-project-by-id` | Requestor token only — no fallback configured, and **never** `forceM2M` for any caller, including its billing-account client enrichment call (ADR 0007) |
+| `fetch-challenge-resources` | Requestor token when the caller is `administrator`; tc-ai-api's own M2M token (`forceM2M`) for any other RBAC-allowed caller (e.g. `Talent Manager`) — see [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) |
+| `fetch-client-projects` | Same `forceM2M` shape as `fetch-challenge-resources`: requestor token only for `administrator`, tc-ai-api's own M2M token for any other RBAC-allowed caller — see [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md) |
 | `standardized-skills-fuzzy-match` | Unauthenticated (public endpoint) — unaffected by this mechanism |
 | `standardized-skills-semantic-search` | Unauthenticated (public endpoint) — unaffected by this mechanism |
 
-`TOOL_M2M_FALLBACK_CONFIG` currently has **no entries** — every tool above uses only whichever token the requestor authenticated with. The fallback path exists as reusable infrastructure for a future tool that needs it (see ADR 0002's "Resolution of open questions" for why the three existing Challenge/Project tools deliberately ship without a safety net: correctness of authorization was prioritized over availability).
+`TOOL_M2M_FALLBACK_CONFIG` currently has **no entries** — none of the tools above use the reactive fallback-on-401/403 path. The fallback path exists as reusable infrastructure for a future tool that needs it (see ADR 0002's "Resolution of open questions" for why the three original Challenge/Project tools deliberately ship without a safety net: correctness of authorization was prioritized over availability). `fetch-challenge-resources` and `fetch-client-projects` both use the proactive `forceM2M` branch instead (ADR 0005 / ADR 0007), driven by the caller's RBAC-checked role rather than an upstream error response — `fetch-project-by-id` deliberately does **not**, even though it's restricted to the same two roles (ADR 0007: correctness/least-privilege over completeness for a single-project lookup).
 
 ---
 
@@ -390,7 +398,7 @@ Four agents are registered in `src/mastra/index.ts`, all built via the shared `c
 | --- | --- | --- | --- | --- |
 | `skillsMatchingAgent` | `skillsMatchingAgent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | PostgreSQL-backed | — (workflow calls skill tools directly) |
 | `challengeParserAgent` | `challenge-parser-agent` | AWSBedrock `us.anthropic.claude-sonnet-5` | — | — (structured-output extractor) |
-| `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool` |
+| `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
 | `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | — | — (structured-output rewriter) |
 
 Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_MODEL_ID` env vars (e.g. `SKILLS_EXTRACTOR_AI_PROVIDER`, `CHALLENGE_PARSER_AI_PROVIDER`, `CHALLENGE_SEARCH_AI_PROVIDER`, `JD_REWRITER_AI_PROVIDER`).
@@ -435,9 +443,11 @@ Reads a full challenge specification (public + private description, skills, meta
 | **ID**     | `challenge-search-agent`                                       |
 | **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5')` by default |
 | **Memory** | In-memory only (`Memory({ options: { lastMessages: 10 } })`) — no persistent storage backend, unlike `skillsMatchingAgent` |
-| **Tools**  | `challengeVectorQueryTool`, `fetchProjectTool`                 |
+| **Tools**  | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
 
 Answers natural-language questions about indexed Topcoder challenges. Infers `skills`/`type`/`track`/`groups` filters from the query and calls `challenge-vector-query`; never infers `projectId` from query text (it must arrive from the caller's context — see [Challenges Vector RAG](#challenges-vector-rag)). Grounds every answer solely in tool results. For callers needing raw ranked results with no LLM latency/cost/non-determinism, the `challenge-search` workflow shares the same underlying tool.
+
+Can also answer "who's on this challenge" questions — copilot, reviewers, registrants, managers, observers — via `fetchChallengeResourcesTool` (ADR 0005), and "find me all the work done for client X" questions — walking clients → billing accounts → projects — via `fetchClientProjectsTool` (ADR 0007). Both tools, plus `fetchProjectTool` (also restricted since ADR 0007), are `restricted` (see [Access control](#access-control)): only callers with the `administrator` or `Talent Manager` role can invoke them, matching the RBAC platform-ui already enforces on the customer-portal page that hosts this agent.
 
 ### `jdRewriterAgent`
 
@@ -454,7 +464,7 @@ Rewrites a raw/rough job description into Topcoder's canonical structured format
 
 ## Tools
 
-Six tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zod input/output schema. The three Challenge/Project tools call `TC_API_BASE` authorized as the requesting user (see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools)); the two Skills tools call unauthenticated public endpoints.
+Eight tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zod input/output schema. The five Challenge/Project/Client tools call `TC_API_BASE` authorized as the requesting user or tc-ai-api's own M2M credential depending on the tool (see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools)); the two Skills tools call unauthenticated public endpoints.
 
 | Tool ID | Purpose | Called by |
 | --- | --- | --- |
@@ -463,7 +473,9 @@ Six tools are defined under `src/mastra/tools/`, each a `createTool()` with a Zo
 | `fetch-challenge-by-id` | Fetch one challenge by UUID | `challenge-context-workflow`, `challenge-ingestion-workflow` |
 | `search-challenges` | Paginated/filtered challenge search | `challenge-bulk-ingestion-workflow` |
 | `challenge-vector-query` | Semantic + metadata-filtered vector search | `challengeSearchAgent`, `challenge-search` workflow |
-| `fetch-project-by-id` | Resolve a `projectId` reference to project detail | `challengeSearchAgent` (on-demand enrichment) |
+| `fetch-project-by-id` | Resolve a `projectId` reference to project detail, plus its client/subcontracting end customer | `challengeSearchAgent` (on-demand enrichment) — **restricted**: `administrator`/`Talent Manager` only (ADR 0007) |
+| `fetch-challenge-resources` | List a challenge's resources (copilot/reviewers/registrants/managers/observers) | `challengeSearchAgent` — **restricted**: `administrator`/`Talent Manager` only (ADR 0005) |
+| `fetch-client-projects` | Find a client's delivered work: client search → its billing accounts → their projects | `challengeSearchAgent` — **restricted**: `administrator`/`Talent Manager` only (ADR 0007) |
 
 ### `standardized-skills-fuzzy-match`
 
@@ -524,11 +536,36 @@ The shared retrieval primitive behind both the search agent and the deterministi
 | Property   | Value                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | **ID**     | `fetch-project-by-id`                                                |
-| **API**    | `GET {TC_API_BASE}/v6/projects/:projectId` (requestor token)         |
+| **API**    | `GET {TC_API_BASE}/v6/projects/:projectId` (requestor token), plus `GET {TC_API_BASE}/v6/billing-accounts/:id` (requestor token — **never** `forceM2M`) when the project has a `billingAccountId` |
 | **Input**  | `{ projectId: string, fields?: string }`                            |
-| **Output** | `{ project: { id, name?, status?, type?, billingAccountId?, directProjectId?, techStack? } }` |
+| **Output** | `{ project: { id, name?, status?, type?, billingAccountId?, directProjectId?, techStack?, client?: { id, name?, codeName? }, subcontractingEndCustomer? } }` |
+| **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) — was `public` before ADR 0007 |
 
-Retrieval-time enrichment only (not used by ingestion): resolves the opaque `projectId` a challenge-search hit carries into project name/status/tech stack, under the caller's own authorization.
+Retrieval-time enrichment only (not used by ingestion): resolves the opaque `projectId` a challenge-search hit carries into project name/status/tech stack, under the caller's own authorization. Since [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md), also enriches the result with the project's billing-account `client` and `subcontractingEndCustomer` (a plain string, not an object — confirmed against a real response) when the project has a `billingAccountId`. This enrichment is **fail-soft**: a missing `billingAccountId`, a non-2xx billing-account response, or a thrown error is logged and swallowed, returning the base project data without `client`/`subcontractingEndCustomer` rather than failing the whole call — and it **never** escalates to tc-ai-api's own M2M token, for any caller, so a `Talent Manager` whose own JWT can't see a given billing account silently gets the project back without client data rather than the tool escalating privilege on their behalf.
+
+### `fetch-challenge-resources`
+
+| Property   | Value                                                              |
+| ---------- | -------------------------------------------------------------------- |
+| **ID**     | `fetch-challenge-resources`                                          |
+| **API**    | `GET {TC_API_BASE}/v6/resources?challengeId=...` (requestor token for `administrator`, tc-ai-api's own M2M token otherwise) |
+| **Input**  | `{ challengeId: uuid, role?: 'copilot' \| 'reviewers' \| 'registrants' \| 'managers' \| 'observers' \| 'all', roleId?: uuid }` |
+| **Output** | `{ challengeId, role, resources: [{ memberId, memberHandle, roleId, roleName, created? }], total, truncated }` |
+| **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) |
+
+Lists who's on a challenge by role. `role` is a caller-facing category resolved server-side (`src/config/challenge-resource-roles.config.ts`) to the actual, possibly multi-valued, set of upstream resource-role names it covers (e.g. `reviewers` spans `Reviewer`, `Iterative Reviewer`, `Final Reviewer`, and several more) — the model never has to guess or supply a raw `roleId` UUID unless it already has one from a prior lookup, in which case `roleId` takes precedence. `truncated: true` means the challenge has more than 1000 total resources and the response is a partial list, not the full set. See [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) for why credential selection branches on the caller's role instead of reacting to a `401`/`403` (the upstream API silently returns an empty result for privileged roles when unauthenticated/under-privileged, rather than erroring).
+
+### `fetch-client-projects`
+
+| Property   | Value                                                              |
+| ---------- | -------------------------------------------------------------------- |
+| **ID**     | `fetch-client-projects`                                              |
+| **API**    | `GET {TC_API_BASE}/v6/clients` → `GET {TC_API_BASE}/v6/billing-accounts?clientId=` → `GET {TC_API_BASE}/v6/projects?billingAccountId=` (requestor token for `administrator`, tc-ai-api's own M2M token otherwise) |
+| **Input**  | `{ codeName?: string, name?: string }` — at least one required |
+| **Output** | `{ clients: [{ id, name?, codeName?, billingAccountsTruncated, billingAccounts: [{ id, name?, projectsTruncated, projects: [{ id, name?, status? }] }] }], clientsTruncated }` |
+| **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) |
+
+Finds the work delivered for a client/customer by walking Topcoder's v6 clients → billing accounts → projects hierarchy for a `codeName`/`name` search term, so `challengeSearchAgent` can answer "find me all the work done for client X" and then let the caller pick one project to resolve further with `fetch-project-by-id`. Each level is capped at 50 rows per invocation (bounding upstream fan-out), with a `...Truncated` flag surfacing when more exists than was fetched rather than looping through further pages. The three list endpoints don't share one pagination shape: `clients` and `billing-accounts?clientId=` return the `{ page, perPage, total, totalPages, data }` envelope, while `projects?billingAccountId=` returns a bare array with pagination communicated via the same `X-Total`/`X-Page`/`X-Per-Page` headers `GET /v6/resources` uses (ADR 0005) — both confirmed against live responses, see [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md). Credential selection is the same shape as `fetch-challenge-resources` (`shouldForceM2M`): the requestor's own token only for `administrator`, tc-ai-api's service M2M token for every other RBAC-permitted caller — deliberately the *opposite* default from `fetch-project-by-id`, since this is a cross-project discovery tool where an incomplete tree (because a caller's own JWT can't see part of it) would silently undercount delivered work.
 
 ---
 
@@ -651,7 +688,7 @@ Retrieval goes through PgVector's similarity API, which can't express "list dist
 - **`challengeVectorQueryTool`** — the shared retrieval primitive. Composes an `$and` metadata filter from `skills` (`$in`), `type`/`track` (`$eq`, free-form strings per D12 — not enums), `groups` (`$in`), and `projectId` (`$in`, D10). `query` is optional: with at least one filter and no query text, it performs a metadata-only lookup (`query({ filter })`, no `queryVector`) — e.g. "everything indexed for project 17423". The relevance threshold (`VECTOR_SEARCH_THRESHOLD`) is applied **after** retrieval in application code rather than passed to `query({ minScore })`, because passing `minScore` forces `@mastra/pg` off the HNSW ANN fast path onto a full exact scan.
 - **`challenge-search-agent`** ("Topcoder Challenge Assistant") — infers `skills`/`type`/`track`/`groups` filters from natural language and calls the tool. Never infers `projectId` from the query text — that must come from the caller's context, and **scope filters must be enforced server-side**, not left to the model (see the ADR's security note).
 - **`challenge-search`** (workflow, D8) — the deterministic, LLM-free path: same tool, same filter composition, so results cannot diverge from the agent path. Input adds `groupBy` (`chunk` | `challenge` | `project`, default `challenge`): `chunk` returns raw hits ungrouped; `challenge` groups hits by `challengeId` (best chunk score becomes the challenge score, contributing chunks listed underneath); `project` rolls the same hits up by `projectId`.
-- **`fetchProjectTool`** (optional, D10) — retrieval-time enrichment: resolves a `projectId` from a hit to project name/status/tech stack via `GET /v6/projects/:projectId`, under the caller's own authorization. Not used by, and nothing in, the ingestion or retrieval path depends on it.
+- **`fetchProjectTool`** (optional, D10) — retrieval-time enrichment: resolves a `projectId` from a hit to project name/status/tech stack via `GET /v6/projects/:projectId`, under the caller's own authorization — plus, since ADR 0007, its billing account's client/subcontracting end customer. Not used by, and nothing in, the ingestion or retrieval path depends on it. Restricted to `administrator`/`Talent Manager` since ADR 0007 (see [Access control](#access-control)).
 
 ### Chunking strategy
 
@@ -836,6 +873,8 @@ sequenceDiagram
 
 `fetch-challenge-by-id`, `search-challenges`, and `fetch-project-by-id` are **not** listed in `TOOL_M2M_FALLBACK_CONFIG` today, so for them the "else" branch never fires — a 401/403 from the requestor's own token is returned as-is.
 
+`fetch-challenge-resources` (ADR 0005) doesn't fit this diagram: its upstream API returns `200` with a silently empty result for an under-privileged caller rather than a `401`/`403`, so there's nothing for the reactive fallback above to react to. It instead decides the credential *before* calling `callTcApi()` — `forceM2M: true` unless the caller is `administrator` — via `shouldForceM2M`, then calls once with whichever credential it picked. See [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) Decision 3/4.
+
 ### Agent Interaction — Term Extraction Detail
 
 ```mermaid
@@ -896,8 +935,14 @@ These are **unauthenticated** calls (no bearer token forwarded). The API base UR
 | `{TC_API_BASE}/v6/challenges/:challengeId` | `GET`  | Fetch full challenge detail          | `fetchChallengeTool`   |
 | `{TC_API_BASE}/v6/challenges`              | `GET`  | Filtered/paginated challenge search  | `searchChallengesTool` |
 | `{TC_API_BASE}/v6/projects/:projectId`     | `GET`  | Resolve a `projectId` reference      | `fetchProjectTool`     |
+| `{TC_API_BASE}/v6/billing-accounts/:id`    | `GET`  | Enrich a resolved project with its client/subcontracting end customer | `fetchProjectTool` (ADR 0007) |
+| `{TC_API_BASE}/v6/resources?challengeId=`  | `GET`  | List a challenge's resources, optionally filtered by `roleId` | `fetchChallengeResourcesTool` |
+| `{TC_API_BASE}/v6/resource-roles`          | `GET`  | Resolve a caller-facing role category to resource-role ids (memoized per process) | `fetchChallengeResourcesTool` |
+| `{TC_API_BASE}/v6/clients?codeName=&name=` | `GET`  | Search clients by code and/or name (paginated) | `fetchClientProjectsTool` (ADR 0007) |
+| `{TC_API_BASE}/v6/billing-accounts?clientId=` | `GET` | List a client's billing accounts (paginated) | `fetchClientProjectsTool` (ADR 0007) |
+| `{TC_API_BASE}/v6/projects?billingAccountId=` | `GET` | List a billing account's projects (paginated via headers, not a body envelope) | `fetchClientProjectsTool` (ADR 0007) |
 
-Authorized as the **requesting user** — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No M2M fallback is configured for these three today.
+Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallengesTool` — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No reactive M2M fallback is configured for either. `fetchProjectTool` is also requestor-token-only, including for its billing-account enrichment call, and **never** escalates to M2M ([ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md)) — even though, unlike the two above, it's now `restricted` rather than `public`. `fetchChallengeResourcesTool` and `fetchClientProjectsTool` both branch instead (`forceM2M`, ADR 0005 / ADR 0007): the requestor's own token only when they're `administrator`, tc-ai-api's service M2M token otherwise.
 
 ### 3. Ollama LLM API
 

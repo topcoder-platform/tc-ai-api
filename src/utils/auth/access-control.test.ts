@@ -162,6 +162,18 @@ describe('checkAccess', () => {
         ).toBe(true);
     });
 
+    it('restricted matches roles case-insensitively', () => {
+        expect(
+            checkAccess(toAuthenticatedCaller(memberUser(['Administrator'])), restricted),
+        ).toBe(true);
+        expect(
+            checkAccess(
+                toAuthenticatedCaller(memberUser(['talent manager'])),
+                { mode: 'restricted', roles: ['Talent Manager'] },
+            ),
+        ).toBe(true);
+    });
+
     it('restricted denies a member without a matching role', () => {
         expect(checkAccess(toAuthenticatedCaller(memberUser(['copilot'])), restricted)).toBe(false);
     });
@@ -217,7 +229,10 @@ describe('toEnvKey', () => {
         ['jd-autowrite', 'JD_AUTOWRITE'],
         ['challenge-vector-query', 'CHALLENGE_VECTOR_QUERY'],
         ['fetch-challenge-by-id', 'FETCH_CHALLENGE_BY_ID'],
+        ['fetch-challenge-resources', 'FETCH_CHALLENGE_RESOURCES'],
+        ['fetch-member-insights', 'FETCH_MEMBER_INSIGHTS'],
         ['fetch-project-by-id', 'FETCH_PROJECT_BY_ID'],
+        ['fetch-client-projects', 'FETCH_CLIENT_PROJECTS'],
         ['search-challenges', 'SEARCH_CHALLENGES'],
         ['standardized-skills-fuzzy-match', 'STANDARDIZED_SKILLS_FUZZY_MATCH'],
         ['standardized-skills-semantic-search', 'STANDARDIZED_SKILLS_SEMANTIC_SEARCH'],
@@ -244,6 +259,29 @@ describe('resolveAccessPolicy', () => {
     it('defaults an unconfigured target to public', () => {
         expect(resolveAccessPolicy('agent', 'challenge-search-agent')).toEqual({ mode: 'public' });
         expect(resolveAccessPolicy('tool', 'challenge-vector-query')).toEqual({ mode: 'public' });
+    });
+
+    it('resolves fetch-challenge-resources to the baked-in restricted policy with no env set', () => {
+        expect(resolveAccessPolicy('tool', 'fetch-challenge-resources')).toEqual({
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager'],
+        });
+    });
+
+    it('resolves fetch-member-insights to the baked-in restricted policy with no env set', () => {
+        expect(resolveAccessPolicy('tool', 'fetch-member-insights')).toEqual({
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager'],
+        });
+    });
+
+    it('resolves fetch-project-by-id and fetch-client-projects to the baked-in restricted policy with no env set (ADR 0007)', () => {
+        for (const id of ['fetch-project-by-id', 'fetch-client-projects']) {
+            expect(resolveAccessPolicy('tool', id)).toEqual({
+                mode: 'restricted',
+                roles: ['administrator', 'Talent Manager'],
+            });
+        }
     });
 
     it('honours ACCESS_CONTROL_DEFAULT_POLICY=deny as the global default', () => {
