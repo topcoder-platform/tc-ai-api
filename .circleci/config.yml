@@ -65,7 +65,7 @@ workflows:
               only:
                 - develop
                 - challenges-rag
-                - challenge-resources-tool
+                - member-insights-tool
             tags:
                 only: /^dev-.*/
 

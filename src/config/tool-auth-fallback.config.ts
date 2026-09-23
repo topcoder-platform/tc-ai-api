@@ -8,4 +8,7 @@
  * requestor's own token can't reach the endpoint it calls. Treat flipping
  * an entry to `true` as a reviewable privilege-escalation decision.
  */
-export const TOOL_M2M_FALLBACK_CONFIG: Record<string, boolean> = {};
+export const TOOL_M2M_FALLBACK_CONFIG: Record<string, boolean> = {
+    // Retry with service M2M when a member JWT is rejected (403/401) — e.g. extra secure fields.
+    'fetch-member-insights': true,
+};

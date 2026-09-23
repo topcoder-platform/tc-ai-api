@@ -57,6 +57,16 @@ export function toAuthenticatedCaller(user: Record<string, unknown>): Authentica
     return { isM2M, roles, scopes };
 }
 
+/** Case-insensitive role match — aligns with member-api `hasSensitiveDataRole` and JWT variance. */
+export function callerHasRole(roles: string[], role: string): boolean {
+    const target = role.toLowerCase();
+    return roles.some((r) => r.toLowerCase() === target);
+}
+
+export function callerHasAnyRole(roles: string[], allowedRoles: string[]): boolean {
+    return allowedRoles.some((role) => callerHasRole(roles, role));
+}
+
 // ---------------------------------------------------------------------------
 // The shared check
 // ---------------------------------------------------------------------------
@@ -73,7 +83,10 @@ export function checkAccess(caller: AuthenticatedCaller, policy: AccessPolicy): 
     if (caller.isM2M) {
         return !!policy.scopes?.length && policy.scopes.some((s) => caller.scopes.includes(s));
     }
-    return !!policy.roles?.length && policy.roles.some((r) => caller.roles.includes(r));
+    return (
+        !!policy.roles?.length &&
+        policy.roles.some((policyRole) => callerHasRole(caller.roles, policyRole))
+    );
 }
 
 // ---------------------------------------------------------------------------
