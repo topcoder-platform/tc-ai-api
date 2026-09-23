@@ -19,7 +19,14 @@ const USERID_CLAIM = 'https://topcoder.com/userId';
 
 const CLIENT = { id: '71000412', name: 'ANHEUSER-BUSCH', codeName: 'CUS-173826' };
 const BILLING_ACCOUNT = { id: 70016070, name: 'RPC Rewrite', clientId: '71000412' };
-const PROJECT = { id: '15554', name: 'RPC Rewrite', status: 'completed', billingAccountId: '70016070' };
+const PROJECT = {
+    id: '15554',
+    name: 'RPC Rewrite',
+    status: 'completed',
+    billingAccountId: '70016070',
+    lastActivityAt: '2025-11-04T12:30:00.000Z',
+    lastActivityUserId: 40158994,
+};
 
 function memberUser(roles: string[]): Record<string, unknown> {
     return { sub: 'auth0|123', [USERID_CLAIM]: '88774433', [ROLES_CLAIM]: roles };
@@ -128,7 +135,13 @@ describe('fetchClientProjectsTool — happy path', () => {
             projectsTruncated: false,
         });
         expect(result.clients[0].billingAccounts[0].projects).toEqual([
-            { id: '15554', name: 'RPC Rewrite', status: 'completed' },
+            {
+                id: '15554',
+                name: 'RPC Rewrite',
+                status: 'completed',
+                lastActivityAt: '2025-11-04T12:30:00.000Z',
+                lastActivityUserId: '40158994',
+            },
         ]);
         expect(result.clientsTruncated).toBe(false);
     });

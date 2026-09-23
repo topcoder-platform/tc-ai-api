@@ -33,6 +33,8 @@ const PROJECT_ROW_SHAPE = z.object({
     id: z.string(),
     name: z.string().optional(),
     status: z.string().optional(),
+    lastActivityAt: z.string().optional().describe('ISO timestamp of the most recent activity on the project'),
+    lastActivityUserId: z.string().optional().describe('Topcoder user id of whoever performed that last activity'),
 });
 
 const BILLING_ACCOUNT_SHAPE = z.object({
@@ -201,6 +203,8 @@ const fetchProjectsForBillingAccount = async (
             id: toStringOrUndefined(row?.id) ?? '',
             name: row?.name ?? undefined,
             status: row?.status ?? undefined,
+            lastActivityAt: toStringOrUndefined(row?.lastActivityAt),
+            lastActivityUserId: toStringOrUndefined(row?.lastActivityUserId),
         }))
         .filter((project) => project.id.length > 0);
 

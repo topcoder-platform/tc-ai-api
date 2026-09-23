@@ -2,7 +2,7 @@
 //
 // Retrieval-time enrichment only (D10): resolves the opaque `projectId`
 // reference stored in challenge vector metadata to project detail (name,
-// status, tech stack) on demand, under the CALLER's own authorization.
+// status, tech stack, last activity) on demand, under the CALLER's own authorization.
 // Not used by, and nothing in, the ingestion or retrieval path depends on
 // this tool — it exists so a consumer that already has a projectId from a
 // challenge-search hit can make the "subsequent call" D10 describes instead
@@ -56,6 +56,8 @@ const PROJECT_SHAPE = z.object({
     billingAccountId: z.string().optional(),
     directProjectId: z.string().optional(),
     techStack: z.array(z.string()).optional(),
+    lastActivityAt: z.string().optional().describe('ISO timestamp of the most recent activity on the project'),
+    lastActivityUserId: z.string().optional().describe('Topcoder user id of whoever performed that last activity'),
     // Populated from the project's billing account, when it has one and the
     // caller's own JWT can see it — absent, not an error, otherwise. See the
     // file header and enrichWithClient() below.
@@ -79,8 +81,8 @@ export const fetchProjectTool = withAccessPolicy(createTool({
     description:
         'Resolves a Topcoder project from the v6 Projects API, authorized as the requesting user. ' +
         'Accepts either a numeric project id or a project name — a non-numeric value is treated as a ' +
-        'name search instead of an id lookup. Returns the project\'s id, name, status, type, and tech ' +
-        'stack, plus its client and subcontracting end customer when its billing account has them; ' +
+        'name search instead of an id lookup. Returns the project\'s id, name, status, type, tech ' +
+        'stack, and last activity (lastActivityAt timestamp and lastActivityUserId), plus its client and subcontracting end customer when its billing account has them; ' +
         'use the returned numeric id when a projectId is needed elsewhere.',
     inputSchema: z.object({
         projectId: z.string().describe(
@@ -249,6 +251,8 @@ function mapProject(data: any, fallbackId: string) {
         billingAccountId: toStringOrUndefined(data.billingAccountId),
         directProjectId: toStringOrUndefined(data.directProjectId),
         techStack,
+        lastActivityAt: toStringOrUndefined(data.lastActivityAt),
+        lastActivityUserId: toStringOrUndefined(data.lastActivityUserId),
     };
 }
 
