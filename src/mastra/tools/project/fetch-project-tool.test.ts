@@ -67,6 +67,8 @@ function baseApiResponse(overrides: Record<string, unknown> = {}) {
         billingAccountId: 98765,
         directProjectId: 54321,
         techStack: ['React', 'Node.js'],
+        lastActivityAt: '2025-11-04T12:30:00.000Z',
+        lastActivityUserId: 40158994,
         ...overrides,
     };
 }
@@ -103,7 +105,7 @@ describe('fetchProjectTool — request construction', () => {
 });
 
 describe('fetchProjectTool — response mapping', () => {
-    it('coerces id/billingAccountId/directProjectId to strings', async () => {
+    it('coerces id/billingAccountId/directProjectId/lastActivityUserId to strings', async () => {
         mockFetchResponse(baseApiResponse());
 
         const result = await executeTool({ projectId: '17423' });
@@ -116,6 +118,8 @@ describe('fetchProjectTool — response mapping', () => {
             billingAccountId: '98765',
             directProjectId: '54321',
             techStack: ['React', 'Node.js'],
+            lastActivityAt: '2025-11-04T12:30:00.000Z',
+            lastActivityUserId: '40158994',
         });
     });
 
