@@ -145,6 +145,80 @@ describe('fetchProjectTool — response mapping', () => {
     });
 });
 
+describe('fetchProjectTool — members', () => {
+    function apiMember(overrides: Record<string, unknown> = {}) {
+        return {
+            id: '1000335',
+            projectId: '1000289',
+            userId: '8547899',
+            role: 'manager',
+            isPrimary: true,
+            deletedAt: null,
+            createdAt: '2025-01-07T18:23:17.853Z',
+            updatedAt: '2025-01-07T18:23:17.865Z',
+            deletedBy: null,
+            createdBy: 8547899,
+            updatedBy: 8547899,
+            handle: 'TonyJ',
+            ...overrides,
+        };
+    }
+
+    it('maps members to userId/handle/role/isPrimary/createdAt, dropping audit fields', async () => {
+        mockFetchResponse(baseApiResponse({ members: [apiMember()] }));
+
+        const result = await executeTool({ projectId: '17423' });
+
+        expect(result.project.members).toEqual([
+            {
+                userId: '8547899',
+                handle: 'TonyJ',
+                role: 'manager',
+                isPrimary: true,
+                createdAt: '2025-01-07T18:23:17.853Z',
+            },
+        ]);
+    });
+
+    it('coerces a numeric userId to string', async () => {
+        mockFetchResponse(baseApiResponse({ members: [apiMember({ userId: 40158994, handle: 'copilotX', role: 'copilot', isPrimary: false })] }));
+        const result = await executeTool({ projectId: '17423' });
+        expect(result.project.members[0]).toMatchObject({ userId: '40158994', role: 'copilot', isPrimary: false });
+    });
+
+    it('drops soft-deleted members and members without a userId', async () => {
+        mockFetchResponse(
+            baseApiResponse({
+                members: [
+                    apiMember(),
+                    apiMember({ userId: '111', deletedAt: '2025-02-01T00:00:00.000Z' }),
+                    apiMember({ userId: null }),
+                ],
+            }),
+        );
+        const result = await executeTool({ projectId: '17423' });
+        expect(result.project.members.map((m: any) => m.userId)).toEqual(['8547899']);
+    });
+
+    it('leaves members undefined when the response has none', async () => {
+        mockFetchResponse(baseApiResponse());
+        const result = await executeTool({ projectId: '17423' });
+        expect(result.project.members).toBeUndefined();
+    });
+
+    it('keeps members on the best name match but strips them from matches', async () => {
+        mockFetchResponse([
+            baseApiResponse({ id: 1, name: 'skproject1 archive', members: [apiMember({ userId: '1' })] }),
+            baseApiResponse({ id: 2, name: 'SKProject1', members: [apiMember({ userId: '2' })] }),
+        ] as any);
+
+        const result = await executeTool({ projectId: 'skproject1' });
+
+        expect(result.project.members.map((m: any) => m.userId)).toEqual(['2']);
+        expect(result.matches[0].members).toBeUndefined();
+    });
+});
+
 describe('fetchProjectTool — name resolution', () => {
     it('searches by name when the input is not numeric', async () => {
         const fetchSpy = mockFetchResponse([baseApiResponse({ id: 17423, name: 'skproject1' })] as any);
