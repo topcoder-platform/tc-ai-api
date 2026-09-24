@@ -2,7 +2,7 @@
 //
 // Retrieval-time enrichment only (D10): resolves the opaque `projectId`
 // reference stored in challenge vector metadata to project detail (name,
-// status, tech stack, last activity) on demand, under the CALLER's own authorization.
+// status, tech stack, last activity, members) on demand, under the CALLER's own authorization.
 // Not used by, and nothing in, the ingestion or retrieval path depends on
 // this tool — it exists so a consumer that already has a projectId from a
 // challenge-search hit can make the "subsequent call" D10 describes instead
@@ -48,6 +48,17 @@ const CLIENT_SHAPE = z.object({
     codeName: z.string().optional(),
 });
 
+// One entry of the project detail's `members` array. The upstream row also
+// carries projectId/deletedAt/deletedBy/createdBy/updatedAt/updatedBy audit
+// fields — dropped here; `createdAt` is kept as "when they joined the project".
+const MEMBER_SHAPE = z.object({
+    userId: z.string(),
+    handle: z.string().optional(),
+    role: z.string().optional().describe('Project role, e.g. manager, customer, copilot, observer, account_manager'),
+    isPrimary: z.boolean().optional().describe('Whether this member is the primary holder of their role on the project'),
+    createdAt: z.string().optional().describe('ISO timestamp of when the member was added to the project'),
+});
+
 const PROJECT_SHAPE = z.object({
     id: z.string(),
     name: z.string().optional(),
@@ -58,6 +69,12 @@ const PROJECT_SHAPE = z.object({
     techStack: z.array(z.string()).optional(),
     lastActivityAt: z.string().optional().describe('ISO timestamp of the most recent activity on the project'),
     lastActivityUserId: z.string().optional().describe('Topcoder user id of whoever performed that last activity'),
+    // Only when the upstream response includes a `members` array (the detail
+    // endpoint does; a `fields` narrowing can omit it). Never populated on
+    // name-search `matches` — see searchProjectsByName().
+    members: z.array(MEMBER_SHAPE).optional().describe(
+        'People on the project team and their project role (manager, copilot, customer, ...)',
+    ),
     // Populated from the project's billing account, when it has one and the
     // caller's own JWT can see it — absent, not an error, otherwise. See the
     // file header and enrichWithClient() below.
@@ -82,7 +99,9 @@ export const fetchProjectTool = withAccessPolicy(createTool({
         'Resolves a Topcoder project from the v6 Projects API, authorized as the requesting user. ' +
         'Accepts either a numeric project id or a project name — a non-numeric value is treated as a ' +
         'name search instead of an id lookup. Returns the project\'s id, name, status, type, tech ' +
-        'stack, and last activity (lastActivityAt timestamp and lastActivityUserId), plus its client and subcontracting end customer when its billing account has them; ' +
+        'stack, last activity (lastActivityAt timestamp and lastActivityUserId), and project team ' +
+        'members (userId, handle, project role such as manager/copilot/customer, isPrimary) when the API returns them, ' +
+        'plus its client and subcontracting end customer when its billing account has them; ' +
         'use the returned numeric id when a projectId is needed elsewhere.',
     inputSchema: z.object({
         projectId: z.string().describe(
@@ -253,7 +272,29 @@ function mapProject(data: any, fallbackId: string) {
         techStack,
         lastActivityAt: toStringOrUndefined(data.lastActivityAt),
         lastActivityUserId: toStringOrUndefined(data.lastActivityUserId),
+        members: mapMembers(data.members),
     };
+}
+
+/**
+ * Maps the project's `members` array, when present. Soft-deleted rows
+ * (`deletedAt` set) and rows without a userId are dropped; userId is coerced
+ * to string like every other id this tool returns.
+ */
+function mapMembers(members: unknown): z.infer<typeof MEMBER_SHAPE>[] | undefined {
+    if (!Array.isArray(members)) {
+        return undefined;
+    }
+    return members
+        .filter((member) => member && !member.deletedAt)
+        .map((member) => ({
+            userId: toStringOrUndefined(member.userId) ?? '',
+            handle: typeof member.handle === 'string' ? member.handle : undefined,
+            role: typeof member.role === 'string' ? member.role : undefined,
+            isPrimary: typeof member.isPrimary === 'boolean' ? member.isPrimary : undefined,
+            createdAt: toStringOrUndefined(member.createdAt),
+        }))
+        .filter((member) => member.userId.length > 0);
 }
 
 /**
@@ -298,7 +339,12 @@ const searchProjectsByName = async (name: string, requestContext: RequestContext
         (project) => project.name?.toLowerCase() === name.toLowerCase(),
     );
     const bestIndex = exactIndex === -1 ? 0 : exactIndex;
-    const others = projects.filter((_, index) => index !== bestIndex);
+    // Members are kept on the best match only: `matches` exist for
+    // disambiguation, and a full team roster per alternative would bloat the
+    // tool output for no benefit.
+    const others = projects
+        .filter((_, index) => index !== bestIndex)
+        .map(({ members: _members, ...rest }) => rest);
 
     return {
         project: projects[bestIndex],
