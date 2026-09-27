@@ -1,6 +1,6 @@
 # ADR 0008 — Member search tool (talent search by skills + profile filters) for `challengeSearchAgent`
 
-- **Status:** **Accepted** (2026-09-24) — revision 3, all review questions confirmed and all blocking prerequisites met; ready for implementation, not yet implemented
+- **Status:** **Accepted** (2026-09-24) — implemented in `tc-ai-api` (`search-members` tool, skill resolver, agent wiring)
 - **Date:** 2026-09-24
 - **Target branch:** `develop`
 - **Related:** [ADR 0002](0002-tc-api-requestor-token-with-m2m-fallback.md) (requestor-token-first `callTcApi`, per-tool M2M fallback registry — this ADR deliberately opts **out** of it), [ADR 0004](0004-role-based-access-for-agents-workflows-tools.md) (agent/workflow/tool RBAC layer), [ADR 0006](0006-member-insights-tool-for-challenge-search-agent.md) (the single-member counterpart this tool hands off to), [ADR 0007](0007-client-billing-account-project-visibility.md) Decision 2 (precedent for "requestor JWT only, never escalate to M2M"), `src/mastra/workflows/skills/skill-extraction-workflow.ts` (existing fuzzy → semantic skill-mapping pattern), `src/mastra/tools/skills/standardized-skills-{fuzzy,semantic}-tool.ts` (the two skill-lookup tools reused as-is)

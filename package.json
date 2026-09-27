@@ -46,6 +46,7 @@
     "ai": "^6.0.209",
     "ai-sdk-ollama": "^3.8.8",
     "csv-parse": "^7.0.2",
+    "i18n-iso-countries": "^7.14.0",
     "js-tiktoken": "^1.0.21",
     "tc-core-library-js": "^2.4.1",
     "turndown": "^7.2.4",
