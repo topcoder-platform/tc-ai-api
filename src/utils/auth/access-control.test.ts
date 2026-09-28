@@ -275,6 +275,13 @@ describe('resolveAccessPolicy', () => {
         });
     });
 
+    it('resolves search-members to the baked-in restricted policy with no env set (ADR 0008)', () => {
+        expect(resolveAccessPolicy('tool', 'search-members')).toEqual({
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager'],
+        });
+    });
+
     it('resolves fetch-project-by-id and fetch-client-projects to the baked-in restricted policy with no env set (ADR 0007)', () => {
         for (const id of ['fetch-project-by-id', 'fetch-client-projects']) {
             expect(resolveAccessPolicy('tool', id)).toEqual({
