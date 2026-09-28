@@ -145,9 +145,10 @@ Nothing in this codebase reads a roles or scope claim today. The only comparable
 | Tool | `fetchChallengeResourcesTool` | `fetch-challenge-resources` | Agent-callable (`challengeSearchAgent`) — **default-restricted (ADR 0005)**: `roles: ['administrator', 'Talent Manager']`, no `scopes` (M2M denied) |
 | Tool | `fetchMemberInsightsTool` | `fetch-member-insights` | Agent-callable (`challengeSearchAgent`) — **default-restricted (ADR 0006)**: `roles: ['administrator', 'Talent Manager']`, no `scopes` (M2M denied) |
 | Tool | `fetchClientProjectsTool` | `fetch-client-projects` | Agent-callable (`challengeSearchAgent`) — **default-restricted (ADR 0007)**: `roles: ['administrator', 'Talent Manager']`, no `scopes` (M2M denied) |
+| Tool | `searchMembersTool` | `search-members` | Agent-callable (`challengeSearchAgent`) — **default-restricted (ADR 0008)**: `roles: ['administrator', 'Talent Manager']`, no `scopes` (M2M denied); requestor JWT only, no M2M fallback |
 | Tool | `searchChallengesTool` | `search-challenges` | Workflow-internal only (`challenge-bulk-ingestion` step) — not agent-exposed |
-| Tool | `standardizedSkillsFuzzyTool` | `standardized-skills-fuzzy-match` | Workflow-internal only (`skill-extraction-workflow` step) |
-| Tool | `standardizedSkillsSemanticTool` | `standardized-skills-semantic-search` | Workflow-internal only (`skill-extraction-workflow` step) |
+| Tool | `standardizedSkillsFuzzyTool` | `standardized-skills-fuzzy-match` | Internal only (`skill-extraction-workflow` step; `search-members` skill resolution) |
+| Tool | `standardizedSkillsSemanticTool` | `standardized-skills-semantic-search` | Internal only (`skill-extraction-workflow` step; `search-members` skill resolution) |
 
 Every resource not explicitly listed with a restricted default falls through to `public` (any authenticated caller) — unchanged from today's behavior. Only the two ingestion workflows change behavior out of the box.
 
