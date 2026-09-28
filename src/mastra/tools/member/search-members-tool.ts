@@ -39,10 +39,10 @@ const preferredRoleEnum = z.enum(preferredRoleValues);
 const preferredRoleLabel = new Map(MEMBER_SEARCH_PREFERRED_ROLES.map((r) => [r.value, r.label]));
 
 const preferredRolesDescription =
-    'Roles members said they WANT in their open-to-work preferences — only members who set ' +
-    'open-to-work preferences can match. Pick the codes that fit the user\'s wording: ' +
+    'Roles members WANT (open-to-work preferences; members without them never match). For "people ' +
+    'looking for X roles" only — for "people who can do X" use skills. Codes: ' +
     MEMBER_SEARCH_PREFERRED_ROLES.map((r) => `${r.value} (${r.label})`).join(', ') +
-    '. For "people who can do X", use skills instead; use this for "people looking for X roles".';
+    '. Use the labels, not the codes, with the user.';
 
 /** Common country names not covered by i18n-iso-countries alone (ADR 0008). */
 const COUNTRY_ALIASES: Record<string, string> = {
@@ -124,13 +124,24 @@ function hasAtLeastOneFilter(data: {
 }
 
 const skillResolutionOutputSchema = z.object({
-    input: z.string(),
-    status: z.enum(['resolved', 'ambiguous', 'unresolved']),
-    id: z.string().optional(),
-    name: z.string().optional(),
-    matchedBy: z.enum(['id', 'exact', 'alias', 'semantic']).optional(),
-    candidates: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
-    reason: z.string().optional(),
+    input: z.string().describe('Skill as requested.'),
+    status: z
+        .enum(['resolved', 'ambiguous', 'unresolved'])
+        .describe(
+            'ambiguous: search not run — call again with one candidate id. ' +
+                'unresolved: not a Topcoder skill, left out of the search.',
+        ),
+    id: z.string().optional().describe('Resolved skill id (internal; never show to the user).'),
+    name: z.string().optional().describe('Resolved Topcoder skill name.'),
+    matchedBy: z
+        .enum(['id', 'exact', 'alias', 'semantic'])
+        .optional()
+        .describe('alias/semantic: the input was interpreted — tell the user which skill was used.'),
+    candidates: z
+        .array(z.object({ id: z.string(), name: z.string() }))
+        .optional()
+        .describe('Possible skills when ambiguous.'),
+    reason: z.string().optional().describe('Why the skill was unresolved.'),
 });
 
 const searchMembersInputSchema = z
@@ -138,28 +149,65 @@ const searchMembersInputSchema = z
         skills: z
             .array(
                 z.object({
-                    skill: z.string().min(1),
-                    minWins: z.number().int().min(1).optional(),
+                    skill: z
+                        .string()
+                        .min(1)
+                        .describe(
+                            'Plain skill name with abbreviations written out ("Kubernetes" not "k8s", ' +
+                                '"machine learning" not "ML"), or a Topcoder skill id from an earlier tool ' +
+                                'result. Never invent ids.',
+                        ),
+                    minWins: z
+                        .number()
+                        .int()
+                        .min(1)
+                        .optional()
+                        .describe('Minimum wins wanted. NOT filtered — check matchedSkills[].meetsMinWins.'),
                 }),
             )
             .max(10)
-            .optional(),
-        skillMatch: z.enum(['any', 'all']).optional(),
-        openToWork: z.boolean().optional(),
-        recentlyActive: z.boolean().optional(),
-        verifiedProfile: z.boolean().optional(),
-        profileComplete: z.boolean().optional(),
-        copilot: z.boolean().optional(),
+            .optional()
+            .describe(
+                'Technologies, tools or domains, one per entry. Matches only members who competed or ' +
+                    'submitted with the skill, not skills merely listed on a profile.',
+            ),
+        skillMatch: z
+            .enum(['any', 'all'])
+            .optional()
+            .describe(
+                'all: every skill required (one person with React AND Node). any (default): at least one; ' +
+                    'members matching more rank higher.',
+            ),
+        openToWork: z.boolean().optional().describe('Only members open to work ("available", "can start now").'),
+        recentlyActive: z.boolean().optional().describe('Only recently active members.'),
+        verifiedProfile: z.boolean().optional().describe('Only verified members ("verified", "can be paid").'),
+        profileComplete: z.boolean().optional().describe('Only members with a complete profile.'),
+        copilot: z.boolean().optional().describe('Only copilots.'),
         preferredRoles: z
             .array(preferredRoleEnum)
             .max(MEMBER_SEARCH_PREFERRED_ROLES.length)
             .optional()
             .describe(preferredRolesDescription),
-        countries: z.array(z.string().min(1)).max(30).optional(),
-        sortBy: z.enum(['matchIndex', 'handle']).optional(),
-        sortOrder: z.enum(['asc', 'desc']).optional(),
-        page: z.number().int().min(1).optional(),
-        limit: z.number().int().min(1).max(MAX_LIMIT).optional(),
+        countries: z
+            .array(z.string().min(1))
+            .max(30)
+            .optional()
+            .describe(
+                'Country names or ISO codes. Regions ("Europe", "LATAM") are not countries — expand them.',
+            ),
+        sortBy: z
+            .enum(['matchIndex', 'handle'])
+            .optional()
+            .describe('Omit for best match first; handle = alphabetical.'),
+        sortOrder: z.enum(['asc', 'desc']).optional().describe('Defaults: desc for matchIndex, asc for handle.'),
+        page: z.number().int().min(1).optional().describe('1-based page (default 1).'),
+        limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(MAX_LIMIT)
+            .optional()
+            .describe(`Members per page (default ${DEFAULT_LIMIT}).`),
     })
     .refine(hasAtLeastOneFilter, {
         message:
@@ -168,16 +216,28 @@ const searchMembersInputSchema = z
     });
 
 const searchMembersOutputSchema = z.object({
-    searched: z.boolean(),
-    message: z.string().optional(),
-    total: z.number(),
+    searched: z
+        .boolean()
+        .describe(
+            'false: no search ran (see message and skillResolution) — never report it as "no members found".',
+        ),
+    message: z.string().optional().describe('Why the search did not run.'),
+    total: z.number().describe('Matching members across all pages.'),
     page: z.number(),
     limit: z.number(),
-    hasMore: z.boolean(),
-    rankedBy: z.enum(['matchIndex', 'handle', 'activity']),
-    unrecognizedCountries: z.array(z.string()).optional(),
-    minWinsEnforced: z.boolean().optional(),
-    skillResolution: z.array(skillResolutionOutputSchema),
+    hasMore: z.boolean().describe('More pages exist.'),
+    rankedBy: z
+        .enum(['matchIndex', 'handle', 'activity'])
+        .describe(
+            'matchIndex: best match first. handle: alphabetical. activity: recently active and available ' +
+                'first. Only matchIndex justifies calling anyone "top" or "best".',
+        ),
+    unrecognizedCountries: z.array(z.string()).optional().describe('Countries left out of the search.'),
+    minWinsEnforced: z
+        .boolean()
+        .optional()
+        .describe('Present (false) when minWins was set: results are not filtered by it — use meetsMinWins.'),
+    skillResolution: z.array(skillResolutionOutputSchema).describe('How each requested skill was mapped.'),
     appliedFilters: z
         .object({
             skills: z.array(z.object({ id: z.string(), name: z.string(), minWins: z.number().optional() })),
@@ -194,29 +254,36 @@ const searchMembersOutputSchema = z.object({
             sortBy: z.enum(['matchIndex', 'handle']),
             sortOrder: z.enum(['asc', 'desc']),
         })
-        .optional(),
-    members: z.array(
-        z.object({
-            userId: z.string(),
-            handle: z.string(),
-            name: z.string().optional(),
-            location: z.string().optional(),
-            matchIndex: z.number(),
-            openToWork: z.boolean(),
-            isRecentlyActive: z.boolean(),
-            isVerified: z.boolean(),
-            isCopilot: z.boolean(),
-            matchedSkills: z.array(
-                z.object({
-                    id: z.string(),
-                    name: z.string(),
-                    wins: z.number(),
-                    submitted: z.number(),
-                    meetsMinWins: z.boolean().optional(),
-                }),
-            ),
-        }),
-    ),
+        .optional()
+        .describe('Filters actually searched. For the next page, pass these again (skills by id) with page + 1.'),
+    members: z
+        .array(
+            z.object({
+                userId: z.string(),
+                handle: z.string().describe('Topcoder handle (profile URL segment).'),
+                name: z.string().optional().describe('Personal data — show only when useful.'),
+                location: z.string().optional().describe('Personal data — show only when useful.'),
+                matchIndex: z
+                    .number()
+                    .describe('Relative score, mostly how many requested skills matched. Not a percentage.'),
+                openToWork: z.boolean(),
+                isRecentlyActive: z.boolean(),
+                isVerified: z.boolean(),
+                isCopilot: z.boolean(),
+                matchedSkills: z
+                    .array(
+                        z.object({
+                            id: z.string(),
+                            name: z.string(),
+                            wins: z.number().describe('Challenges won with this skill.'),
+                            submitted: z.number().describe('Challenges submitted to with this skill.'),
+                            meetsMinWins: z.boolean().optional().describe('wins >= the requested minWins.'),
+                        }),
+                    )
+                    .describe('Requested skills this member has Topcoder activity in.'),
+            }),
+        )
+        .describe('One page of members, in rankedBy order.'),
 });
 
 type SearchInput = z.infer<typeof searchMembersInputSchema>;
@@ -531,17 +598,10 @@ export const searchMembersTool = withAccessPolicy(
     createTool({
         id: TOOL_ID,
         description:
-            'Searches the Topcoder member base for people matching skills and profile filters — the same search ' +
-            'as the Talent Search portal. Use it to FIND candidates ("find React developers in the US who are open ' +
-            'to work", "strong Python + AWS members", "copilots who know Salesforce"). Returns a ranked, paginated ' +
-            'shortlist with each member\'s handle, name, location, availability flags, a match score and per-skill ' +
-            'activity (wins, submissions). ' +
-            'Skills can be plain names ("node.js", "react js", "machine learning") or Topcoder skill UUIDs; names are ' +
-            'mapped to the Topcoder skills taxonomy automatically. If a skill name is ambiguous the search is NOT run ' +
-            'and the result lists candidate skills to choose from — call again with the chosen candidate\'s id. ' +
-            'At least one filter is required. ' +
-            'Does NOT look up one known member (use fetch-member-insights) and does NOT say who worked on a specific ' +
-            'challenge (use fetch-challenge-resources).',
+            'Finds Topcoder members by skills and profile filters (Talent Search): "React developers open to ' +
+            'work in the US", "copilots who know Salesforce". Returns a ranked, paginated shortlist with ' +
+            'per-skill wins/submissions. At least one filter is required. Not for one known member ' +
+            '(fetch-member-insights) or who worked on a challenge (fetch-challenge-resources).',
         inputSchema: searchMembersInputSchema,
         outputSchema: searchMembersOutputSchema,
         execute: async (inputData, context) => {
