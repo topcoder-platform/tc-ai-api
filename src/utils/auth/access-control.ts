@@ -8,10 +8,11 @@
  *    to both MastraAuthAuth0 providers in `apiAuthLayer`. Mastra's own
  *    `coreAuthMiddleware` already invokes that hook on every protected request
  *    and 403s when it returns false.
- *  - Tools: `withAccessPolicy` wraps a tool's `execute` at its export site.
- *    Tools have no HTTP route of their own, so enforcement uses the `user`
- *    that coreAuthMiddleware/resourceIdMiddleware already put on RequestContext
- *    before any agent or workflow body runs.
+ *  - Tools: `withAccessPolicy` wraps a tool's `execute` at its export site, so
+ *    the guard holds however the tool is reached — from an agent, a workflow
+ *    step, or Mastra's `POST /tools/:toolId/execute` route (which resolves any
+ *    agent-attached tool, ADR 0009 F1). That route is additionally matched by
+ *    `authorizeAccessPolicy` for an early 403 at the auth hook (ADR 0009 C1).
  */
 import { getWebRequest, type MastraAuthRequest } from '@mastra/core/server';
 import {
@@ -167,6 +168,10 @@ const AGENT_PATH_RE = new RegExp(`^${API_PREFIX}/agents/([^/]+)`);
 const WORKFLOW_PATH_RE = new RegExp(`^${API_PREFIX}/workflows/([^/]+)`);
 // chatRoute() is CHAT_ROUTE_BASE_PATH/:agentId — an agent by another path.
 const CHAT_PATH_RE = new RegExp(`^${CHAT_ROUTE_BASE_PATH}/([^/]+)`);
+// GET /tools/:toolId and POST /tools/:toolId/execute (ADR 0009 C1).
+// /agents/:agentId/tools/:toolId/execute matches AGENT_PATH_RE first; the
+// in-execute guard (withAccessPolicy) covers the tool on that path.
+const TOOL_PATH_RE = new RegExp(`^${API_PREFIX}/tools/([^/]+)`);
 
 /**
  * This repo's own custom API routes, which are neither agents nor workflows and
@@ -188,6 +193,9 @@ function parseTarget(pathname: string): { category: AccessCategory; targetId: st
 
     const chat = CHAT_PATH_RE.exec(pathname);
     if (chat) return { category: 'agent', targetId: decodeURIComponent(chat[1]) };
+
+    const tool = TOOL_PATH_RE.exec(pathname);
+    if (tool) return { category: 'tool', targetId: decodeURIComponent(tool[1]) };
 
     const route = ROUTE_PATH_TARGETS.find(
         r => pathname === r.prefix || pathname.startsWith(`${r.prefix}/`),
@@ -231,7 +239,7 @@ export function authorizeAccessPolicy(
     }
 
     const target = parseTarget(pathname);
-    // Not an agent/workflow invocation — out of this ADR's scope, unaffected.
+    // Not an agent/workflow/tool/route invocation — out of this ADR's scope, unaffected.
     if (!target) return true;
 
     const policy = resolveAccessPolicy(target.category, target.targetId);
@@ -251,6 +259,12 @@ export function authorizeAccessPolicy(
 // ---------------------------------------------------------------------------
 
 export class ToolAccessDeniedError extends Error {
+    /**
+     * Read by Mastra's handleError, so a denial reached over HTTP answers 403
+     * instead of 500 (ADR 0009 C2). In-agent behaviour is unchanged.
+     */
+    readonly status = 403;
+
     constructor(message: string) {
         super(message);
         this.name = 'ToolAccessDeniedError';
@@ -264,6 +278,26 @@ interface ToolLike {
 
 interface ToolExecuteContext {
     requestContext?: { get(key: string): unknown };
+}
+
+/**
+ * Mastra's reserved RequestContext key for the verified user (`MASTRA_USER_KEY`
+ * in @mastra/server, which this repo doesn't depend on directly — and
+ * @mastra/core/request-context doesn't export it). Mastra sets it only from the
+ * verified token, and mergeRequestContext never copies a `mastra__*` key from a
+ * request body — unlike plain `user` (ADR 0009 F4).
+ */
+export const MASTRA_USER_CONTEXT_KEY = 'mastra__user';
+
+/**
+ * The verified caller: the reserved, non-injectable key first (ADR 0009 C3),
+ * then `user` for in-process callers (workflow steps, tests) that set only it.
+ */
+function contextUser(context: ToolExecuteContext | undefined): Record<string, unknown> | undefined {
+    const requestContext = context?.requestContext;
+    return (requestContext?.get(MASTRA_USER_CONTEXT_KEY) ?? requestContext?.get('user')) as
+        | Record<string, unknown>
+        | undefined;
 }
 
 /**
@@ -289,9 +323,7 @@ export function withAccessPolicy<T extends ToolLike>(tool: T): T {
                 return originalExecute(inputData, context);
             }
 
-            const user = context?.requestContext?.get('user') as
-                | Record<string, unknown>
-                | undefined;
+            const user = contextUser(context);
             const policy = resolveAccessPolicy('tool', tool.id);
 
             if (!user || !checkAccess(toAuthenticatedCaller(user), policy)) {

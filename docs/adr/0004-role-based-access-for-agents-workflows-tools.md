@@ -460,3 +460,19 @@ input/output/resume/requestContext validation still runs — it lives inside the
 **Still open (unchanged):** creating `challengesRAG:admin` in Auth0 on the `AUTH0_M2M_AUDIENCE` API
 resource, the live smoke tests in Phase 3, and the dev-token spot-check of the
 `https://topcoder-dev.com/roles` claim key.
+
+## Implementation note — ADR 0009 corrections (2026-10-05)
+
+[ADR 0009](0009-system-one-tool.md) (System One) found that two claims in this ADR are wrong, and added one hardening
+change. All three apply to every tool, not only System One:
+
+- **Tools *are* addressable by URL (ADR 0009 F1/C1).** Statements above that "tools have no HTTP route" are wrong.
+  Mastra's `POST /v6/ai/tools/:toolId/execute` resolves any tool attached to a registered agent (`findToolInAgents`,
+  matched on `.id` only). The in-`execute` guard always held. `parseTarget()` now also maps `/v6/ai/tools/:toolId` to
+  `('tool', id)`, which gives an early 403 at the auth hook. The `TARGET_ID_ALIASES.tool` comment has been corrected.
+- **Denials return 403, not 500 (C2).** `ToolAccessDeniedError` now has `status = 403`, which Mastra's `handleError`
+  maps to the HTTP status. Behaviour inside an agent is unchanged.
+- **The caller is read from a key the request body can't set (C3).** `withAccessPolicy` resolves the user as
+  `requestContext.get('mastra__user') ?? requestContext.get('user')`. A body-supplied `requestContext.user` lands in
+  plain `user`. Before this change it was overwritten by verified auth only because of middleware ordering (F4). A
+  unit test pins the spoofing case.

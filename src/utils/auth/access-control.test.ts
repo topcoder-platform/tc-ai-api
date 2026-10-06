@@ -2,6 +2,9 @@
  * Unit tests for the role/scope access-control layer.
  * See docs/adr/0004-role-based-access-for-agents-workflows-tools.md.
  */
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import {
     canonicalTargetId,
@@ -15,6 +18,7 @@ import {
     _resetAccessPolicyCache,
     authorizeAccessPolicy,
     checkAccess,
+    MASTRA_USER_CONTEXT_KEY,
     resolveAccessPolicy,
     toAuthenticatedCaller,
     ToolAccessDeniedError,
@@ -580,5 +584,140 @@ describe('route policies', () => {
         _resetAccessPolicyCache();
 
         expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(LIST))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// System One (ADR 0009) — workflow + tool policies
+// ---------------------------------------------------------------------------
+
+describe('system-one policies (ADR 0009)', () => {
+    const SYS1_POLICY = { mode: 'restricted', roles: ['administrator'], scopes: ['sys1:use'] };
+
+    it('ships the workflow and the tool restricted, with no env vars set', () => {
+        expect(resolveAccessPolicy('workflow', 'system-one')).toEqual(SYS1_POLICY);
+        expect(resolveAccessPolicy('workflow', 'systemOneWorkflow')).toEqual(SYS1_POLICY);
+        expect(resolveAccessPolicy('tool', 'system-one')).toEqual(SYS1_POLICY);
+    });
+
+    it.each([
+        '/v6/ai/workflows/system-one/start-async',
+        '/v6/ai/workflows/systemOneWorkflow/start-async',
+        '/v6/ai/workflows/system-one/create-run',
+        '/v6/ai/workflows/system-one/runs',
+        '/v6/ai/workflows/system-one/runs/9f1c2e4a-7b3d',
+        '/v6/ai/workflows/system-one',
+    ])('gates %s by role / scope', (path) => {
+        expect(authorizeAccessPolicy(memberUser(['copilot']), authRequest(path))).toBe(false);
+        expect(authorizeAccessPolicy(m2mUser(['challengesRAG:admin']), authRequest(path))).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(true);
+        expect(authorizeAccessPolicy(m2mUser(['sys1:use']), authRequest(path))).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// C1 — tools are URL-addressable (POST /tools/:toolId/execute)
+// ---------------------------------------------------------------------------
+
+describe('tool paths (ADR 0009 C1)', () => {
+    it.each([
+        '/v6/ai/tools/system-one/execute',
+        '/v6/ai/tools/search-members/execute',
+        '/v6/ai/tools/search-members',
+    ])('applies the tool policy to %s at the auth hook', (path) => {
+        expect(authorizeAccessPolicy(memberUser(['copilot']), authRequest(path))).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(true);
+    });
+
+    it('decodes the tool id', () => {
+        expect(
+            authorizeAccessPolicy(memberUser(['copilot']), authRequest('/v6/ai/tools/system%2Done/execute')),
+        ).toBe(false);
+    });
+
+    it('leaves public tools and the tool listing open', () => {
+        expect(
+            authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/tools/search-challenges/execute')),
+        ).toBe(true);
+        expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/tools'))).toBe(true);
+    });
+
+    it('matches /agents/:agentId/tools/:toolId as an agent path first', () => {
+        // The agent here is public; the tool's own guard (withAccessPolicy)
+        // covers it inside execute.
+        expect(
+            authorizeAccessPolicy(
+                memberUser(['copilot']),
+                authRequest('/v6/ai/agents/skillsMatchingAgent/tools/system-one/execute'),
+            ),
+        ).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// C2 — denials carry a 403 status; C3 — identity from the reserved key
+// ---------------------------------------------------------------------------
+
+describe('withAccessPolicy hardening (ADR 0009 C2, C3)', () => {
+    const TOOL_ID = 'system-one';
+
+    function fakeTool() {
+        const execute = vi.fn(async () => ({ ok: true }));
+        return { tool: withAccessPolicy({ id: TOOL_ID, execute } as any), execute };
+    }
+
+    function ctxWith(values: Record<string, unknown>) {
+        return { requestContext: { get: (k: string) => values[k] } };
+    }
+
+    it('ToolAccessDeniedError carries status 403, so Mastra answers 403 instead of 500', async () => {
+        const { tool } = fakeTool();
+        const error = await tool.execute!({}, ctxWith({ user: memberUser([]) })).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(ToolAccessDeniedError);
+        expect(error).toMatchObject({ status: 403 });
+    });
+
+    it('denies a request-body `user` spoofed to administrator when the verified user is not (F4)', async () => {
+        // Member token with no roles + body requestContext: { user: { roles: ['administrator'] } }:
+        // the body lands in `user`; Mastra writes the verified claims to `mastra__user`.
+        const { tool, execute } = fakeTool();
+        await expect(
+            tool.execute!(
+                {},
+                ctxWith({
+                    user: memberUser(['administrator']),
+                    [MASTRA_USER_CONTEXT_KEY]: memberUser([]),
+                }),
+            ),
+        ).rejects.toBeInstanceOf(ToolAccessDeniedError);
+        expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('allows on the verified user even when `user` says otherwise', async () => {
+        const { tool } = fakeTool();
+        await expect(
+            tool.execute!(
+                {},
+                ctxWith({ user: memberUser([]), [MASTRA_USER_CONTEXT_KEY]: m2mUser(['sys1:use']) }),
+            ),
+        ).resolves.toEqual({ ok: true });
+    });
+
+    it('falls back to `user` for in-process callers that only set it', async () => {
+        const { tool } = fakeTool();
+        await expect(
+            tool.execute!({}, ctxWith({ user: memberUser(['administrator']) })),
+        ).resolves.toEqual({ ok: true });
+    });
+
+    it('uses the same key Mastra\'s auth middleware writes (guards a Mastra upgrade)', () => {
+        // @mastra/server isn't a direct dependency and doesn't export its
+        // constants, so resolve it the way the build does: mastra -> deployer -> server.
+        const fromMastra = createRequire(createRequire(import.meta.url).resolve('mastra/package.json'));
+        const fromDeployer = createRequire(fromMastra.resolve('@mastra/deployer/package.json'));
+        const serverRoot = dirname(fromDeployer.resolve('@mastra/server/package.json'));
+        const constants = readFileSync(join(serverRoot, 'dist/server/constants.d.ts'), 'utf8');
+
+        expect(constants).toContain(`MASTRA_USER_KEY = "${MASTRA_USER_CONTEXT_KEY}"`);
     });
 });
