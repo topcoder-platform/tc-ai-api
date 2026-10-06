@@ -53,6 +53,15 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
             roles: ['administrator'],
             scopes: ['challengesRAG:admin'],
         },
+        // System One (ADR 0009) — gates every /workflows/system-one/* route at
+        // the auth hook. Keep in step with the `system-one` TOOL policy below:
+        // widening only this one yields runs that start and then fail in the
+        // evaluate step with "Access denied for tool".
+        'system-one': {
+            mode: 'restricted',
+            roles: ['administrator'],
+            scopes: ['sys1:use'],
+        },
     },
     tool: {
         'fetch-challenge-resources': {
@@ -76,6 +85,14 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
         'fetch-client-projects': {
             mode: 'restricted',
             roles: ['administrator', 'Talent Manager'],
+        },
+        // The in-execute guard of the System One tool (ADR 0009); runs again
+        // inside the system-one workflow's evaluate step. Keep in step with the
+        // `system-one` WORKFLOW policy above.
+        'system-one': {
+            mode: 'restricted',
+            roles: ['administrator'],
+            scopes: ['sys1:use'],
         },
     },
     route: {
@@ -124,8 +141,12 @@ export const TARGET_ID_ALIASES: Record<AccessCategory, Record<string, string>> =
         challengeSearchWorkflow: 'challenge-search',
         jdAutowriteWorkflow: 'jd-autowrite',
         skillExtractionWorkflow: 'skill-extraction-workflow',
+        systemOneWorkflow: 'system-one',
     },
-    // Tools are never addressed by URL — they're invoked in-process by `.id`.
+    // Tools ARE addressable by URL (ADR 0009 C1): POST /tools/:toolId/execute
+    // resolves agent-attached tools via findToolInAgents. That lookup matches
+    // on the tool's `.id` only — never on the key it's attached under — so
+    // there is no second spelling to alias.
     tool: {},
     // Route slugs are assigned by this repo, so there is no second spelling.
     route: {},

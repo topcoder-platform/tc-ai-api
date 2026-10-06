@@ -16,10 +16,11 @@
 12. [Scorers (Evaluation)](#scorers-evaluation)
 13. [Workflows — Skill Extraction](#workflows--skill-extraction)
 14. [Challenges Vector RAG](#challenges-vector-rag)
-15. [Sequence Diagrams](#sequence-diagrams)
-16. [External API Interactions](#external-api-interactions)
-17. [CI/CD Pipeline](#cicd-pipeline)
-18. [Deployment](#deployment)
+15. [System One — decision API](#system-one--decision-api)
+16. [Sequence Diagrams](#sequence-diagrams)
+17. [External API Interactions](#external-api-interactions)
+18. [CI/CD Pipeline](#cicd-pipeline)
+19. [Deployment](#deployment)
 
 ---
 
@@ -44,7 +45,7 @@ The service exposes a Hono-based HTTP API (managed by Mastra's built-in server),
 | **HTTP Server**     | Hono (embedded in Mastra)                                   |
 | **Database**        | PostgreSQL via `@mastra/pg` ^1.2.0                          |
 | **Auth**            | Auth0 via `@mastra/auth-auth0` ^1.0.0                       |
-| **Observability**   | OpenTelemetry via `@mastra/observability` ^1.2.0            |
+| **Observability**   | Not configured — `@mastra/observability`/OpenTelemetry deps are installed but unused (see [Observability](#observability--logging)) |
 | **Logging**         | Pino via `@mastra/loggers` ^1.0.1                           |
 | **Evals**           | `@mastra/evals` ^1.1.0 (Answer Relevancy, Prompt Alignment) |
 | **Schema**          | Zod 4.3+                                                    |
@@ -114,7 +115,13 @@ tc-ai-api/
 | `MASTRA_DB_CONNECTION`              | **Yes**  | —                                      | PostgreSQL connection string for Mastra storage and agent memory |
 | `MASTRA_DB_SCHEMA`                  | No       | `ai`                                   | PostgreSQL schema name for Mastra tables                         |
 | `TC_API_BASE`                       | **Yes**  | —                                      | Topcoder API base URL (e.g. `https://api.topcoder-dev.com`)      |
-| `OLLAMA_API_URL`                    | No       | `http://ollama.topcoder-dev.com:11434` | Ollama API endpoint for LLM inference                            |
+| `OLLAMA_API_URL`                    | No       | `http://ollama.topcoder-dev.com:11434` | Ollama API endpoint for LLM inference. Also System One's host — but read directly there, **without** the dev fallback |
+| `SYS1_PROVIDER`                     | No       | `ollama`                               | System One backend; only `ollama` in v1 ([ADR 0009](docs/adr/0009-system-one-tool.md)) |
+| `SYS1_OLLAMA_BASE_URL`              | No       | `OLLAMA_API_URL`                       | Overrides the Ollama host for System One only. Both unset ⇒ every call fails `503 SYS1_NOT_CONFIGURED` |
+| `SYS1_MODEL`                        | No       | `nimble`                               | Default System One model when a request omits `model`; always allowed |
+| `SYS1_ALLOWED_MODELS`               | No       | `= SYS1_MODEL`                         | Comma list of extra models callers may pick. Add `clef-flash`/`clef` to enable images |
+| `SYS1_TIMEOUT_MS`                   | No       | `30000`                                | Per System One provider call                                      |
+| `SYS1_KEEP_ALIVE`                   | No       | Ollama server default (5m)             | Sent as `keep_alive` (`5m`, or seconds; `0` unloads, negative pins). Callers can't set it |
 | `MASTRA_EVAL_MODEL`                 | No       | `mistral:latest`                       | Ollama model used for evaluation scorers                         |
 | `AUTH0_DOMAIN`                      | Yes\*    | —                                      | Auth0 domain for member JWT validation                           |
 | `AUTH0_AUDIENCE`                    | Yes\*    | —                                      | Auth0 audience (client ID) for member tokens                     |
@@ -165,7 +172,7 @@ export const mastra = new Mastra({
   scorers:      { ...evalScorers },
   storage:      new PostgresStore({ connectionString, schemaName }),
   logger:       tcAILogger,          // Pino
-  observability: new Observability({...}),  // OpenTelemetry
+  // no `observability` — tracing is not configured (see Observability & Logging)
   server: {
     port: 3000,
     apiPrefix: API_PREFIX,            // '/v6/ai' — built-in Mastra routes live here
@@ -285,12 +292,15 @@ Authentication answers *"is this a valid caller?"*; access control answers *"may
 
 Because Mastra's `getAgentById`/`getWorkflowById` fall back to the registry key, **both spellings reach the same resource over HTTP** — `/v6/ai/workflows/challenge-ingestion/start` and `/v6/ai/workflows/challengeIngestionWorkflow/start` are the same workflow. `TARGET_ID_ALIASES` maps every differing registry key to its canonical `.id`, and `resolveAccessPolicy()` canonicalises through it before any lookup, so a restriction can't be bypassed by addressing the target the other way. **Adding a restricted policy for a resource whose registry key differs from its `.id` means adding its alias entry too**; the unit tests assert both spellings resolve identically.
 
-**Shipped defaults.** Five targets are restricted out of the box:
+**Shipped defaults.** These targets are restricted out of the box:
 
 ```
 challenge-ingestion        roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
 challenge-bulk-ingestion   roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
 rag-challenges             roles: [administrator]                  scopes: [challengesRAG:admin]   (route)
+system-one                 roles: [administrator]                  scopes: [sys1:use]              (workflow AND tool)
+search-members             roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
+fetch-member-insights      roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 fetch-challenge-resources  roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 fetch-project-by-id        roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 fetch-client-projects      roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
@@ -298,13 +308,15 @@ fetch-client-projects      roles: [administrator, Talent Manager]  scopes: none 
 
 The first three all rewrite the shared challenge vector index. The last three (`fetch-challenge-resources`, `fetch-project-by-id`, `fetch-client-projects`) are different: they're `restricted` to match the RBAC platform-ui already enforces one layer up on the only UI surface that reaches them, not because the underlying data is sensitive to write. `fetch-project-by-id` was `public` before [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md) — it's now restricted because it also surfaces a project's client/billing identity, not just project detail.
 
+`system-one` ([ADR 0009](docs/adr/0009-system-one-tool.md)) has the same policy in two categories — the workflow (the service entry point, gated at the auth hook) and the tool (re-checked inside the workflow's `evaluate` step). **Override both together** (`ACCESS_POLICY_WORKFLOW_SYSTEM_ONE_*` and `ACCESS_POLICY_TOOL_SYSTEM_ONE_*`): widening only the workflow yields runs that start and then fail with `Access denied for tool "system-one"`. The `sys1:use` permission must exist on the `AUTH0_M2M_AUDIENCE` API and be granted to the consuming service clients.
+
 Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
 
 **Three enforcement points:**
 
 - **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
 - **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Currently one entry: `/v6/ai-api/rag/challenges` → `rag-challenges`, restricted to `administrator` / `challengesRAG:admin` out of the box.
-- **Tools** — tools have no HTTP route of their own, so `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the `user` already on `RequestContext` and throws `ToolAccessDeniedError` on denial — surfaced to the LLM as a failed tool call, or to a workflow step as a rejected `execute()`.
+- **Tools** — `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the verified caller from `RequestContext` — the reserved `mastra__user` key first, which a request body cannot set, then `user` for in-process callers — and throws `ToolAccessDeniedError` (`status: 403`) on denial: surfaced to the LLM as a failed tool call, to a workflow step as a rejected `execute()`, or over HTTP as a **403**. Tools **are** URL-addressable: Mastra's `POST /v6/ai/tools/:toolId/execute` resolves any tool attached to a registered agent, so `authorizeAccessPolicy` also matches `/v6/ai/tools/:toolId` for an early 403 at the auth hook (ADR 0009 C1–C3).
 
 Nested, in-process invocations (`challenge-bulk-ingestion` → `challenge-ingestion`, `challenge-context` → `challenge-parser-agent`) are **not** re-gated: they never re-enter the HTTP router, and you can't reach them without passing the outer check first.
 
@@ -357,15 +369,9 @@ Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authoriz
 
 A Pino logger (`@mastra/loggers`) is configured at `info` level with the service name `TC AI API`. It is injected into the Mastra instance and made available to all agents, tools, and workflow steps via context.
 
-### Observability (OpenTelemetry)
+### Observability (tracing)
 
-The `@mastra/observability` package provides:
-
-- **DefaultExporter** — exports spans to the configured OTLP endpoint.
-- **SensitiveDataFilter** — a span output processor that redacts sensitive data from telemetry.
-- Service name: `tc-ai-api`
-
-All agent interactions, tool executions, and workflow step runs are automatically instrumented.
+**Not configured.** `src/mastra/index.ts` sets no `observability`, and nothing else wires an exporter — the `@mastra/observability` and `@opentelemetry/*` packages in `package.json` are installed but unused. The `traceId`/`spanId` fields in workflow results therefore correlate to nothing. The persisted **workflow run** (Postgres `workflow_snapshots`) is the tracking record today — see [System One](#system-one--decision-api) for how a service call is recorded. Enabling tracing repo-wide is a separate ADR (ADR 0009, W7).
 
 ---
 
@@ -726,6 +732,46 @@ Switching a given environment's embedding provider requires a full reindex — `
 ### Database bootstrap
 
 Per D3, there is **no hand-maintained DDL script** — `PgVector.createIndex()` performs all schema/table/index creation on first use (schema, table, HNSW vector index, and btree `metadataIndexes` on `challengeId`/`projectId`/`track`). This assumes the `vector` extension is enabled and the runtime database role holds DDL privileges. Local development uses the same `docker/docker-compose.yml` (`pgvector/pgvector:pg16`) as the rest of the project — no separate `init-db` step.
+
+---
+
+## System One — decision API
+
+> See [ADR 0009](docs/adr/0009-system-one-tool.md) for the design and the Mastra behaviours it is built around.
+
+Ollama's System One (`POST /v1/systemone`, Ollama ≥ 0.35) scores a fixed set of caller-defined answers with a small local decision model and returns **probabilities** instead of text. It handles three question types: `choice` (one of N labels), `noul` (yes/no, returns P(yes)) and `score` (position on an ordered rubric, a weighted index in `[0, N-1]`).
+
+**Services call the `system-one` workflow, never the tool.** Every call is then a persisted run (input, per-step payload/output/error/timing, result, caller identity). The `system-one` tool (`src/mastra/tools/system-one/`) holds the logic and is the future agent interface. It is deliberately not registered on Mastra or on any agent, so `/v6/ai/tools/system-one/execute` answers `404`. Access: `administrator` members or M2M tokens with `sys1:use`.
+
+```bash
+curl -X POST "$TC_AI_API/v6/ai/workflows/system-one/start-async?runId=$(uuidgen)" \
+  -H "Authorization: Bearer $M2M_TOKEN_WITH_sys1:use" -H 'Content-Type: application/json' \
+  -d '{ "inputData": {
+        "state": {"ticket": "I was charged twice. Please refund the extra payment."},
+        "questions": {
+          "refund": { "type": "noul",   "instructions": "Is the customer requesting a refund?" },
+          "label":  { "type": "choice", "instructions": "Which queue owns this ticket?",
+                      "criteria": {"billing": "Payments and refunds", "bug": "Software errors", "other": null} } } } }'
+```
+
+- `inputData` is Ollama's request body. Two differences: `model` is optional and must be in `SYS1_ALLOWED_MODELS`, and `keep_alive` is ignored because the server sets it.
+- `result` is Ollama's response verbatim, plus `provider`.
+- **Failures arrive as HTTP 200** with `{ "status": "failed", "error": { "message": "[SYS1_…] …", "status": <code> } }`, and they are recorded. Branch on `status` first, then on the `[SYS1_…]` prefix or `error.status`:
+
+  | Code | `error.status` | Meaning |
+  | --- | --- | --- |
+  | `SYS1_INVALID_INPUT` | 400 | Request failed the schema (message lists each field path) |
+  | `SYS1_MODEL_NOT_ALLOWED` | 400 | `model` not allowlisted (message lists allowed models) |
+  | `SYS1_INVALID_REQUEST` | 400 | Rejected upstream (context overflow, image to a non-vision model, …) |
+  | `SYS1_REQUEST_TOO_LARGE` | 413 | > 64 KiB without images / > 32 MiB with images |
+  | `SYS1_MODEL_UNAVAILABLE` | 503 | Allowed model not pulled on the Ollama host (ops fault) |
+  | `SYS1_PROVIDER_UNAVAILABLE` / `SYS1_NOT_CONFIGURED` | 503 | Ollama unreachable / no Ollama URL configured |
+  | `SYS1_UPSTREAM_ERROR` | 502 | Upstream 5xx, or a response that breaks the contract |
+  | `SYS1_TIMEOUT` | 504 | No answer within `SYS1_TIMEOUT_MS` |
+
+- HTTP-level errors happen before any run exists: `403` (missing role/scope), `413` (body over Mastra's 4.5 MB limit, i.e. ~3.3 MB of raw image), and `409 SYS1_RUN_ID_CONFLICT` (a `runId` that is already in use; omit it or send a fresh UUID).
+- Read runs back with `GET /v6/ai/workflows/system-one/runs[/:runId]`. Callers see only their own runs; Studio and the database see all of them.
+- Images are stored in run records as `{ sha256, bytes }`, never as base64. Such runs can't be restarted or time-travelled, and the `start-async` response still echoes the caller's own images. Run records include the caller's `state` and are kept indefinitely until a retention policy lands.
 
 ---
 

@@ -5,6 +5,7 @@ import { challengeIngestionWorkflow } from './workflows/challenge/challenge-inge
 import { challengeBulkIngestionWorkflow } from './workflows/challenge/challenge-bulk-ingestion-workflow';
 import { challengeSearchWorkflow } from './workflows/challenge/challenge-search-workflow';
 import { jdAutowriteWorkflow } from './workflows/jd/jd-autowrite-workflow';
+import { systemOneWorkflow } from './workflows/system-one/system-one-workflow';
 import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
 import { challengeParserAgent } from './agents/challenge/challenge-parser-agent';
 import { challengeSearchAgent } from './agents/challenge/challenge-search-agent';
@@ -28,6 +29,10 @@ export const mastra = new Mastra({
     challengeBulkIngestionWorkflow,
     challengeSearchWorkflow,
     jdAutowriteWorkflow,
+    // The service entry point to System One (ADR 0009). Its tool is
+    // deliberately NOT registered here (`tools`) nor on any agent, so
+    // /v6/ai/tools/system-one/execute 404s and every call is a tracked run.
+    systemOneWorkflow,
   },
   agents: { skillsMatchingAgent, challengeParserAgent, challengeSearchAgent, jdRewriterAgent },
   scorers: {

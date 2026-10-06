@@ -1,6 +1,6 @@
 # ADR 0009 — System One (`sys1`): provider-agnostic decision tool, exposed to services through a tracked workflow
 
-- **Status:** **Proposed** (2026-10-05) — design decisions confirmed with the requester; not yet implemented
+- **Status:** **Accepted — implemented** (2026-10-05) on `sys1`; see *Implementation notes* at the end. Live verification against a real Ollama ≥ 0.35 (plan step 6) is still open.
 - **Date:** 2026-10-05
 - **Target branch:** `sys1`
 - **Related:** [ADR 0004](0004-role-based-access-for-agents-workflows-tools.md) (agent/workflow/tool RBAC layer — this ADR adds a policy and **corrects two of its claims**, see Decision 6), [ADR 0008](0008-member-search-tool.md) (layout and "schema is the agent's manual" precedent), `src/mastra/workflows/challenge/challenge-ingestion-workflow.ts` (existing service-triggered workflow pattern), `src/utils/providers/model-factory.ts` (existing chat-model provider switch — deliberately *not* reused, see Decision 1), `src/utils/providers/ollama.ts`
@@ -416,3 +416,33 @@ curl -X POST "$TC_AI_API/v6/ai/workflows/system-one/start-async?runId=$(uuidgen)
 - [ ] **`OLLAMA_API_URL`** set in every environment (System One uses it by default). Set **`SYS1_OLLAMA_BASE_URL`** only where System One should run on a different Ollama host than the chat models — decision models are small, but scoring 64 questions on a shared host competes with chat inference.
 - [ ] **`sys1:use` scope** created on the M2M Auth0 API (`AUTH0_M2M_AUDIENCE`) and granted to the consuming service clients.
 - [ ] Owner agreed for the **retention follow-up** (run records hold caller content indefinitely until then).
+
+## Implementation notes (2026-10-05)
+
+Implemented as designed. These details were settled while building it:
+
+- **`runId` gate checks the verified caller, not `info.resourceId`.** `Workflow.createRun()` returns the *cached*
+  in-process `Run` for a known `runId`, along with the first caller's `resourceId`. So `onStart`'s `info.resourceId`
+  can't tell B apart from A when B reuses A's still-`pending` id. `rejectRunIdReuse` compares the stored run's
+  `resourceId` with `requestContext.get(MASTRA_RESOURCE_ID_KEY)`, which verified auth sets per request, and falls
+  back to `info.resourceId` for in-process callers. A test covers the pending case. It fails if the check uses
+  `info.resourceId`.
+  A run with no owner (always the case under `DISABLE_AUTH=true`) is stored with `resourceId` NULL in Postgres while
+  the context has `undefined`. Both mean "no owner" and are compared as equal. The first version compared them
+  strictly, so it rejected every such run with `409` (fixed 2026-10-06; regression tests added).
+- **`mastra__user` is a local constant** (`MASTRA_USER_CONTEXT_KEY` in `access-control.ts`). Neither
+  `@mastra/core/request-context` nor any public `@mastra/server` export provides it. A test resolves
+  `@mastra/server` through `mastra` → `@mastra/deployer` and asserts that its `MASTRA_USER_KEY` still equals that
+  string.
+- **Response schemas are `z.looseObject`.** Additive upstream fields pass through verbatim (*Decisions confirmed* 6).
+  A missing or mistyped required field is still a `502`.
+- **`SYS1_KEEP_ALIVE`**: a purely numeric value is sent as a JSON number (seconds), anything else as a duration
+  string. Ollama rejects a unitless duration string.
+- **A caller abort is rethrown as-is.** Only the provider's own timeout maps to `504 SYS1_TIMEOUT`.
+- **Blank question/option names** are rejected by a refine on the record, not by the key schema. Zod reports a
+  failing key schema only as "Invalid key in record", with no useful path.
+- **Image redaction** touches only the `images` field of `context.input` and of each step's `payload`/`output`. A
+  caller's `state` may legitimately contain an `images` key and is left alone. A snapshot with no raw images is
+  returned as-is, without a clone. Tests confirm that breaking the deep copy makes the live run fail, as W2 predicts.
+- The **"tool unreachable" test** lives in `src/mastra/index.test.ts`. It imports the real Mastra instance with
+  Postgres swapped for in-memory LibSQL and Auth0/workspace env stubbed.
