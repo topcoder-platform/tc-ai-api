@@ -28,6 +28,21 @@ export const CHAT_ROUTE_PATH = `${CHAT_ROUTE_BASE_PATH}/:agentId`;
  */
 export const CUSTOM_API_BASE_PATH = '/v6/ai-api';
 
+/**
+ * Swagger UI + OpenAPI spec, mounted only when SWAGGER_UI_ENABLED=true — see
+ * src/utils/routes/api-docs.routes.ts. Mastra's own `/swagger-ui` sits at the
+ * server root, which the ALB doesn't forward (it routes only `/v6/ai/*`,
+ * `/v6/ai-chat/*` and `/v6/ai-api/*` to this service), so the docs live under
+ * the custom namespace instead.
+ */
+export const API_DOCS_ROUTE_PATH = `${CUSTOM_API_BASE_PATH}/docs`;
+export const API_DOCS_SPEC_ROUTE_PATH = `${API_DOCS_ROUTE_PATH}/openapi.json`;
+
+export const isSwaggerUIEnabled = (): boolean => process.env.SWAGGER_UI_ENABLED === 'true';
+
+/** Paths apiAuthLayer must let through unauthenticated while the flag is on. */
+export const API_DOCS_PUBLIC_PATHS = [API_DOCS_ROUTE_PATH, API_DOCS_SPEC_ROUTE_PATH];
+
 /** RAG index administration API — see src/utils/routes/rag-index.routes.ts. */
 export const RAG_ADMIN_ROUTE_BASE_PATH = `${CUSTOM_API_BASE_PATH}/rag`;
 export const RAG_CHALLENGES_ROUTE_PATH = `${RAG_ADMIN_ROUTE_BASE_PATH}/challenges`;

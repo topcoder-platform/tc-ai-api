@@ -41,6 +41,7 @@
     "@mastra/observability": "^1.18.3",
     "@mastra/pg": "^1.29.0",
     "@mastra/rag": "^2.6.6",
+    "@mastra/server": "^1.74.0",
     "@opentelemetry/exporter-logs-otlp-proto": "^0.222.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.222.0",
     "ai": "^6.0.209",

@@ -47,6 +47,9 @@ importers:
       '@mastra/rag':
         specifier: ^2.6.6
         version: 2.6.6(@mastra/core@1.74.0(@grpc/grpc-js@1.14.4)(ai@6.0.209(zod@4.6.5))(express@5.2.1)(zod@4.6.5))(zod@4.6.5)
+      '@mastra/server':
+        specifier: ^1.74.0
+        version: 1.74.0(@mastra/core@1.74.0(@grpc/grpc-js@1.14.4)(ai@6.0.209(zod@4.6.5))(express@5.2.1)(zod@4.6.5))(zod@4.6.5)
       '@opentelemetry/exporter-logs-otlp-proto':
         specifier: ^0.222.0
         version: 0.222.0(@opentelemetry/api@1.9.1)

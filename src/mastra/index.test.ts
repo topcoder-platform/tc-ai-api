@@ -2,6 +2,7 @@
  * Registration guards for src/mastra/index.ts. See docs/adr/0009-system-one-tool.md.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { API_DOCS_ROUTE_PATH } from '../utils/server-routes';
 
 // The real instance needs Postgres, Auth0 and a workspace path; none of that
 // matters for what is registered where.
@@ -42,5 +43,30 @@ describe('System One registration (ADR 0009)', () => {
             const ids = Object.values(tools ?? {}).map((tool) => (tool as { id?: string }).id);
             expect(ids, `agent "${agent.id}"`).not.toContain('system-one');
         }
+    });
+});
+
+describe('Swagger UI registration', () => {
+    // index.ts and auth/index.ts read SWAGGER_UI_ENABLED at module load, so each
+    // case needs a fresh module graph.
+    const docsRoutePaths = async (flag: string) => {
+        vi.resetModules();
+        vi.stubEnv('SWAGGER_UI_ENABLED', flag);
+        try {
+            const { mastra } = await import('./index');
+            return (mastra.getServer()?.apiRoutes ?? [])
+                .map(route => route.path)
+                .filter(path => path.startsWith(API_DOCS_ROUTE_PATH));
+        } finally {
+            vi.stubEnv('SWAGGER_UI_ENABLED', undefined);
+        }
+    };
+
+    it('mounts no docs routes unless SWAGGER_UI_ENABLED=true', async () => {
+        expect(await docsRoutePaths('')).toEqual([]);
+    });
+
+    it('mounts the UI and spec routes when SWAGGER_UI_ENABLED=true', async () => {
+        expect(await docsRoutePaths('true')).toHaveLength(2);
     });
 });
