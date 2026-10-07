@@ -128,6 +128,7 @@ tc-ai-api/
 | `AUTH0_M2M_DOMAIN`                  | Yes\*    | —                                      | Auth0 domain for M2M JWT validation                              |
 | `AUTH0_M2M_AUDIENCE`                | Yes\*    | —                                      | Auth0 audience for M2M tokens                                    |
 | `DISABLE_AUTH`                      | No       | `false`                                | Set to `"true"` to disable all authentication (dev mode)         |
+| `SWAGGER_UI_ENABLED`                | No       | `false`                                | `"true"` serves Swagger UI at `/v6/ai-api/docs` and the spec at `/v6/ai-api/docs/openapi.json`, both unauthenticated. Read at startup; enable in dev only (see [API docs](#api-docs-swagger-ui)) |
 | `M2M_AUTH_CLIENT_ID`                | No\*\*   | —                                       | Client id for tc-ai-api's own service M2M credential (`M2MService`) |
 | `M2M_AUTH_CLIENT_SECRET`            | No\*\*   | —                                       | Client secret for tc-ai-api's own service M2M credential            |
 | `M2M_AUTH_URL`                      | No       | `https://topcoder-dev.auth0.com/oauth/token` | Token endpoint used to obtain the service M2M token             |
@@ -1085,5 +1086,26 @@ Mastra automatically exposes the following REST endpoints:
 | `/api/agents/challengeSearchAgent/generate`       | `POST` | Synthesised NL challenge search           |
 | `/api/agents/challengeSearchAgent/stream`         | `POST` | Synthesised NL challenge search (streaming) |
 | `/studio/*`                                       | `GET`  | Mastra Studio UI (development/debugging) |
+| `/v6/ai-api/docs`                                 | `GET`  | Swagger UI — only when `SWAGGER_UI_ENABLED=true` |
+| `/v6/ai-api/docs/openapi.json`                    | `GET`  | OpenAPI 3.1 spec — only when `SWAGGER_UI_ENABLED=true` |
 
 All `/api/*` endpoints are protected by Auth0 authentication (unless `DISABLE_AUTH=true`) and scoped by the resource ID middleware.
+
+### API docs (Swagger UI)
+
+Set `SWAGGER_UI_ENABLED=true` on an environment (e.g. the dev ECS task's env, `/config/tc-ai-api/appvar`) to serve:
+
+- **Swagger UI** — `https://api.topcoder-dev.com/v6/ai-api/docs`
+- **OpenAPI spec** — `https://api.topcoder-dev.com/v6/ai-api/docs/openapi.json`
+
+The flag is read when the server starts, so toggling it needs only a task restart, not a rebuild. Both routes are public. Every other route still needs a token: click **Authorize** in the UI and paste a member or M2M Auth0 JWT (without the `Bearer ` prefix).
+
+Mastra's own `server.build.swaggerUI` / `openAPIDocs` aren't used, because they don't work behind the ALB:
+
+- Mastra hard-codes Swagger UI at `/swagger-ui`, on the server root. The ALB forwards only `/v6/ai/*`, `/v6/ai-chat/*` and `/v6/ai-api/*` to this service.
+- Mastra serves its spec at `/v6/ai/openapi.json`, which Auth0 and the resource-ID middleware protect, so the UI couldn't load it.
+- The generated spec has no security scheme, so Swagger UI would have no way to send a token.
+
+`src/utils/routes/api-docs.routes.ts` rebuilds the spec with Mastra's own generators (`@mastra/server/server-adapter`). The spec covers the built-in routes, served under `/v6/ai`, and the custom routes that carry `openapi` metadata, served from `/`. It also adds a bearer scheme. The two docs paths are added to the Auth0 providers' `public` list only while the flag is on.
+
+Locally, `pnpm dev` also serves Mastra's default UI at `http://localhost:4111/swagger-ui`, whatever the flag says.

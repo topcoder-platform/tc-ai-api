@@ -16,10 +16,11 @@ import {
   instancePromptAlignmentScorer,
 } from './scorers/instance-scorers';
 import { apiAuthLayer, middlewareConfig, tcAILogger } from '../utils';
-import { API_PREFIX, CHAT_ROUTE_PATH } from '../utils/server-routes';
+import { API_PREFIX, CHAT_ROUTE_PATH, isSwaggerUIEnabled } from '../utils/server-routes';
 import { aiWorkspace } from './workspaces';
 import { chatRoute } from '@mastra/ai-sdk';
 import { ragIndexRoutes } from '../utils/routes/rag-index.routes';
+import { apiDocsRoutes } from '../utils/routes/api-docs.routes';
 
 export const mastra = new Mastra({
   workflows: {
@@ -85,6 +86,9 @@ export const mastra = new Mastra({
       // RAG index admin API (list/delete indexed challenges) — administrator
       // only, see ADR 0004's `route` policy category.
       ...ragIndexRoutes,
+      // Swagger UI at /v6/ai-api/docs — opt-in per environment, see
+      // src/utils/routes/api-docs.routes.ts for why not Mastra's /swagger-ui.
+      ...(isSwaggerUIEnabled() ? apiDocsRoutes : []),
     ],
   },
   bundler: {
