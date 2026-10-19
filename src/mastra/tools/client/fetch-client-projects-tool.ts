@@ -3,16 +3,11 @@
 // search term, so a caller can answer "what work have we delivered for client X".
 // See docs/adr/0007-client-billing-account-project-visibility.md.
 //
-// Credential policy is the OPPOSITE of fetch-project-by-id's (which never
-// escalates to M2M): here, only an `administrator` caller's own JWT is
-// forwarded — every other RBAC-permitted role (currently just `Talent
-// Manager`) forces tc-ai-api's own service M2M token for every call this tool
-// makes. This is a discovery tool where an incomplete client/billing-account/
-// project tree (because a caller's own JWT can't see some of it) would
-// silently undercount delivered work — the same completeness argument
-// fetch-challenge-resources (ADR 0005) makes for its own forced-M2M branch.
+// All calls forward the requestor's token without M2M escalation, so the
+// Projects API enforces internal-project membership restrictions. Non-admin
+// callers only receive billing accounts with at least one visible project.
 import { createTool } from '@mastra/core/tools';
-import { toAuthenticatedCaller, withAccessPolicy } from '../../../utils/auth/access-control';
+import { callerHasRole, toAuthenticatedCaller, withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/request-context';
 import { callTcApi } from '../../../utils/tc-api-client';
@@ -59,8 +54,8 @@ export const fetchClientProjectsTool = withAccessPolicy(
             'Finds the work delivered for a Topcoder client/customer by walking the v6 Clients, ' +
             'Billing Accounts, and Projects APIs: client search -> that client\'s billing accounts -> ' +
             'each billing account\'s projects. Takes a codeName and/or name search term (at least one ' +
-            'required) and returns every matching client with its billing accounts and projects nested ' +
-            'underneath. Use this to answer "find me all the work done for client X" — then let the ' +
+            'required) and returns matching clients with the billing accounts and projects visible to ' +
+            'the caller nested underneath. Non-admin callers only see accounts with visible projects. Use this to answer "find me all the work done for client X" — then let the ' +
             'caller pick one project and resolve it further with fetch-project-by-id.',
         inputSchema: z.object({
             codeName: z.string().optional().describe('Client code to search for, e.g. "CUS-173826"'),
@@ -89,21 +84,6 @@ interface Input {
     name?: string;
 }
 
-/**
- * `withAccessPolicy` has already confirmed the caller holds `administrator`
- * or `Talent Manager` by the time this runs — this only decides *which*
- * credential to forward for the outbound TC API calls, not whether to allow
- * the call at all. Mirrors fetch-challenge-resources-tool.ts's own
- * shouldForceM2M (ADR 0005): fail toward the credential that works.
- */
-function shouldForceM2M(requestContext: RequestContext | undefined): boolean {
-    const user = requestContext?.get('user') as Record<string, unknown> | undefined;
-    if (!user) {
-        return true;
-    }
-    return !toAuthenticatedCaller(user).roles.includes(ADMIN_ROLE);
-}
-
 function toStringOrUndefined(value: unknown): string | undefined {
     return value === null || value === undefined ? undefined : String(value);
 }
@@ -115,7 +95,7 @@ function parseEnvelope(body: any): { total: number; data: any[] } {
     return { total, data };
 }
 
-const fetchClients = async (input: Input, requestContext: RequestContext | undefined, forceM2M: boolean) => {
+const fetchClients = async (input: Input, requestContext: RequestContext | undefined) => {
     const params = new URLSearchParams();
     if (input.codeName) params.set('codeName', input.codeName);
     if (input.name) params.set('name', input.name);
@@ -127,7 +107,6 @@ const fetchClients = async (input: Input, requestContext: RequestContext | undef
         url: `${CLIENTS_BASE_URL}?${params.toString()}`,
         init: { method: 'GET', signal: AbortSignal.timeout(15_000) },
         requestContext,
-        forceM2M,
     });
     if (!response.ok) {
         throw new Error(`Failed to search clients (HTTP ${response.status})`);
@@ -148,14 +127,12 @@ const fetchClients = async (input: Input, requestContext: RequestContext | undef
 const fetchBillingAccountsForClient = async (
     clientId: string,
     requestContext: RequestContext | undefined,
-    forceM2M: boolean,
 ) => {
     const response = await callTcApi({
         toolId: TOOL_ID,
         url: `${BILLING_ACCOUNTS_BASE_URL}?clientId=${encodeURIComponent(clientId)}&page=1&perPage=${PAGE_CAP}`,
         init: { method: 'GET', signal: AbortSignal.timeout(15_000) },
         requestContext,
-        forceM2M,
     });
     if (!response.ok) {
         throw new Error(`Failed to fetch billing accounts for client ${clientId} (HTTP ${response.status})`);
@@ -175,22 +152,24 @@ const fetchBillingAccountsForClient = async (
  * against a live response (see ADR 0007). Pagination metadata instead comes
  * from the same X-Total/X-Page/X-Per-Page headers GET /v6/resources already
  * uses (ADR 0005), also confirmed live for this endpoint.
+ * @param billingAccountId Account whose caller-visible projects are requested.
+ * @param requestContext Carries the requestor token used to enforce project access.
+ * @returns Visible project rows and whether more visible rows exist upstream.
+ * @throws Error on non-success responses; network/token errors propagate without M2M fallback.
  */
 const fetchProjectsForBillingAccount = async (
     billingAccountId: string,
     requestContext: RequestContext | undefined,
-    forceM2M: boolean,
 ) => {
     const response = await callTcApi({
         toolId: TOOL_ID,
         url: `${PROJECTS_BASE_URL}?billingAccountId=${encodeURIComponent(billingAccountId)}&page=1&perPage=${PAGE_CAP}`,
         init: { method: 'GET', signal: AbortSignal.timeout(15_000) },
         requestContext,
-        forceM2M,
     });
     if (!response.ok) {
         throw new Error(
-            `Failed to fetch projects for billing account ${billingAccountId} (HTTP ${response.status})`,
+            `Failed to fetch projects (HTTP ${response.status})`,
         );
     }
 
@@ -211,17 +190,25 @@ const fetchProjectsForBillingAccount = async (
     return { projects, truncated: totalHeader > rows.length };
 };
 
+/**
+ * Builds TopScout's client work tree using the caller's API permissions.
+ * Non-admins only receive account details when the Projects API returns visible work.
+ * @param input Client name/code search criteria from the tool invocation.
+ * @param requestContext Authenticated user and requestor token for all upstream calls.
+ * @returns Clients with visible billing accounts/projects and pagination flags.
+ * @throws Error on upstream failures or a missing requestor token; never escalates to M2M.
+ */
 const fetchClientProjects = async (input: Input, requestContext: RequestContext | undefined) => {
-    const forceM2M = shouldForceM2M(requestContext);
+    const user = requestContext?.get('user') as Record<string, unknown> | undefined;
+    const isAdmin = !!user && callerHasRole(toAuthenticatedCaller(user).roles, ADMIN_ROLE);
 
-    const { clients, truncated: clientsTruncated } = await fetchClients(input, requestContext, forceM2M);
+    const { clients, truncated: clientsTruncated } = await fetchClients(input, requestContext);
 
     const clientResults = await Promise.all(
         clients.map(async (client) => {
             const { billingAccounts, truncated: billingAccountsTruncated } = await fetchBillingAccountsForClient(
                 client.id,
                 requestContext,
-                forceM2M,
             );
 
             const billingAccountResults = await Promise.all(
@@ -229,7 +216,6 @@ const fetchClientProjects = async (input: Input, requestContext: RequestContext 
                     const { projects, truncated: projectsTruncated } = await fetchProjectsForBillingAccount(
                         billingAccount.id,
                         requestContext,
-                        forceM2M,
                     );
                     return {
                         id: billingAccount.id,
@@ -245,7 +231,9 @@ const fetchClientProjects = async (input: Input, requestContext: RequestContext 
                 name: client.name,
                 codeName: client.codeName,
                 billingAccountsTruncated,
-                billingAccounts: billingAccountResults,
+                // The billing-account list itself is broader than project visibility.
+                // Do not expose names/IDs for accounts with no caller-visible projects.
+                billingAccounts: billingAccountResults.filter((account) => isAdmin || account.projects.length > 0),
             };
         }),
     );
