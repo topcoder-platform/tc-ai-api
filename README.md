@@ -17,10 +17,11 @@
 13. [Workflows — Skill Extraction](#workflows--skill-extraction)
 14. [Challenges Vector RAG](#challenges-vector-rag)
 15. [System One — decision API](#system-one--decision-api)
-16. [Sequence Diagrams](#sequence-diagrams)
-17. [External API Interactions](#external-api-interactions)
-18. [CI/CD Pipeline](#cicd-pipeline)
-19. [Deployment](#deployment)
+16. [Let's talk classification](#lets-talk-classification)
+17. [Sequence Diagrams](#sequence-diagrams)
+18. [External API Interactions](#external-api-interactions)
+19. [CI/CD Pipeline](#cicd-pipeline)
+20. [Deployment](#deployment)
 
 ---
 
@@ -122,6 +123,15 @@ tc-ai-api/
 | `SYS1_ALLOWED_MODELS`               | No       | `= SYS1_MODEL`                         | Comma list of extra models callers may pick. Add `clef-flash`/`clef` to enable images |
 | `SYS1_TIMEOUT_MS`                   | No       | `30000`                                | Per System One provider call                                      |
 | `SYS1_KEEP_ALIVE`                   | No       | Ollama server default (5m)             | Sent as `keep_alive` (`5m`, or seconds; `0` unloads, negative pins). Callers can't set it |
+| `LETS_TALK_CLASSIFIER_AI_PROVIDER`  | No       | `AWSBedrock`                           | Model provider for `lets-talk-classifier-agent` ([ADR 0010](docs/adr/0010-lets-talk-classification.md)) |
+| `LETS_TALK_CLASSIFIER_AI_MODEL_ID`  | No       | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model id for `lets-talk-classifier-agent`                  |
+| `LETS_TALK_CLASSIFIER_MAX_OUTPUT_TOKENS` | No  | `1024`                                 | Output token cap per classification call                          |
+| `LETS_TALK_CLASSIFIER_MAX_RETRIES`  | No       | `2`                                    | L0 — AI SDK transport retries (throttling, 5xx, network)          |
+| `LETS_TALK_CLASSIFIER_MAX_PROCESSOR_RETRIES` | No | `2`                                 | L2 — feedback retries of an invalid model answer, per call        |
+| `LETS_TALK_CLASSIFY_MAX_ATTEMPTS`   | No       | `2`                                    | L4 — corrective attempts in total; then the run fails             |
+| `LETS_TALK_CLASSES_JSON`            | No       | the 4 default classes                  | JSON array of `{"id","description","examples"?,"counterExamples"?}` — 2–20 unique `UPPER_SNAKE` ids; invalid ⇒ boot fails. Changing it changes the output contract |
+| `LETS_TALK_MAX_MESSAGE_CHARS`       | No       | `5000`                                 | `message` is truncated to this before the model call              |
+| `LETS_TALK_MIN_CONFIDENCE`          | No       | `0.5`                                  | Below this top confidence the output sets `needsReview: true`     |
 | `MASTRA_EVAL_MODEL`                 | No       | `mistral:latest`                       | Ollama model used for evaluation scorers                         |
 | `AUTH0_DOMAIN`                      | Yes\*    | —                                      | Auth0 domain for member JWT validation                           |
 | `AUTH0_AUDIENCE`                    | Yes\*    | —                                      | Auth0 audience (client ID) for member tokens                     |
@@ -300,6 +310,8 @@ challenge-ingestion        roles: [administrator]                  scopes: [chal
 challenge-bulk-ingestion   roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
 rag-challenges             roles: [administrator]                  scopes: [challengesRAG:admin]   (route)
 system-one                 roles: [administrator]                  scopes: [sys1:use]              (workflow AND tool)
+lets-talk-classification   roles: none — all members denied        scopes: [ai:letstalk:classify]  (workflow)
+lets-talk-classifier-agent roles: none — all members denied        scopes: [ai:letstalk:classify]  (agent)
 search-members             roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 fetch-member-insights      roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 fetch-challenge-resources  roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
@@ -466,6 +478,17 @@ Can also answer "who's on this challenge" questions — copilot, reviewers, regi
 | **Tools**  | None — pure structured-output rewriter                                      |
 
 Rewrites a raw/rough job description into Topcoder's canonical structured format (formatted description + extracted skill keywords) for `jd-autowrite-workflow`.
+
+### `letsTalkClassifierAgent`
+
+| Property   | Value                                                                       |
+| ---------- | ----------------------------------------------------------------------------- |
+| **ID**     | `lets-talk-classifier-agent`                                                 |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default, `temperature: 0` |
+| **Memory** | None — stateless                                                             |
+| **Tools**  | None. Output processor: `StructuredOutputValidator` (L2 feedback retries)    |
+
+Scores one "Let's talk" form submission against the configured classes, in any language, for the `lets-talk-classification` workflow. Its instructions are generated from the class config. M2M-only (`ai:letstalk:classify`), like its workflow — see [Let's talk classification](#lets-talk-classification).
 
 ---
 
@@ -773,6 +796,40 @@ curl -X POST "$TC_AI_API/v6/ai/workflows/system-one/start-async?runId=$(uuidgen)
 - HTTP-level errors happen before any run exists: `403` (missing role/scope), `413` (body over Mastra's 4.5 MB limit, i.e. ~3.3 MB of raw image), and `409 SYS1_RUN_ID_CONFLICT` (a `runId` that is already in use; omit it or send a fresh UUID).
 - Read runs back with `GET /v6/ai/workflows/system-one/runs[/:runId]`. Callers see only their own runs; Studio and the database see all of them.
 - Images are stored in run records as `{ sha256, bytes }`, never as base64. Such runs can't be restarted or time-travelled, and the `start-async` response still echoes the caller's own images. Run records include the caller's `state` and are kept indefinitely until a retention policy lands.
+
+---
+
+## Let's talk classification
+
+> See [ADR 0010](docs/adr/0010-lets-talk-classification.md) for the design, the verification layers and the spike results.
+
+Sorts inbound "Let's talk" form submissions into predefined buckets with no manual triage: `JUNK`, `COMMUNITY_GENERAL`, `COMMUNITY_SUPPORT`, `SALES_LEAD` by default (configurable through `LETS_TALK_CLASSES_JSON`). The `lets-talk-classification` workflow (validate-submission → classify-submission → finalize-classification) wraps `lets-talk-classifier-agent`. Access is **M2M-only**: a token with the `ai:letstalk:classify` scope. Every member is denied, administrator included, on both the workflow and the agent routes. The scope must exist on the `AUTH0_M2M_AUDIENCE` API and be granted to the triggering client.
+
+```bash
+curl -X POST "$TC_AI_API/v6/ai/workflows/lets-talk-classification/start-async" \
+  -H "Authorization: Bearer $M2M_TOKEN_WITH_ai:letstalk:classify" -H 'Content-Type: application/json' \
+  -d '{ "inputData": {
+        "submissionId": "3f1c2a9e-6b7d-4e8f-9a01-2b3c4d5e6f70", "submittedAt": "2026-10-20T06:15:57Z",
+        "memberId": "88774411", "interestedIn": "Hiring talent",
+        "firstName": "Ana", "lastName": "García", "workEmail": "ana.garcia@acme.es", "companyName": "Acme S.L.",
+        "message": "Buscamos un equipo de desarrolladores React para un proyecto de 6 meses..." } }'
+```
+
+```json
+{ "status": "success", "result": {
+    "submissionId": "3f1c2a9e-6b7d-4e8f-9a01-2b3c4d5e6f70",
+    "classification": "SALES_LEAD", "confidence": 0.9,
+    "confidences": { "JUNK": 0.02, "COMMUNITY_GENERAL": 0.05, "COMMUNITY_SUPPORT": 0.03, "SALES_LEAD": 0.9 },
+    "needsReview": false, "detectedLanguage": "es",
+    "rationale": "A company asks for a React development team for a six-month project." } }
+```
+
+- **Input.** `submissionId` (UUID v4), `submittedAt` (UTC, `Z` suffix), optional `memberId`, plus `interestedIn`, `firstName`, `lastName`, `workEmail`, `companyName` and an **optional** `message` (empty in about half of real submissions). Unknown keys such as UTM parameters are dropped silently, so the raw form payload can be forwarded as-is.
+- **What the model sees.** The name, company, selector value and message, plus the email **domain** with code-computed free-mail / disposable flags, and `isTopcoderMember`. It never sees the email address, the member id, the submission id or the timestamp.
+- **Output.** `classification` is always the argmax of `confidences`, computed in code (ties go to the earlier configured class). `confidences` covers every configured class and sums to 1. `needsReview` is `true` when the message was empty, when the top confidence is below `LETS_TALK_MIN_CONFIDENCE`, or when the top two are within 0.1 of each other.
+- **Verification and retries.** A broken model answer goes through layers: transport retries, tolerant coercions, processor feedback retries, strategy fallback with JSON repair, then a code-side check with one corrective re-run. A run that still has no usable answer **fails**; no class is ever guessed. At most 18 model calls per run with the defaults; typically 1. The classify step's output in the run record carries `meta` (`strategy`, `attempts`, `processorRetries`, `repaired`, `issuesFixedInCode`, `tokenUsage`).
+- **Failures arrive as HTTP 200** with `{ "status": "failed", "error": { "message": "[LETS_TALK_…] …", "status": <code> } }`: `LETS_TALK_INVALID_INPUT` (400, lists each field path) or `LETS_TALK_INVALID_MODEL_OUTPUT` (502, lists the issues). Provider errors (e.g. Bedrock unreachable after retries) fail the run with the provider's message. Re-triggering is the caller's job.
+- **Eval.** `LETS_TALK_EVAL=true pnpm test:integration tests/integration/lets-talk` runs 206 labeled samples against real Bedrock: 194 pseudonymized real submissions from the HubSpot export plus 12 synthetic gap-fillers (`tests/fixtures/lets-talk-samples.json`). It reports accuracy per source, L2/L4 retry rates and tokens per run. Raw CRM exports hold personal data and are git-ignored; commit only pseudonymized fixtures.
 
 ---
 

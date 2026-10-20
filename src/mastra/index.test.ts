@@ -46,6 +46,14 @@ describe('System One registration (ADR 0009)', () => {
     });
 });
 
+describe("Let's talk registration (ADR 0010)", () => {
+    it('registers the workflow and its agent under ids the access policies are keyed on', async () => {
+        const { mastra } = await import('./index');
+        expect(mastra.getWorkflowById('lets-talk-classification').id).toBe('lets-talk-classification');
+        expect(mastra.getAgentById('lets-talk-classifier-agent').id).toBe('lets-talk-classifier-agent');
+    });
+});
+
 describe('Swagger UI registration', () => {
     // index.ts and auth/index.ts read SWAGGER_UI_ENABLED at module load, so each
     // case needs a fresh module graph.

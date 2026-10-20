@@ -39,7 +39,15 @@ export type AccessCategory = 'agent' | 'workflow' | 'tool' | 'route';
  * precedence over anything here — see resolveAccessPolicy().
  */
 export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, AccessPolicy>> = {
-    agent: {},
+    agent: {
+        // Same gate as the lets-talk-classification workflow (ADR 0010),
+        // otherwise /agents/lets-talk-classifier-agent/generate is a public
+        // bypass of it. Scopes only ⇒ every member token is denied.
+        'lets-talk-classifier-agent': {
+            mode: 'restricted',
+            scopes: ['ai:letstalk:classify'],
+        },
+    },
     workflow: {
         // Both rewrite the shared vector index — restricted out of the box so a
         // fresh deploy is safe before any operator sets an env var.
@@ -61,6 +69,13 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
             mode: 'restricted',
             roles: ['administrator'],
             scopes: ['sys1:use'],
+        },
+        // Let's talk classification (ADR 0010) — automated M2M caller only
+        // (no member roles ⇒ members denied, administrator included). Keep in
+        // step with the `lets-talk-classifier-agent` AGENT policy above.
+        'lets-talk-classification': {
+            mode: 'restricted',
+            scopes: ['ai:letstalk:classify'],
         },
     },
     tool: {
@@ -132,6 +147,7 @@ export const TARGET_ID_ALIASES: Record<AccessCategory, Record<string, string>> =
         challengeParserAgent: 'challenge-parser-agent',
         challengeSearchAgent: 'challenge-search-agent',
         jdRewriterAgent: 'jd-rewriter-agent',
+        letsTalkClassifierAgent: 'lets-talk-classifier-agent',
         // skillsMatchingAgent's key and .id already match.
     },
     workflow: {
@@ -140,6 +156,7 @@ export const TARGET_ID_ALIASES: Record<AccessCategory, Record<string, string>> =
         challengeIngestionWorkflow: 'challenge-ingestion',
         challengeSearchWorkflow: 'challenge-search',
         jdAutowriteWorkflow: 'jd-autowrite',
+        letsTalkClassificationWorkflow: 'lets-talk-classification',
         skillExtractionWorkflow: 'skill-extraction-workflow',
         systemOneWorkflow: 'system-one',
     },
