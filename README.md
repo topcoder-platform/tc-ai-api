@@ -16,10 +16,12 @@
 12. [Scorers (Evaluation)](#scorers-evaluation)
 13. [Workflows — Skill Extraction](#workflows--skill-extraction)
 14. [Challenges Vector RAG](#challenges-vector-rag)
-15. [Sequence Diagrams](#sequence-diagrams)
-16. [External API Interactions](#external-api-interactions)
-17. [CI/CD Pipeline](#cicd-pipeline)
-18. [Deployment](#deployment)
+15. [System One — decision API](#system-one--decision-api)
+16. [Let's talk classification](#lets-talk-classification)
+17. [Sequence Diagrams](#sequence-diagrams)
+18. [External API Interactions](#external-api-interactions)
+19. [CI/CD Pipeline](#cicd-pipeline)
+20. [Deployment](#deployment)
 
 ---
 
@@ -44,7 +46,7 @@ The service exposes a Hono-based HTTP API (managed by Mastra's built-in server),
 | **HTTP Server**     | Hono (embedded in Mastra)                                   |
 | **Database**        | PostgreSQL via `@mastra/pg` ^1.2.0                          |
 | **Auth**            | Auth0 via `@mastra/auth-auth0` ^1.0.0                       |
-| **Observability**   | OpenTelemetry via `@mastra/observability` ^1.2.0            |
+| **Observability**   | Not configured — `@mastra/observability`/OpenTelemetry deps are installed but unused (see [Observability](#observability--logging)) |
 | **Logging**         | Pino via `@mastra/loggers` ^1.0.1                           |
 | **Evals**           | `@mastra/evals` ^1.1.0 (Answer Relevancy, Prompt Alignment) |
 | **Schema**          | Zod 4.3+                                                    |
@@ -114,13 +116,29 @@ tc-ai-api/
 | `MASTRA_DB_CONNECTION`              | **Yes**  | —                                      | PostgreSQL connection string for Mastra storage and agent memory |
 | `MASTRA_DB_SCHEMA`                  | No       | `ai`                                   | PostgreSQL schema name for Mastra tables                         |
 | `TC_API_BASE`                       | **Yes**  | —                                      | Topcoder API base URL (e.g. `https://api.topcoder-dev.com`)      |
-| `OLLAMA_API_URL`                    | No       | `http://ollama.topcoder-dev.com:11434` | Ollama API endpoint for LLM inference                            |
+| `OLLAMA_API_URL`                    | No       | `http://ollama.topcoder-dev.com:11434` | Ollama API endpoint for LLM inference. Also System One's host — but read directly there, **without** the dev fallback |
+| `SYS1_PROVIDER`                     | No       | `ollama`                               | System One backend; only `ollama` in v1 ([ADR 0009](docs/adr/0009-system-one-tool.md)) |
+| `SYS1_OLLAMA_BASE_URL`              | No       | `OLLAMA_API_URL`                       | Overrides the Ollama host for System One only. Both unset ⇒ every call fails `503 SYS1_NOT_CONFIGURED` |
+| `SYS1_MODEL`                        | No       | `nimble`                               | Default System One model when a request omits `model`; always allowed |
+| `SYS1_ALLOWED_MODELS`               | No       | `= SYS1_MODEL`                         | Comma list of extra models callers may pick. Add `clef-flash`/`clef` to enable images |
+| `SYS1_TIMEOUT_MS`                   | No       | `30000`                                | Per System One provider call                                      |
+| `SYS1_KEEP_ALIVE`                   | No       | Ollama server default (5m)             | Sent as `keep_alive` (`5m`, or seconds; `0` unloads, negative pins). Callers can't set it |
+| `LETS_TALK_CLASSIFIER_AI_PROVIDER`  | No       | `AWSBedrock`                           | Model provider for `lets-talk-classifier-agent` ([ADR 0010](docs/adr/0010-lets-talk-classification.md)) |
+| `LETS_TALK_CLASSIFIER_AI_MODEL_ID`  | No       | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model id for `lets-talk-classifier-agent`                  |
+| `LETS_TALK_CLASSIFIER_MAX_OUTPUT_TOKENS` | No  | `1024`                                 | Output token cap per classification call                          |
+| `LETS_TALK_CLASSIFIER_MAX_RETRIES`  | No       | `2`                                    | L0 — AI SDK transport retries (throttling, 5xx, network)          |
+| `LETS_TALK_CLASSIFIER_MAX_PROCESSOR_RETRIES` | No | `2`                                 | L2 — feedback retries of an invalid model answer, per call        |
+| `LETS_TALK_CLASSIFY_MAX_ATTEMPTS`   | No       | `2`                                    | L4 — corrective attempts in total; then the run fails             |
+| `LETS_TALK_CLASSES_JSON`            | No       | the 4 default classes                  | JSON array of `{"id","description","examples"?,"counterExamples"?}` — 2–20 unique `UPPER_SNAKE` ids; invalid ⇒ boot fails. Changing it changes the output contract |
+| `LETS_TALK_MAX_MESSAGE_CHARS`       | No       | `5000`                                 | `message` is truncated to this before the model call              |
+| `LETS_TALK_MIN_CONFIDENCE`          | No       | `0.5`                                  | Below this top confidence the output sets `needsReview: true`     |
 | `MASTRA_EVAL_MODEL`                 | No       | `mistral:latest`                       | Ollama model used for evaluation scorers                         |
 | `AUTH0_DOMAIN`                      | Yes\*    | —                                      | Auth0 domain for member JWT validation                           |
 | `AUTH0_AUDIENCE`                    | Yes\*    | —                                      | Auth0 audience (client ID) for member tokens                     |
 | `AUTH0_M2M_DOMAIN`                  | Yes\*    | —                                      | Auth0 domain for M2M JWT validation                              |
 | `AUTH0_M2M_AUDIENCE`                | Yes\*    | —                                      | Auth0 audience for M2M tokens                                    |
 | `DISABLE_AUTH`                      | No       | `false`                                | Set to `"true"` to disable all authentication (dev mode)         |
+| `SWAGGER_UI_ENABLED`                | No       | `false`                                | `"true"` serves Swagger UI at `/v6/ai-api/docs` and the spec at `/v6/ai-api/docs/openapi.json`, both unauthenticated. Read at startup; enable in dev only (see [API docs](#api-docs-swagger-ui)) |
 | `M2M_AUTH_CLIENT_ID`                | No\*\*   | —                                       | Client id for tc-ai-api's own service M2M credential (`M2MService`) |
 | `M2M_AUTH_CLIENT_SECRET`            | No\*\*   | —                                       | Client secret for tc-ai-api's own service M2M credential            |
 | `M2M_AUTH_URL`                      | No       | `https://topcoder-dev.auth0.com/oauth/token` | Token endpoint used to obtain the service M2M token             |
@@ -165,7 +183,7 @@ export const mastra = new Mastra({
   scorers:      { ...evalScorers },
   storage:      new PostgresStore({ connectionString, schemaName }),
   logger:       tcAILogger,          // Pino
-  observability: new Observability({...}),  // OpenTelemetry
+  // no `observability` — tracing is not configured (see Observability & Logging)
   server: {
     port: 3000,
     apiPrefix: API_PREFIX,            // '/v6/ai' — built-in Mastra routes live here
@@ -285,12 +303,17 @@ Authentication answers *"is this a valid caller?"*; access control answers *"may
 
 Because Mastra's `getAgentById`/`getWorkflowById` fall back to the registry key, **both spellings reach the same resource over HTTP** — `/v6/ai/workflows/challenge-ingestion/start` and `/v6/ai/workflows/challengeIngestionWorkflow/start` are the same workflow. `TARGET_ID_ALIASES` maps every differing registry key to its canonical `.id`, and `resolveAccessPolicy()` canonicalises through it before any lookup, so a restriction can't be bypassed by addressing the target the other way. **Adding a restricted policy for a resource whose registry key differs from its `.id` means adding its alias entry too**; the unit tests assert both spellings resolve identically.
 
-**Shipped defaults.** Five targets are restricted out of the box:
+**Shipped defaults.** These targets are restricted out of the box:
 
 ```
 challenge-ingestion        roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
 challenge-bulk-ingestion   roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
 rag-challenges             roles: [administrator]                  scopes: [challengesRAG:admin]   (route)
+system-one                 roles: [administrator]                  scopes: [sys1:use]              (workflow AND tool)
+lets-talk-classification   roles: none — all members denied        scopes: [ai:letstalk:classify]  (workflow)
+lets-talk-classifier-agent roles: none — all members denied        scopes: [ai:letstalk:classify]  (agent)
+search-members             roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
+fetch-member-insights      roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 fetch-challenge-resources  roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 fetch-project-by-id        roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 fetch-client-projects      roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
@@ -298,13 +321,15 @@ fetch-client-projects      roles: [administrator, Talent Manager]  scopes: none 
 
 The first three all rewrite the shared challenge vector index. The last three (`fetch-challenge-resources`, `fetch-project-by-id`, `fetch-client-projects`) are different: they're `restricted` to match the RBAC platform-ui already enforces one layer up on the only UI surface that reaches them, not because the underlying data is sensitive to write. `fetch-project-by-id` was `public` before [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md) — it's now restricted because it also surfaces a project's client/billing identity, not just project detail.
 
+`system-one` ([ADR 0009](docs/adr/0009-system-one-tool.md)) has the same policy in two categories — the workflow (the service entry point, gated at the auth hook) and the tool (re-checked inside the workflow's `evaluate` step). **Override both together** (`ACCESS_POLICY_WORKFLOW_SYSTEM_ONE_*` and `ACCESS_POLICY_TOOL_SYSTEM_ONE_*`): widening only the workflow yields runs that start and then fail with `Access denied for tool "system-one"`. The `sys1:use` permission must exist on the `AUTH0_M2M_AUDIENCE` API and be granted to the consuming service clients.
+
 Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
 
 **Three enforcement points:**
 
 - **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
 - **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Currently one entry: `/v6/ai-api/rag/challenges` → `rag-challenges`, restricted to `administrator` / `challengesRAG:admin` out of the box.
-- **Tools** — tools have no HTTP route of their own, so `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the `user` already on `RequestContext` and throws `ToolAccessDeniedError` on denial — surfaced to the LLM as a failed tool call, or to a workflow step as a rejected `execute()`.
+- **Tools** — `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the verified caller from `RequestContext` — the reserved `mastra__user` key first, which a request body cannot set, then `user` for in-process callers — and throws `ToolAccessDeniedError` (`status: 403`) on denial: surfaced to the LLM as a failed tool call, to a workflow step as a rejected `execute()`, or over HTTP as a **403**. Tools **are** URL-addressable: Mastra's `POST /v6/ai/tools/:toolId/execute` resolves any tool attached to a registered agent, so `authorizeAccessPolicy` also matches `/v6/ai/tools/:toolId` for an early 403 at the auth hook (ADR 0009 C1–C3).
 
 Nested, in-process invocations (`challenge-bulk-ingestion` → `challenge-ingestion`, `challenge-context` → `challenge-parser-agent`) are **not** re-gated: they never re-enter the HTTP router, and you can't reach them without passing the outer check first.
 
@@ -343,11 +368,11 @@ Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authoriz
 | `search-challenges` | Requestor token only — no fallback configured |
 | `fetch-project-by-id` | Requestor token only — no fallback configured, and **never** `forceM2M` for any caller, including its billing-account client enrichment call (ADR 0007) |
 | `fetch-challenge-resources` | Requestor token when the caller is `administrator`; tc-ai-api's own M2M token (`forceM2M`) for any other RBAC-allowed caller (e.g. `Talent Manager`) — see [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) |
-| `fetch-client-projects` | Same `forceM2M` shape as `fetch-challenge-resources`: requestor token only for `administrator`, tc-ai-api's own M2M token for any other RBAC-allowed caller — see [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md) |
+| `fetch-client-projects` | Requestor token only for every caller, with no M2M fallback; non-admins only receive billing accounts with caller-visible projects — see [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md#addendum--pm-6517-caller-scoped-client-discovery) |
 | `standardized-skills-fuzzy-match` | Unauthenticated (public endpoint) — unaffected by this mechanism |
 | `standardized-skills-semantic-search` | Unauthenticated (public endpoint) — unaffected by this mechanism |
 
-`TOOL_M2M_FALLBACK_CONFIG` currently has **no entries** — none of the tools above use the reactive fallback-on-401/403 path. The fallback path exists as reusable infrastructure for a future tool that needs it (see ADR 0002's "Resolution of open questions" for why the three original Challenge/Project tools deliberately ship without a safety net: correctness of authorization was prioritized over availability). `fetch-challenge-resources` and `fetch-client-projects` both use the proactive `forceM2M` branch instead (ADR 0005 / ADR 0007), driven by the caller's RBAC-checked role rather than an upstream error response — `fetch-project-by-id` deliberately does **not**, even though it's restricted to the same two roles (ADR 0007: correctness/least-privilege over completeness for a single-project lookup).
+`TOOL_M2M_FALLBACK_CONFIG` currently has **no entries** — none of the tools above use the reactive fallback-on-401/403 path. The fallback path exists as reusable infrastructure for a future tool that needs it (see ADR 0002's "Resolution of open questions" for why the three original Challenge/Project tools deliberately ship without a safety net: correctness of authorization was prioritized over availability). `fetch-challenge-resources` uses the proactive `forceM2M` branch (ADR 0005), driven by the caller's RBAC-checked role rather than an upstream error response. `fetch-project-by-id` and `fetch-client-projects` do **not** escalate to M2M: both preserve the caller's upstream permissions (ADR 0007, including the PM-6517 addendum).
 
 ---
 
@@ -357,15 +382,9 @@ Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authoriz
 
 A Pino logger (`@mastra/loggers`) is configured at `info` level with the service name `TC AI API`. It is injected into the Mastra instance and made available to all agents, tools, and workflow steps via context.
 
-### Observability (OpenTelemetry)
+### Observability (tracing)
 
-The `@mastra/observability` package provides:
-
-- **DefaultExporter** — exports spans to the configured OTLP endpoint.
-- **SensitiveDataFilter** — a span output processor that redacts sensitive data from telemetry.
-- Service name: `tc-ai-api`
-
-All agent interactions, tool executions, and workflow step runs are automatically instrumented.
+**Not configured.** `src/mastra/index.ts` sets no `observability`, and nothing else wires an exporter — the `@mastra/observability` and `@opentelemetry/*` packages in `package.json` are installed but unused. The `traceId`/`spanId` fields in workflow results therefore correlate to nothing. The persisted **workflow run** (Postgres `workflow_snapshots`) is the tracking record today — see [System One](#system-one--decision-api) for how a service call is recorded. Enabling tracing repo-wide is a separate ADR (ADR 0009, W7).
 
 ---
 
@@ -459,6 +478,17 @@ Can also answer "who's on this challenge" questions — copilot, reviewers, regi
 | **Tools**  | None — pure structured-output rewriter                                      |
 
 Rewrites a raw/rough job description into Topcoder's canonical structured format (formatted description + extracted skill keywords) for `jd-autowrite-workflow`.
+
+### `letsTalkClassifierAgent`
+
+| Property   | Value                                                                       |
+| ---------- | ----------------------------------------------------------------------------- |
+| **ID**     | `lets-talk-classifier-agent`                                                 |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default, `temperature: 0` |
+| **Memory** | None — stateless                                                             |
+| **Tools**  | None. Output processor: `StructuredOutputValidator` (L2 feedback retries)    |
+
+Scores one "Let's talk" form submission against the configured classes, in any language, for the `lets-talk-classification` workflow. Its instructions are generated from the class config. M2M-only (`ai:letstalk:classify`), like its workflow — see [Let's talk classification](#lets-talk-classification).
 
 ---
 
@@ -560,12 +590,12 @@ Lists who's on a challenge by role. `role` is a caller-facing category resolved 
 | Property   | Value                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | **ID**     | `fetch-client-projects`                                              |
-| **API**    | `GET {TC_API_BASE}/v6/clients` → `GET {TC_API_BASE}/v6/billing-accounts?clientId=` → `GET {TC_API_BASE}/v6/projects?billingAccountId=` (requestor token for `administrator`, tc-ai-api's own M2M token otherwise) |
+| **API**    | `GET {TC_API_BASE}/v6/clients` → `GET {TC_API_BASE}/v6/billing-accounts?clientId=` → `GET {TC_API_BASE}/v6/projects?billingAccountId=` (requestor token for every caller; no M2M escalation) |
 | **Input**  | `{ codeName?: string, name?: string }` — at least one required |
 | **Output** | `{ clients: [{ id, name?, codeName?, billingAccountsTruncated, billingAccounts: [{ id, name?, projectsTruncated, projects: [{ id, name?, status?, lastActivityAt?, lastActivityUserId? }] }] }], clientsTruncated }` |
 | **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) |
 
-Finds the work delivered for a client/customer by walking Topcoder's v6 clients → billing accounts → projects hierarchy for a `codeName`/`name` search term, so `challengeSearchAgent` can answer "find me all the work done for client X" and then let the caller pick one project to resolve further with `fetch-project-by-id`. Each level is capped at 50 rows per invocation (bounding upstream fan-out), with a `...Truncated` flag surfacing when more exists than was fetched rather than looping through further pages. Each project row also carries the upstream `lastActivityAt` / `lastActivityUserId` (both optional, passed through as strings) so the agent can say which of a client's projects are active or most recent without a per-project follow-up call. The three list endpoints don't share one pagination shape: `clients` and `billing-accounts?clientId=` return the `{ page, perPage, total, totalPages, data }` envelope, while `projects?billingAccountId=` returns a bare array with pagination communicated via the same `X-Total`/`X-Page`/`X-Per-Page` headers `GET /v6/resources` uses (ADR 0005) — both confirmed against live responses, see [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md). Credential selection is the same shape as `fetch-challenge-resources` (`shouldForceM2M`): the requestor's own token only for `administrator`, tc-ai-api's service M2M token for every other RBAC-permitted caller — deliberately the *opposite* default from `fetch-project-by-id`, since this is a cross-project discovery tool where an incomplete tree (because a caller's own JWT can't see part of it) would silently undercount delivered work.
+Finds the work delivered for a client/customer by walking Topcoder's v6 clients → billing accounts → projects hierarchy for a `codeName`/`name` search term, so `challengeSearchAgent` can answer "find me all the work done for client X" and then let the caller pick one project to resolve further with `fetch-project-by-id`. Each level is capped at 50 rows per invocation (bounding upstream fan-out), with a `...Truncated` flag surfacing when more exists than was fetched rather than looping through further pages. Each project row also carries the upstream `lastActivityAt` / `lastActivityUserId` (both optional, passed through as strings) so the agent can say which of a client's projects are active or most recent without a per-project follow-up call. The three list endpoints don't share one pagination shape: `clients` and `billing-accounts?clientId=` return the `{ page, perPage, total, totalPages, data }` envelope, while `projects?billingAccountId=` returns a bare array with pagination communicated via the same `X-Total`/`X-Page`/`X-Per-Page` headers `GET /v6/resources` uses (ADR 0005) — both confirmed against live responses, see [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md). Every upstream call forwards the requestor's token without M2M escalation, including on missing credentials or HTTP 401/403. The Projects API applies its configured internal billing account exclusions and active-membership exceptions. For non-admin callers, accounts without any visible projects are omitted entirely, including their IDs and names; this also omits genuinely empty accounts because the billing-account list alone cannot establish project visibility. Administrators retain empty accounts. Pagination flags still describe the upstream pages, so an empty filtered page can have `billingAccountsTruncated: true`.
 
 ---
 
@@ -726,6 +756,80 @@ Switching a given environment's embedding provider requires a full reindex — `
 ### Database bootstrap
 
 Per D3, there is **no hand-maintained DDL script** — `PgVector.createIndex()` performs all schema/table/index creation on first use (schema, table, HNSW vector index, and btree `metadataIndexes` on `challengeId`/`projectId`/`track`). This assumes the `vector` extension is enabled and the runtime database role holds DDL privileges. Local development uses the same `docker/docker-compose.yml` (`pgvector/pgvector:pg16`) as the rest of the project — no separate `init-db` step.
+
+---
+
+## System One — decision API
+
+> See [ADR 0009](docs/adr/0009-system-one-tool.md) for the design and the Mastra behaviours it is built around.
+
+Ollama's System One (`POST /v1/systemone`, Ollama ≥ 0.35) scores a fixed set of caller-defined answers with a small local decision model and returns **probabilities** instead of text. It handles three question types: `choice` (one of N labels), `noul` (yes/no, returns P(yes)) and `score` (position on an ordered rubric, a weighted index in `[0, N-1]`).
+
+**Services call the `system-one` workflow, never the tool.** Every call is then a persisted run (input, per-step payload/output/error/timing, result, caller identity). The `system-one` tool (`src/mastra/tools/system-one/`) holds the logic and is the future agent interface. It is deliberately not registered on Mastra or on any agent, so `/v6/ai/tools/system-one/execute` answers `404`. Access: `administrator` members or M2M tokens with `sys1:use`.
+
+```bash
+curl -X POST "$TC_AI_API/v6/ai/workflows/system-one/start-async?runId=$(uuidgen)" \
+  -H "Authorization: Bearer $M2M_TOKEN_WITH_sys1:use" -H 'Content-Type: application/json' \
+  -d '{ "inputData": {
+        "state": {"ticket": "I was charged twice. Please refund the extra payment."},
+        "questions": {
+          "refund": { "type": "noul",   "instructions": "Is the customer requesting a refund?" },
+          "label":  { "type": "choice", "instructions": "Which queue owns this ticket?",
+                      "criteria": {"billing": "Payments and refunds", "bug": "Software errors", "other": null} } } } }'
+```
+
+- `inputData` is Ollama's request body. Two differences: `model` is optional and must be in `SYS1_ALLOWED_MODELS`, and `keep_alive` is ignored because the server sets it.
+- `result` is Ollama's response verbatim, plus `provider`.
+- **Failures arrive as HTTP 200** with `{ "status": "failed", "error": { "message": "[SYS1_…] …", "status": <code> } }`, and they are recorded. Branch on `status` first, then on the `[SYS1_…]` prefix or `error.status`:
+
+  | Code | `error.status` | Meaning |
+  | --- | --- | --- |
+  | `SYS1_INVALID_INPUT` | 400 | Request failed the schema (message lists each field path) |
+  | `SYS1_MODEL_NOT_ALLOWED` | 400 | `model` not allowlisted (message lists allowed models) |
+  | `SYS1_INVALID_REQUEST` | 400 | Rejected upstream (context overflow, image to a non-vision model, …) |
+  | `SYS1_REQUEST_TOO_LARGE` | 413 | > 64 KiB without images / > 32 MiB with images |
+  | `SYS1_MODEL_UNAVAILABLE` | 503 | Allowed model not pulled on the Ollama host (ops fault) |
+  | `SYS1_PROVIDER_UNAVAILABLE` / `SYS1_NOT_CONFIGURED` | 503 | Ollama unreachable / no Ollama URL configured |
+  | `SYS1_UPSTREAM_ERROR` | 502 | Upstream 5xx, or a response that breaks the contract |
+  | `SYS1_TIMEOUT` | 504 | No answer within `SYS1_TIMEOUT_MS` |
+
+- HTTP-level errors happen before any run exists: `403` (missing role/scope), `413` (body over Mastra's 4.5 MB limit, i.e. ~3.3 MB of raw image), and `409 SYS1_RUN_ID_CONFLICT` (a `runId` that is already in use; omit it or send a fresh UUID).
+- Read runs back with `GET /v6/ai/workflows/system-one/runs[/:runId]`. Callers see only their own runs; Studio and the database see all of them.
+- Images are stored in run records as `{ sha256, bytes }`, never as base64. Such runs can't be restarted or time-travelled, and the `start-async` response still echoes the caller's own images. Run records include the caller's `state` and are kept indefinitely until a retention policy lands.
+
+---
+
+## Let's talk classification
+
+> See [ADR 0010](docs/adr/0010-lets-talk-classification.md) for the design, the verification layers and the spike results.
+
+Sorts inbound "Let's talk" form submissions into predefined buckets with no manual triage: `JUNK`, `COMMUNITY_GENERAL`, `COMMUNITY_SUPPORT`, `SALES_LEAD` by default (configurable through `LETS_TALK_CLASSES_JSON`). The `lets-talk-classification` workflow (validate-submission → classify-submission → finalize-classification) wraps `lets-talk-classifier-agent`. Access is **M2M-only**: a token with the `ai:letstalk:classify` scope. Every member is denied, administrator included, on both the workflow and the agent routes. The scope must exist on the `AUTH0_M2M_AUDIENCE` API and be granted to the triggering client.
+
+```bash
+curl -X POST "$TC_AI_API/v6/ai/workflows/lets-talk-classification/start-async" \
+  -H "Authorization: Bearer $M2M_TOKEN_WITH_ai:letstalk:classify" -H 'Content-Type: application/json' \
+  -d '{ "inputData": {
+        "submissionId": "3f1c2a9e-6b7d-4e8f-9a01-2b3c4d5e6f70", "submittedAt": "2026-10-20T06:15:57Z",
+        "memberId": "88774411", "interestedIn": "Hiring talent",
+        "firstName": "Ana", "lastName": "García", "workEmail": "ana.garcia@acme.es", "companyName": "Acme S.L.",
+        "message": "Buscamos un equipo de desarrolladores React para un proyecto de 6 meses..." } }'
+```
+
+```json
+{ "status": "success", "result": {
+    "submissionId": "3f1c2a9e-6b7d-4e8f-9a01-2b3c4d5e6f70",
+    "classification": "SALES_LEAD", "confidence": 0.9,
+    "confidences": { "JUNK": 0.02, "COMMUNITY_GENERAL": 0.05, "COMMUNITY_SUPPORT": 0.03, "SALES_LEAD": 0.9 },
+    "needsReview": false, "detectedLanguage": "es",
+    "rationale": "A company asks for a React development team for a six-month project." } }
+```
+
+- **Input.** `submissionId` (UUID v4), `submittedAt` (UTC, `Z` suffix), optional `memberId`, plus `interestedIn`, `firstName`, `lastName`, `workEmail`, `companyName` and an **optional** `message` (empty in about half of real submissions). Unknown keys such as UTM parameters are dropped silently, so the raw form payload can be forwarded as-is.
+- **What the model sees.** The name, company, selector value and message, plus the email **domain** with code-computed free-mail / disposable flags, and `isTopcoderMember`. It never sees the email address, the member id, the submission id or the timestamp.
+- **Output.** `classification` is always the argmax of `confidences`, computed in code (ties go to the earlier configured class). `confidences` covers every configured class and sums to 1. `needsReview` is `true` when the message was empty, when the top confidence is below `LETS_TALK_MIN_CONFIDENCE`, or when the top two are within 0.1 of each other.
+- **Verification and retries.** A broken model answer goes through layers: transport retries, tolerant coercions, processor feedback retries, strategy fallback with JSON repair, then a code-side check with one corrective re-run. A run that still has no usable answer **fails**; no class is ever guessed. At most 18 model calls per run with the defaults; typically 1. The classify step's output in the run record carries `meta` (`strategy`, `attempts`, `processorRetries`, `repaired`, `issuesFixedInCode`, `tokenUsage`).
+- **Failures arrive as HTTP 200** with `{ "status": "failed", "error": { "message": "[LETS_TALK_…] …", "status": <code> } }`: `LETS_TALK_INVALID_INPUT` (400, lists each field path) or `LETS_TALK_INVALID_MODEL_OUTPUT` (502, lists the issues). Provider errors (e.g. Bedrock unreachable after retries) fail the run with the provider's message. Re-triggering is the caller's job.
+- **Eval.** `LETS_TALK_EVAL=true pnpm test:integration tests/integration/lets-talk` runs 206 labeled samples against real Bedrock: 194 pseudonymized real submissions from the HubSpot export plus 12 synthetic gap-fillers (`tests/fixtures/lets-talk-samples.json`). It reports accuracy per source, L2/L4 retry rates and tokens per run. Raw CRM exports hold personal data and are git-ignored; commit only pseudonymized fixtures.
 
 ---
 
@@ -942,7 +1046,7 @@ These are **unauthenticated** calls (no bearer token forwarded). The API base UR
 | `{TC_API_BASE}/v6/billing-accounts?clientId=` | `GET` | List a client's billing accounts (paginated) | `fetchClientProjectsTool` (ADR 0007) |
 | `{TC_API_BASE}/v6/projects?billingAccountId=` | `GET` | List a billing account's projects (paginated via headers, not a body envelope) | `fetchClientProjectsTool` (ADR 0007) |
 
-Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallengesTool` — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No reactive M2M fallback is configured for either. `fetchProjectTool` is also requestor-token-only, including for its billing-account enrichment call, and **never** escalates to M2M ([ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md)) — even though, unlike the two above, it's now `restricted` rather than `public`. `fetchChallengeResourcesTool` and `fetchClientProjectsTool` both branch instead (`forceM2M`, ADR 0005 / ADR 0007): the requestor's own token only when they're `administrator`, tc-ai-api's service M2M token otherwise.
+Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallengesTool` — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No reactive M2M fallback is configured for either. `fetchProjectTool` is also requestor-token-only, including for its billing-account enrichment call, and **never** escalates to M2M ([ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md)) — even though, unlike the two above, it's now `restricted` rather than `public`. `fetchClientProjectsTool` also forwards the requestor's token for every call and omits accounts without visible projects for non-admin callers (PM-6517). `fetchChallengeResourcesTool` branches instead (`forceM2M`, ADR 0005): the requestor's own token only when they're `administrator`, tc-ai-api's service M2M token otherwise.
 
 ### 3. Ollama LLM API
 
@@ -1039,5 +1143,26 @@ Mastra automatically exposes the following REST endpoints:
 | `/api/agents/challengeSearchAgent/generate`       | `POST` | Synthesised NL challenge search           |
 | `/api/agents/challengeSearchAgent/stream`         | `POST` | Synthesised NL challenge search (streaming) |
 | `/studio/*`                                       | `GET`  | Mastra Studio UI (development/debugging) |
+| `/v6/ai-api/docs`                                 | `GET`  | Swagger UI — only when `SWAGGER_UI_ENABLED=true` |
+| `/v6/ai-api/docs/openapi.json`                    | `GET`  | OpenAPI 3.1 spec — only when `SWAGGER_UI_ENABLED=true` |
 
 All `/api/*` endpoints are protected by Auth0 authentication (unless `DISABLE_AUTH=true`) and scoped by the resource ID middleware.
+
+### API docs (Swagger UI)
+
+Set `SWAGGER_UI_ENABLED=true` on an environment (e.g. the dev ECS task's env, `/config/tc-ai-api/appvar`) to serve:
+
+- **Swagger UI** — `https://api.topcoder-dev.com/v6/ai-api/docs`
+- **OpenAPI spec** — `https://api.topcoder-dev.com/v6/ai-api/docs/openapi.json`
+
+The flag is read when the server starts, so toggling it needs only a task restart, not a rebuild. Both routes are public. Every other route still needs a token: click **Authorize** in the UI and paste a member or M2M Auth0 JWT (without the `Bearer ` prefix).
+
+Mastra's own `server.build.swaggerUI` / `openAPIDocs` aren't used, because they don't work behind the ALB:
+
+- Mastra hard-codes Swagger UI at `/swagger-ui`, on the server root. The ALB forwards only `/v6/ai/*`, `/v6/ai-chat/*` and `/v6/ai-api/*` to this service.
+- Mastra serves its spec at `/v6/ai/openapi.json`, which Auth0 and the resource-ID middleware protect, so the UI couldn't load it.
+- The generated spec has no security scheme, so Swagger UI would have no way to send a token.
+
+`src/utils/routes/api-docs.routes.ts` rebuilds the spec with Mastra's own generators (`@mastra/server/server-adapter`). The spec covers the built-in routes, served under `/v6/ai`, and the custom routes that carry `openapi` metadata, served from `/`. It also adds a bearer scheme. The two docs paths are added to the Auth0 providers' `public` list only while the flag is on.
+
+Locally, `pnpm dev` also serves Mastra's default UI at `http://localhost:4111/swagger-ui`, whatever the flag says.

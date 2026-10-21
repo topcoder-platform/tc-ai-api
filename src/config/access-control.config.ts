@@ -39,7 +39,15 @@ export type AccessCategory = 'agent' | 'workflow' | 'tool' | 'route';
  * precedence over anything here — see resolveAccessPolicy().
  */
 export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, AccessPolicy>> = {
-    agent: {},
+    agent: {
+        // Same gate as the lets-talk-classification workflow (ADR 0010),
+        // otherwise /agents/lets-talk-classifier-agent/generate is a public
+        // bypass of it. Scopes only ⇒ every member token is denied.
+        'lets-talk-classifier-agent': {
+            mode: 'restricted',
+            scopes: ['ai:letstalk:classify'],
+        },
+    },
     workflow: {
         // Both rewrite the shared vector index — restricted out of the box so a
         // fresh deploy is safe before any operator sets an env var.
@@ -52,6 +60,22 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
             mode: 'restricted',
             roles: ['administrator'],
             scopes: ['challengesRAG:admin'],
+        },
+        // System One (ADR 0009) — gates every /workflows/system-one/* route at
+        // the auth hook. Keep in step with the `system-one` TOOL policy below:
+        // widening only this one yields runs that start and then fail in the
+        // evaluate step with "Access denied for tool".
+        'system-one': {
+            mode: 'restricted',
+            roles: ['administrator'],
+            scopes: ['sys1:use'],
+        },
+        // Let's talk classification (ADR 0010) — automated M2M caller only
+        // (no member roles ⇒ members denied, administrator included). Keep in
+        // step with the `lets-talk-classifier-agent` AGENT policy above.
+        'lets-talk-classification': {
+            mode: 'restricted',
+            scopes: ['ai:letstalk:classify'],
         },
     },
     tool: {
@@ -76,6 +100,14 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
         'fetch-client-projects': {
             mode: 'restricted',
             roles: ['administrator', 'Talent Manager'],
+        },
+        // The in-execute guard of the System One tool (ADR 0009); runs again
+        // inside the system-one workflow's evaluate step. Keep in step with the
+        // `system-one` WORKFLOW policy above.
+        'system-one': {
+            mode: 'restricted',
+            roles: ['administrator'],
+            scopes: ['sys1:use'],
         },
     },
     route: {
@@ -115,6 +147,7 @@ export const TARGET_ID_ALIASES: Record<AccessCategory, Record<string, string>> =
         challengeParserAgent: 'challenge-parser-agent',
         challengeSearchAgent: 'challenge-search-agent',
         jdRewriterAgent: 'jd-rewriter-agent',
+        letsTalkClassifierAgent: 'lets-talk-classifier-agent',
         // skillsMatchingAgent's key and .id already match.
     },
     workflow: {
@@ -123,9 +156,14 @@ export const TARGET_ID_ALIASES: Record<AccessCategory, Record<string, string>> =
         challengeIngestionWorkflow: 'challenge-ingestion',
         challengeSearchWorkflow: 'challenge-search',
         jdAutowriteWorkflow: 'jd-autowrite',
+        letsTalkClassificationWorkflow: 'lets-talk-classification',
         skillExtractionWorkflow: 'skill-extraction-workflow',
+        systemOneWorkflow: 'system-one',
     },
-    // Tools are never addressed by URL — they're invoked in-process by `.id`.
+    // Tools ARE addressable by URL (ADR 0009 C1): POST /tools/:toolId/execute
+    // resolves agent-attached tools via findToolInAgents. That lookup matches
+    // on the tool's `.id` only — never on the key it's attached under — so
+    // there is no second spelling to alias.
     tool: {},
     // Route slugs are assigned by this repo, so there is no second spelling.
     route: {},

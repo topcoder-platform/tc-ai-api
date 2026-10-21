@@ -32,12 +32,18 @@ function memberUser(roles: string[]): Record<string, unknown> {
     return { sub: 'auth0|123', [USERID_CLAIM]: '88774433', [ROLES_CLAIM]: roles };
 }
 
-function buildContext(user: Record<string, unknown> | undefined) {
+/**
+ * Builds a tool context for authorization tests.
+ * @param user Verified member claims, or undefined to exercise missing identity.
+ * @param token Requestor token; an empty string simulates missing credentials.
+ * @returns Minimal Mastra execution context. Does not throw.
+ */
+function buildContext(user: Record<string, unknown> | undefined, token = 'fake-requestor-token') {
     return {
         mastra: undefined,
         requestContext: {
             get: (key: string) => {
-                if (key === MASTRA_AUTH_TOKEN_KEY) return 'fake-requestor-token';
+                if (key === MASTRA_AUTH_TOKEN_KEY) return token;
                 if (key === 'user') return user;
                 return undefined;
             },
@@ -45,6 +51,12 @@ function buildContext(user: Record<string, unknown> | undefined) {
     } as any;
 }
 
+/**
+ * Stubs the three upstream APIs for client discovery tests.
+ * @param options Response rows, pagination, statuses, and per-account visible projects.
+ * @returns Fetch spy used to check forwarded credentials and requested URLs.
+ * @throws Error for an unexpected endpoint, catching unintended upstream calls.
+ */
 function mockApi(
     options: {
         clients?: any[];
@@ -54,6 +66,7 @@ function mockApi(
         billingAccountsTotal?: number;
         billingAccountsStatus?: number;
         projects?: any[];
+        projectsByBillingAccount?: Record<string, any[]>;
         projectsTotal?: number;
         projectsStatus?: number;
     } = {},
@@ -90,11 +103,13 @@ function mockApi(
             } as Response;
         }
         if (url.includes('/projects')) {
+            const accountId = new URL(url, 'https://api.topcoder-dev.com').searchParams.get('billingAccountId') ?? '';
+            const visibleProjects = options.projectsByBillingAccount?.[accountId] ?? projects;
             return {
                 ok: options.projectsStatus === undefined || options.projectsStatus < 400,
                 status: options.projectsStatus ?? 200,
-                headers: new Headers({ 'x-total': String(projectsTotal) }),
-                json: async () => projects,
+                headers: new Headers({ 'x-total': String(options.projectsByBillingAccount ? visibleProjects.length : projectsTotal) }),
+                json: async () => visibleProjects,
             } as Response;
         }
         throw new Error(`Unexpected fetch URL: ${url}`);
@@ -196,48 +211,100 @@ describe('fetchClientProjectsTool — validation and errors', () => {
 });
 
 describe('fetchClientProjectsTool — credential selection', () => {
-    it('uses the requestor token for administrator callers', async () => {
+    it.each([
+        ['administrator'],
+        ['Talent Manager'],
+        ['administrator', 'Talent Manager'],
+    ])('uses the requestor token for every API call with roles %j', async (...roles) => {
         const fetchSpy = mockApi();
 
-        await executeTool({ name: 'a' }, memberUser(['administrator']));
+        await executeTool({ name: 'a' }, memberUser(roles));
 
-        const clientsCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/clients'));
-        const [, init] = clientsCall as [string, RequestInit];
-        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-requestor-token');
+        expect(fetchSpy).toHaveBeenCalledTimes(3);
+        for (const [, init] of fetchSpy.mock.calls) {
+            expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer fake-requestor-token');
+        }
         expect(m2mTokenMock).not.toHaveBeenCalled();
     });
 
-    it('uses M2M for Talent Manager callers without administrator', async () => {
+    it('rejects a missing requestor token without requesting M2M credentials', async () => {
         const fetchSpy = mockApi();
 
-        await executeTool({ name: 'a' }, memberUser(['Talent Manager']));
+        await expect(fetchClientProjectsTool.execute?.(
+            { name: 'a' }, buildContext(memberUser(['Talent Manager']), ''),
+        )).rejects.toThrow(/No requestor token/);
 
-        const clientsCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/clients'));
-        const [, init] = clientsCall as [string, RequestInit];
-        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-m2m-token');
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(m2mTokenMock).not.toHaveBeenCalled();
     });
 
-    it('uses the requestor token when the caller has both administrator and Talent Manager', async () => {
-        const fetchSpy = mockApi();
+    it.each([401, 403])('does not escalate on HTTP %s at any discovery level', async (status) => {
+        for (const endpoint of ['clientsStatus', 'billingAccountsStatus', 'projectsStatus']) {
+            const fetchSpy = mockApi({ [endpoint]: status });
 
-        await executeTool({ name: 'a' }, memberUser(['administrator', 'Talent Manager']));
+            const request = executeTool({ name: 'a' }, memberUser(['Talent Manager']));
+            await expect(request).rejects.toThrow(`HTTP ${status}`);
+            await expect(request).rejects.not.toThrow(String(BILLING_ACCOUNT.id));
 
-        const clientsCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/clients'));
-        const [, init] = clientsCall as [string, RequestInit];
-        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-requestor-token');
+            expect(m2mTokenMock).not.toHaveBeenCalled();
+            for (const [, init] of fetchSpy.mock.calls) {
+                expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer fake-requestor-token');
+            }
+            fetchSpy.mockRestore();
+        }
+    });
+});
+
+describe('fetchClientProjectsTool — internal billing account visibility (PM-6517)', () => {
+    const internalAccount = { id: 80004349, name: 'Topcoder Sales Investment - FY25-26' };
+    const internalProject = { ...PROJECT, id: '1000853', billingAccountId: '80004349', name: 'Internal project' };
+
+    it('omits internal account details when no projects are visible to the Talent Manager', async () => {
+        mockApi({
+            clients: [{ id: '1', name: 'Topcoder', codeName: 'CUS-174018' }],
+            billingAccounts: [internalAccount, BILLING_ACCOUNT],
+            projectsByBillingAccount: { '80004349': [], '70016070': [PROJECT] },
+        });
+
+        const result = await executeTool({ name: 'Topcoder' }, memberUser(['Talent Manager']));
+
+        expect(result.clients[0].billingAccounts).toEqual([
+            expect.objectContaining({ id: '70016070', projects: [expect.objectContaining({ id: PROJECT.id })] }),
+        ]);
+        expect(JSON.stringify(result)).not.toContain(String(internalAccount.id));
+        expect(JSON.stringify(result)).not.toContain(internalAccount.name);
     });
 
-    it('uses M2M when no user is on the request context', async () => {
-        // RBAC would deny a missing user before execute runs — DISABLE_AUTH isolates
-        // the outbound credential branch (fail toward M2M when !user).
-        process.env.DISABLE_AUTH = 'true';
-        const fetchSpy = mockApi();
+    it('returns only the internal projects the Projects API makes visible through active membership', async () => {
+        mockApi({ billingAccounts: [internalAccount], projects: [internalProject] });
 
-        await fetchClientProjectsTool.execute?.({ name: 'a' }, buildContext(undefined));
+        const result = await executeTool({ name: 'Topcoder' }, memberUser(['Talent Manager']));
 
-        const clientsCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/clients'));
-        const [, init] = clientsCall as [string, RequestInit];
-        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-m2m-token');
+        expect(result.clients[0].billingAccounts).toEqual([
+            expect.objectContaining({
+                id: '80004349', name: internalAccount.name,
+                projects: [expect.objectContaining({ id: internalProject.id })],
+            }),
+        ]);
+        expect(m2mTokenMock).not.toHaveBeenCalled();
+    });
+
+    it.each(['administrator', 'Administrator'])('preserves empty accounts for %s callers', async (role) => {
+        mockApi({ billingAccounts: [internalAccount], projects: [] });
+
+        const result = await executeTool({ name: 'Topcoder' }, memberUser([role, 'Talent Manager']));
+
+        expect(result.clients[0].billingAccounts).toEqual([
+            { id: '80004349', name: internalAccount.name, projects: [], projectsTruncated: false },
+        ]);
+    });
+
+    it('returns no account metadata when all projects are hidden', async () => {
+        mockApi({ billingAccounts: [internalAccount], projects: [] });
+
+        const result = await executeTool({ name: 'Topcoder' }, memberUser(['Talent Manager']));
+
+        expect(result.clients[0].billingAccounts).toEqual([]);
     });
 });
 
