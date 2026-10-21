@@ -272,3 +272,43 @@ describe('generateWithStructuredOutputFallback — truncation handling', () => {
         expect(generate).toHaveBeenLastCalledWith('p', generateOptions);
     });
 });
+
+describe('generateWithStructuredOutputFallback — errorStrategy', () => {
+    const schema = z.object({ a: z.number() });
+
+    function strategiesSent(generate: ReturnType<typeof vi.fn>) {
+        return generate.mock.calls
+            .map(([, options]) => (options as { structuredOutput?: { errorStrategy?: string } } | undefined)?.structuredOutput?.errorStrategy);
+    }
+
+    it("defaults every structured attempt to 'strict'", async () => {
+        const generate = vi
+            .fn()
+            .mockResolvedValueOnce({ finishReason: 'stop', text: 'x' })
+            .mockResolvedValueOnce({ finishReason: 'stop', object: { a: 1 } });
+
+        await generateWithStructuredOutputFallback({ agent: { generate }, prompt: 'p', schema, sectionName: 'sec' });
+
+        expect(strategiesSent(generate)).toEqual(['strict', 'strict']);
+    });
+
+    it("passes 'warn' through to every structured attempt (ADR 0010: processor retries)", async () => {
+        const generate = vi
+            .fn()
+            .mockResolvedValueOnce({ finishReason: 'stop', text: 'x' })
+            .mockResolvedValueOnce({ finishReason: 'stop', text: 'x' })
+            .mockResolvedValueOnce({ finishReason: 'stop', text: '{"a": 1}' });
+
+        const { response, strategy } = await generateWithStructuredOutputFallback({
+            agent: { generate },
+            prompt: 'p',
+            schema,
+            sectionName: 'sec',
+            errorStrategy: 'warn',
+        });
+
+        expect(strategiesSent(generate)).toEqual(['warn', 'warn', undefined]);
+        expect(strategy).toBe('plain-text');
+        expect(response.object).toEqual({ a: 1 });
+    });
+});

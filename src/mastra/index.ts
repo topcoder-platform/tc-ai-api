@@ -6,10 +6,12 @@ import { challengeBulkIngestionWorkflow } from './workflows/challenge/challenge-
 import { challengeSearchWorkflow } from './workflows/challenge/challenge-search-workflow';
 import { jdAutowriteWorkflow } from './workflows/jd/jd-autowrite-workflow';
 import { systemOneWorkflow } from './workflows/system-one/system-one-workflow';
+import { letsTalkClassificationWorkflow } from './workflows/lets-talk/lets-talk-classification-workflow';
 import { skillsMatchingAgent } from './agents/skills/skills-matching-agent';
 import { challengeParserAgent } from './agents/challenge/challenge-parser-agent';
 import { challengeSearchAgent } from './agents/challenge/challenge-search-agent';
 import { jdRewriterAgent } from './agents/jd/jd-rewriter-agent';
+import { letsTalkClassifierAgent } from './agents/lets-talk/lets-talk-classifier-agent';
 import { PostgresStore } from '@mastra/pg';
 import {
   instanceAnswerRelevancyScorer,
@@ -34,8 +36,16 @@ export const mastra = new Mastra({
     // deliberately NOT registered here (`tools`) nor on any agent, so
     // /v6/ai/tools/system-one/execute 404s and every call is a tracked run.
     systemOneWorkflow,
+    // "Let's talk" form triage (ADR 0010) — M2M-only, see access-control.config.
+    letsTalkClassificationWorkflow,
   },
-  agents: { skillsMatchingAgent, challengeParserAgent, challengeSearchAgent, jdRewriterAgent },
+  agents: {
+    skillsMatchingAgent,
+    challengeParserAgent,
+    challengeSearchAgent,
+    jdRewriterAgent,
+    letsTalkClassifierAgent,
+  },
   scorers: {
     instanceAnswerRelevancyScorer,
     instancePromptAlignmentScorer,

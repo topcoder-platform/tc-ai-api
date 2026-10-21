@@ -29,6 +29,17 @@ interface GenerateWithStructuredOutputFallbackParams<Schema extends z.ZodTypeAny
     sectionName: string;
     structuringModel?: string;
     generateOptions?: Record<string, unknown>;
+    /**
+     * Mastra's structured-output error strategy for every structured attempt.
+     * 'strict' (default) throws on a schema-invalid answer. Use 'warn' when the
+     * agent has an output processor that retries invalid answers with
+     * feedback (StructuredOutputValidator): under 'strict' the rejected first
+     * answer still throws after the retry has produced a valid one (probed on
+     * @mastra/core 1.74, ADR 0010). Under 'warn' a still-invalid answer
+     * resolves without `object`, which is handled like a strict failure: the
+     * next strategy is tried.
+     */
+    errorStrategy?: 'strict' | 'warn';
 }
 
 interface GenerateWithStructuredOutputFallbackResult {
@@ -487,10 +498,11 @@ export async function generateWithStructuredOutputFallback<Schema extends z.ZodT
     sectionName,
     structuringModel,
     generateOptions,
+    errorStrategy = 'strict',
 }: GenerateWithStructuredOutputFallbackParams<Schema>): Promise<GenerateWithStructuredOutputFallbackResult> {
     const strictStructuredOutputBase = {
         schema,
-        errorStrategy: 'strict' as const,
+        errorStrategy,
     };
 
     const attempts: {

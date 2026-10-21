@@ -616,6 +616,49 @@ describe('system-one policies (ADR 0009)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Let's talk classification (ADR 0010) — M2M-only workflow + agent policies
+// ---------------------------------------------------------------------------
+
+describe("lets-talk policies (ADR 0010)", () => {
+    const LETS_TALK_POLICY = { mode: 'restricted', scopes: ['ai:letstalk:classify'] };
+
+    it('ships the workflow and the agent restricted to the scope, with no env vars set', () => {
+        expect(resolveAccessPolicy('workflow', 'lets-talk-classification')).toEqual(LETS_TALK_POLICY);
+        expect(resolveAccessPolicy('workflow', 'letsTalkClassificationWorkflow')).toEqual(LETS_TALK_POLICY);
+        expect(resolveAccessPolicy('agent', 'lets-talk-classifier-agent')).toEqual(LETS_TALK_POLICY);
+        expect(resolveAccessPolicy('agent', 'letsTalkClassifierAgent')).toEqual(LETS_TALK_POLICY);
+    });
+
+    it.each([
+        '/v6/ai/workflows/lets-talk-classification/start-async',
+        '/v6/ai/workflows/letsTalkClassificationWorkflow/start-async',
+        '/v6/ai/workflows/lets-talk-classification/create-run',
+        '/v6/ai/workflows/lets-talk-classification/runs/9f1c2e4a-7b3d',
+        '/v6/ai/workflows/lets-talk-classification',
+        '/v6/ai/agents/lets-talk-classifier-agent/generate',
+        '/v6/ai/agents/letsTalkClassifierAgent/generate',
+        '/v6/ai/agents/lets-talk-classifier-agent/stream',
+        '/v6/ai-chat/lets-talk-classifier-agent',
+    ])('allows only an M2M token with ai:letstalk:classify on %s', (path) => {
+        expect(authorizeAccessPolicy(m2mUser(['ai:letstalk:classify']), authRequest(path))).toBe(true);
+        expect(authorizeAccessPolicy(m2mUser(['ai:letstalk:read', 'sys1:use']), authRequest(path))).toBe(false);
+        expect(authorizeAccessPolicy(m2mUser([]), authRequest(path))).toBe(false);
+        // Scopes-only policy: every member is denied, administrator included.
+        expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(['Talent Manager']), authRequest(path))).toBe(false);
+    });
+
+    it('is overridable by the usual env keys', () => {
+        process.env.ACCESS_POLICY_WORKFLOW_LETS_TALK_CLASSIFICATION_SCOPES = 'other:scope';
+        process.env.ACCESS_POLICY_AGENT_LETS_TALK_CLASSIFIER_AGENT_SCOPES = 'other:scope';
+        _resetAccessPolicyCache();
+
+        expect(resolveAccessPolicy('workflow', 'letsTalkClassificationWorkflow')).toMatchObject({ scopes: ['other:scope'] });
+        expect(resolveAccessPolicy('agent', 'letsTalkClassifierAgent')).toMatchObject({ scopes: ['other:scope'] });
+    });
+});
+
+// ---------------------------------------------------------------------------
 // C1 — tools are URL-addressable (POST /tools/:toolId/execute)
 // ---------------------------------------------------------------------------
 
