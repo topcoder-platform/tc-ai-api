@@ -1,7 +1,7 @@
 /**
  * Registration guards for src/mastra/index.ts. See docs/adr/0009-system-one-tool.md.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { API_DOCS_ROUTE_PATH } from '../utils/server-routes';
 
 // The real instance needs Postgres, Auth0 and a workspace path; none of that
@@ -21,6 +21,14 @@ vi.stubEnv('AUTH0_DOMAIN', 'example.auth0.com');
 vi.stubEnv('AUTH0_AUDIENCE', 'https://example.test/');
 vi.stubEnv('AUTH0_M2M_DOMAIN', 'example.auth0.com');
 vi.stubEnv('AUTH0_M2M_AUDIENCE', 'https://example.test/');
+
+// The first import builds the whole Mastra instance (every agent, workflow and
+// store) — ~5 s under a loaded full-suite run, the default test timeout.
+// Warm it once with a generous budget; later imports hit the module cache.
+const IMPORT_TIMEOUT_MS = 60_000;
+beforeAll(async () => {
+    await import('./index');
+}, IMPORT_TIMEOUT_MS);
 
 describe('System One registration (ADR 0009)', () => {
     it('registers the system-one workflow', async () => {
@@ -70,11 +78,13 @@ describe('Swagger UI registration', () => {
         }
     };
 
+    // Each case re-imports a fresh module graph (vi.resetModules), so it pays
+    // the full import cost again.
     it('mounts no docs routes unless SWAGGER_UI_ENABLED=true', async () => {
         expect(await docsRoutePaths('')).toEqual([]);
-    });
+    }, IMPORT_TIMEOUT_MS);
 
     it('mounts the UI and spec routes when SWAGGER_UI_ENABLED=true', async () => {
         expect(await docsRoutePaths('true')).toHaveLength(2);
-    });
+    }, IMPORT_TIMEOUT_MS);
 });
