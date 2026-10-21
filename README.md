@@ -1,3 +1,5 @@
+> Isolated `keycloak_m2M` branch. See [Keycloak configuration and rollout](docs/keycloak-m2m.md). No existing DEV workload is switched by this branch.
+
 # tc-ai-api — Comprehensive Technical Documentation
 
 ## Table of Contents
@@ -28,7 +30,7 @@
 
 **tc-ai-api** is a Topcoder AI microservice built on the [Mastra](https://mastra.ai) AI orchestration framework. Its primary capability today is **Skill Extraction** — given a free-text job description, it identifies and matches relevant skills against Topcoder's Standardized Skills taxonomy using a multi-stage pipeline that combines LLM-based term extraction, fuzzy matching, and semantic search.
 
-The service exposes a Hono-based HTTP API (managed by Mastra's built-in server), is authenticated via Auth0 JWTs, uses PostgreSQL for storage and agent memory, runs local LLM inference through Ollama, and ships with built-in observability and evaluation scorers.
+The service exposes a Hono-based HTTP API (managed by Mastra's built-in server), validates Keycloak service and Auth0 member JWTs through the shared core, uses PostgreSQL for storage and agent memory, runs local LLM inference through Ollama, and ships with built-in observability and evaluation scorers.
 
 ---
 
@@ -44,7 +46,7 @@ The service exposes a Hono-based HTTP API (managed by Mastra's built-in server),
 | **LLM Provider**    | Ollama via `ai-sdk-ollama` ^3.4.0                           |
 | **HTTP Server**     | Hono (embedded in Mastra)                                   |
 | **Database**        | PostgreSQL via `@mastra/pg` ^1.2.0                          |
-| **Auth**            | Auth0 via `@mastra/auth-auth0` ^1.0.0                       |
+| **Auth**            | Shared `tc-core-library-js` Keycloak prerelease                       |
 | **Observability**   | Not configured — `@mastra/observability`/OpenTelemetry deps are installed but unused (see [Observability](#observability--logging)) |
 | **Logging**         | Pino via `@mastra/loggers` ^1.0.1                           |
 | **Evals**           | `@mastra/evals` ^1.1.0 (Answer Relevancy, Prompt Alignment) |
@@ -87,7 +89,7 @@ tc-ai-api/
 │       ├── server-routes.ts      # API_PREFIX / CHAT_ROUTE_PATH — shared by auth + middleware
 │       ├── tc-api-client.ts      # Requestor-token-first TC_API_BASE client, with M2M fallback
 │       ├── auth/
-│       │   ├── index.ts          # Auth0 composite auth setup (protected paths, mapUserToResourceId)
+│       │   ├── index.ts          # Shared-core auth setup (protected paths, mapUserToResourceId)
 │       │   └── m2m.service.ts    # Service M2M token acquisition
 │       ├── middleware/
 │       │   ├── index.ts          # Middleware registration
@@ -112,6 +114,15 @@ tc-ai-api/
 | Variable                            | Required | Default                                | Description                                                      |
 | ----------------------------------- | -------- | -------------------------------------- | ---------------------------------------------------------------- |
 | `PORT`                              | No       | `3000`                                 | HTTP server port                                                 |
+| `M2M_PROVIDER` | Yes | — | Must be `keycloak` on this branch |
+| `KEYCLOAK_ISSUER` | Yes | — | Exact service realm issuer |
+| `KEYCLOAK_AUDIENCE` | Yes | — | Expected API audience |
+| `KEYCLOAK_TOKEN_URL` | Yes | — | Managed Keycloak issuance endpoint |
+| `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | For service issuance | — | Workload-specific credentials from encrypted storage |
+| `VALID_ISSUERS` | For member access | — | JSON array of trusted member issuers |
+| `AUTH_USER_AUDIENCES` | For member access | — | JSON array of accepted member audiences |
+| `AUTH_SECRET` | For legacy member HMAC | — | Existing member signing secret, never a service key |
+| `ALLOW_LEGACY_USER_AUDIENCE` | Optional | false | Explicitly retain legacy member audience behavior |
 | `MASTRA_DB_CONNECTION`              | **Yes**  | —                                      | PostgreSQL connection string for Mastra storage and agent memory |
 | `MASTRA_DB_SCHEMA`                  | No       | `ai`                                   | PostgreSQL schema name for Mastra tables                         |
 | `TC_API_BASE`                       | **Yes**  | —                                      | Topcoder API base URL (e.g. `https://api.topcoder-dev.com`)      |
@@ -123,18 +134,8 @@ tc-ai-api/
 | `SYS1_TIMEOUT_MS`                   | No       | `30000`                                | Per System One provider call                                      |
 | `SYS1_KEEP_ALIVE`                   | No       | Ollama server default (5m)             | Sent as `keep_alive` (`5m`, or seconds; `0` unloads, negative pins). Callers can't set it |
 | `MASTRA_EVAL_MODEL`                 | No       | `mistral:latest`                       | Ollama model used for evaluation scorers                         |
-| `AUTH0_DOMAIN`                      | Yes\*    | —                                      | Auth0 domain for member JWT validation                           |
-| `AUTH0_AUDIENCE`                    | Yes\*    | —                                      | Auth0 audience (client ID) for member tokens                     |
-| `AUTH0_M2M_DOMAIN`                  | Yes\*    | —                                      | Auth0 domain for M2M JWT validation                              |
-| `AUTH0_M2M_AUDIENCE`                | Yes\*    | —                                      | Auth0 audience for M2M tokens                                    |
 | `DISABLE_AUTH`                      | No       | `false`                                | Set to `"true"` to disable all authentication (dev mode)         |
 | `SWAGGER_UI_ENABLED`                | No       | `false`                                | `"true"` serves Swagger UI at `/v6/ai-api/docs` and the spec at `/v6/ai-api/docs/openapi.json`, both unauthenticated. Read at startup; enable in dev only (see [API docs](#api-docs-swagger-ui)) |
-| `M2M_AUTH_CLIENT_ID`                | No\*\*   | —                                       | Client id for tc-ai-api's own service M2M credential (`M2MService`) |
-| `M2M_AUTH_CLIENT_SECRET`            | No\*\*   | —                                       | Client secret for tc-ai-api's own service M2M credential            |
-| `M2M_AUTH_URL`                      | No       | `https://topcoder-dev.auth0.com/oauth/token` | Token endpoint used to obtain the service M2M token             |
-| `M2M_AUTH_DOMAIN`                   | No       | `topcoder-dev.auth0.com`               | Auth0 domain for the service M2M credential                        |
-| `M2M_AUTH_AUDIENCE`                 | No       | `https://m2m.topcoder-dev.com/`        | Auth0 audience for the service M2M credential                      |
-| `M2M_AUTH_PROXY_SERVER_URL`         | No       | `https://auth0proxy.topcoder-dev.com/token` | Proxy used to request the service M2M token                    |
 | `JD_MAX_CHARS`                      | No       | `6000`                                 | Max character length for job description preprocessing           |
 | `SKILL_MATCHING_FUZZY_MATCH_SIZE`   | No       | `3`                                    | Number of candidates returned per fuzzy-match query              |
 | `SKILL_MATCHING_CONCURRENCY`        | No       | `5`                                    | Concurrency limit for parallel skill-matching requests           |
@@ -152,13 +153,10 @@ tc-ai-api/
 | `BEDROCK_PROMPT_CACHE_ENABLED`      | No       | `true`                                 | Global kill switch for Bedrock prompt caching (see below)         |
 | `BEDROCK_PROMPT_CACHE_TTL`          | No       | `5m`                                   | Bedrock cache checkpoint TTL — `5m` or `1h`                       |
 | `ACCESS_CONTROL_DEFAULT_POLICY`     | No       | `public`                               | Global fallback policy for any agent/workflow/tool with no explicit policy — `public` or `deny` |
-| `ACCESS_CONTROL_ROLES_CLAIM`        | No       | `https://<TC_API_BASE domain>/roles`   | JWT claim key carrying member role names — override only if a tenant diverges from the convention |
 | `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_MODE` | No | —                              | Per-target override: `public` or `deny`. See [Access control](#access-control) |
 | `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_ROLES` | No | —                             | Per-target override: comma-separated member roles (implies `restricted`) |
 | `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_SCOPES` | No | —                            | Per-target override: comma-separated M2M scopes (implies `restricted`) |
 
-> \* Auth0 variables are required unless `DISABLE_AUTH=true`.
-> \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are only exercised if a tool is explicitly opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) — no tool is today, so these aren't required for the currently-shipped behavior, only for future fallback use.
 
 ---
 
@@ -177,7 +175,7 @@ export const mastra = new Mastra({
   server: {
     port: 3000,
     apiPrefix: API_PREFIX,            // '/v6/ai' — built-in Mastra routes live here
-    auth: apiAuthLayer,               // CompositeAuth (Auth0)
+    auth: apiAuthLayer,               // CoreAuthProvider (shared core)
     middleware: middlewareConfig,     // resourceIdMiddleware, registered per-route (see below)
     apiRoutes: [
       chatRoute({ path: CHAT_ROUTE_PATH }),  // '/chat/:agentId' — NOT under apiPrefix
@@ -235,37 +233,29 @@ postgresql://<user>:<password>@<host>:<port>/<database>?schema=<schema>
 
 > See [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md) for the design rationale behind the outbound tool-call token flow described below.
 
-### Auth0 Composite Authentication
+### Shared authentication and resource isolation
 
-Authentication is handled by `CompositeAuth` from `@mastra/core/server` (`src/utils/auth/index.ts`), which evaluates incoming JWTs against **two** Auth0 tenants, in order:
+`CoreAuthProvider` delegates signature, issuer, audience, lifetime, and principal
+classification to the pinned `tc-core-library-js` validator. Member tokens continue
+to use explicitly configured Auth0 issuers; service tokens use the Keycloak M2M realm.
+All `/v6/ai/*`, `/v6/ai-chat/*`, and `/v6/ai-api/*` paths remain protected, with the
+existing explicit Swagger documentation exception when enabled.
 
-1. **Member tokens** — issued by `AUTH0_DOMAIN` with audience `AUTH0_AUDIENCE`
-2. **M2M (machine-to-machine) tokens** — issued by `AUTH0_M2M_DOMAIN` with audience `AUTH0_M2M_AUDIENCE`
+The normalized principal determines authorization and memory isolation. Members
+retain their numeric user ID as a string. Services use
+`service:<URL-encoded issuer>:<URL-encoded clientId>` and never acquire member roles
+or IDs. Existing service conversation memory keyed by Auth0 subjects is deliberately
+not reused; migrate it explicitly if required. Member memory IDs remain unchanged.
 
-A request is authorized if it passes validation against **either** tenant. Both providers declare `protected: ['/v6/ai/*', '/v6/ai-chat/*', '/v6/ai-api/*']` (the server's `apiPrefix` plus each custom-route base path — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default. `/v6/ai-chat/*` has to be listed explicitly because `chatRoute()` is registered outside `apiPrefix` and never sets `requiresAuth`, so Mastra's `isProtectedPath` check would otherwise skip it — including its authorization step (see [Access control](#access-control)).
+Resource middleware reads the reserved `mastra__user` context, or authenticates the
+bearer/legacy `apiKey` token itself when that context is absent. A plain client-supplied
+`user` object cannot establish identity. `mapUserToResourceId` and the middleware use
+the same mapping and override client-supplied memory resource IDs.
 
-Both providers also set `mapUserToResourceId`, deriving the caller's Topcoder user id from the JWT claim `https://<domain>/userId` (member tokens) or `sub` (M2M tokens) — see `tcUserIdClaimKey()` / `mapUserToResourceId` in `src/utils/auth/index.ts`. Mastra's core auth flow stores that value under `MASTRA_RESOURCE_ID_KEY` in the request context automatically, and it takes precedence over any client-supplied `resourceId`/`memory.resource` — this is what actually enforces per-user memory/thread isolation; the `Resource ID Middleware` below is a belt-and-suspenders check on top of it, not the primary mechanism.
-
-The same core auth flow also stores the **raw bearer token** that authenticated the request under `MASTRA_AUTH_TOKEN_KEY` in the request context. This is the "requestor token" referenced throughout this section and in ADR 0002 — see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) below.
-
-Authentication can be fully disabled by setting `DISABLE_AUTH=true` (useful for local development).
-
-### Resource ID Middleware
-
-`resourceIdMiddleware` (`src/utils/middleware/resourceIdMiddleware.ts`) is a secondary, explicit check on top of `mapUserToResourceId` above. When auth is enabled it's registered against the two real route surfaces the server actually exposes (`src/utils/server-routes.ts` is the single source of truth for both):
-
-- `${API_PREFIX}/*` (i.e. `/v6/ai/*`) — the built-in Mastra routes (agents, workflows, memory, threads)
-- `${CHAT_ROUTE_BASE_PATH}/*` (i.e. `/v6/ai-chat/*`) — `chatRoute()`, which is registered *outside* `apiPrefix` (custom API routes aren't prefixed by Mastra), so it needs its own entry
-
-For each matching request it:
-
-1. Extracts the authenticated `user` object from the request context (or authenticates the bearer/`apiKey` token itself if the framework hasn't populated it yet).
-2. Derives the Topcoder domain from `TC_API_BASE` (e.g., `topcoder-dev.com`).
-3. Reads the user ID from the JWT claim `https://<domain>/userId`, falling back to `sub` for M2M tokens.
-4. Sets `MASTRA_RESOURCE_ID_KEY` in the request context (redundant with `mapUserToResourceId`, but fails the request with a `401` if no user/id can be resolved at all).
-5. Logs `'Auth resolved for request'` at `info` level with `authType` (`member`/`m2m`) and the resolved `resourceId`, for auth verification during rollout.
-
-This ensures **resource isolation** — each user's agent memory and workflow state are segregated.
+Mastra continues to propagate the authenticated requestor token to downstream tools.
+Only explicitly enabled tool fallbacks request this workload's Keycloak service token;
+there is no Auth0 issuance fallback. `DISABLE_AUTH=true` remains a local development
+option and must not be used on an accessible deployment.
 
 ### Access control
 
@@ -309,13 +299,13 @@ fetch-client-projects      roles: [administrator, Talent Manager]  scopes: none 
 
 The first three all rewrite the shared challenge vector index. The last three (`fetch-challenge-resources`, `fetch-project-by-id`, `fetch-client-projects`) are different: they're `restricted` to match the RBAC platform-ui already enforces one layer up on the only UI surface that reaches them, not because the underlying data is sensitive to write. `fetch-project-by-id` was `public` before [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md) — it's now restricted because it also surfaces a project's client/billing identity, not just project detail.
 
-`system-one` ([ADR 0009](docs/adr/0009-system-one-tool.md)) has the same policy in two categories — the workflow (the service entry point, gated at the auth hook) and the tool (re-checked inside the workflow's `evaluate` step). **Override both together** (`ACCESS_POLICY_WORKFLOW_SYSTEM_ONE_*` and `ACCESS_POLICY_TOOL_SYSTEM_ONE_*`): widening only the workflow yields runs that start and then fail with `Access denied for tool "system-one"`. The `sys1:use` permission must exist on the `AUTH0_M2M_AUDIENCE` API and be granted to the consuming service clients.
+`system-one` ([ADR 0009](docs/adr/0009-system-one-tool.md)) has the same policy in two categories — the workflow (the service entry point, gated at the auth hook) and the tool (re-checked inside the workflow's `evaluate` step). **Override both together** (`ACCESS_POLICY_WORKFLOW_SYSTEM_ONE_*` and `ACCESS_POLICY_TOOL_SYSTEM_ONE_*`): widening only the workflow yields runs that start and then fail with `Access denied for tool "system-one"`. The `sys1:use` permission must exist in the Keycloak M2M realm and be granted to the consuming service clients.
 
-Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
+Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission in the Keycloak M2M scope registry and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
 
 **Three enforcement points:**
 
-- **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
+- **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to the shared CoreAuthProvider. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
 - **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Currently one entry: `/v6/ai-api/rag/challenges` → `rag-challenges`, restricted to `administrator` / `challengesRAG:admin` out of the box.
 - **Tools** — `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the verified caller from `RequestContext` — the reserved `mastra__user` key first, which a request body cannot set, then `user` for in-process callers — and throws `ToolAccessDeniedError` (`status: 403`) on denial: surfaced to the LLM as a failed tool call, to a workflow step as a rejected `execute()`, or over HTTP as a **403**. Tools **are** URL-addressable: Mastra's `POST /v6/ai/tools/:toolId/execute` resolves any tool attached to a registered agent, so `authorizeAccessPolicy` also matches `/v6/ai/tools/:toolId` for an early 403 at the auth hook (ADR 0009 C1–C3).
 
@@ -784,7 +774,7 @@ curl -X POST "$TC_AI_API/v6/ai/workflows/system-one/start-async?runId=$(uuidgen)
 sequenceDiagram
     participant Client
     participant MastraServer as Mastra HTTP Server
-    participant Auth as Auth0 Middleware
+    participant Auth as Shared Core Middleware
     participant ResID as Resource ID Middleware
     participant WF as skill-extraction-workflow
     participant PreProc as preprocess-job-description
@@ -799,9 +789,9 @@ sequenceDiagram
     participant Output as output-final-state
 
     Client->>MastraServer: POST /api/workflows/skill-extraction-workflow/start<br/>{ jobDescription: "..." }
-    MastraServer->>Auth: Validate JWT (Auth0 Member or M2M)
+    MastraServer->>Auth: Validate member or Keycloak service JWT
     Auth-->>MastraServer: ✓ Authenticated user
-    MastraServer->>ResID: Extract userId from JWT claims
+    MastraServer->>ResID: Map verified principal to isolated resource
     ResID-->>MastraServer: Set MASTRA_RESOURCE_ID_KEY
     MastraServer->>WF: Trigger workflow with input
 
@@ -852,35 +842,11 @@ sequenceDiagram
 
 ### Authentication Flow
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server as Mastra HTTP Server
-    participant CoreAuth as Mastra core auth flow
-    participant MemberAuth as Auth0 (Member)
-    participant M2MAuth as Auth0 (M2M)
-    participant ResMiddleware as resourceIdMiddleware
-
-    Client->>Server: Request to /v6/ai/* or /chat/:agentId<br/>Authorization: Bearer <JWT>
-    Server->>CoreAuth: checkRouteAuth() — CompositeAuth
-
-    alt Member Token
-        CoreAuth->>MemberAuth: Verify JWT (domain: AUTH0_DOMAIN)
-        MemberAuth-->>CoreAuth: ✓ Valid — user claims
-    else M2M Token
-        CoreAuth->>M2MAuth: Verify JWT (domain: AUTH0_M2M_DOMAIN)
-        M2MAuth-->>CoreAuth: ✓ Valid — M2M claims
-    end
-
-    CoreAuth->>CoreAuth: mapUserToResourceId(user)<br/>→ set MASTRA_RESOURCE_ID_KEY
-    CoreAuth->>CoreAuth: Store raw token<br/>→ set MASTRA_AUTH_TOKEN_KEY
-    CoreAuth-->>Server: Authenticated — requestContext populated
-
-    Server->>ResMiddleware: /v6/ai/* or /chat/* interceptor
-    ResMiddleware->>ResMiddleware: Extract userId from<br/>https://<domain>/userId<br/>or fallback to 'sub' claim
-    ResMiddleware->>ResMiddleware: Confirm/set MASTRA_RESOURCE_ID_KEY<br/>log authType + resourceId
-    ResMiddleware-->>Server: Continue to handler
-```
+A protected request passes through `CoreAuthProvider.authenticateToken`, the shared
+validator, `authorizeAccessPolicy`, and the common memory resource mapper. Mastra
+stores the verified principal in its reserved request context and the raw bearer token
+in `MASTRA_AUTH_TOKEN_KEY` for existing downstream requestor-token propagation.
+The resource middleware checks that same verified identity before invoking a handler.
 
 ### Topcoder Platform Tool Call — Requestor Token Flow
 
@@ -998,13 +964,11 @@ Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallenges
 | `{OLLAMA_API_URL}/api/chat` | `POST` | Streaming chat completion with `mistral:latest` | `skillsMatchingAgent` (via AI SDK) |
 | `{OLLAMA_API_URL}/api/chat` | `POST` | Evaluation model inference                      | Evaluation scorers                 |
 
-### 4. Auth0
+### 4. Token issuers
 
-| Endpoint                                                   | Purpose                                                                                                                              |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `https://{AUTH0_DOMAIN}/.well-known/jwks.json`             | JWKS for member token verification                                                                                                  |
-| `https://{AUTH0_M2M_DOMAIN}/.well-known/jwks.json`         | JWKS for M2M token verification                                                                                                     |
-| `{M2M_AUTH_URL}` (proxied via `M2M_AUTH_PROXY_SERVER_URL`) | Issues tc-ai-api's own service M2M token (`M2MService`) — used only as an unconfigured fallback credential, not the default for any tool today |
+Shared core discovers keys only from configured member issuers and the configured
+Keycloak realm. Service issuance uses `KEYCLOAK_TOKEN_URL`; client credentials and
+audience must be explicitly configured. No Auth0 machine issuance/proxy is used.
 
 ### 5. PostgreSQL
 
@@ -1089,7 +1053,7 @@ Mastra automatically exposes the following REST endpoints:
 | `/v6/ai-api/docs`                                 | `GET`  | Swagger UI — only when `SWAGGER_UI_ENABLED=true` |
 | `/v6/ai-api/docs/openapi.json`                    | `GET`  | OpenAPI 3.1 spec — only when `SWAGGER_UI_ENABLED=true` |
 
-All `/api/*` endpoints are protected by Auth0 authentication (unless `DISABLE_AUTH=true`) and scoped by the resource ID middleware.
+All `/api/*` endpoints are protected by shared-core authentication (unless `DISABLE_AUTH=true`) and scoped by the resource ID middleware.
 
 ### API docs (Swagger UI)
 
@@ -1098,14 +1062,14 @@ Set `SWAGGER_UI_ENABLED=true` on an environment (e.g. the dev ECS task's env, `/
 - **Swagger UI** — `https://api.topcoder-dev.com/v6/ai-api/docs`
 - **OpenAPI spec** — `https://api.topcoder-dev.com/v6/ai-api/docs/openapi.json`
 
-The flag is read when the server starts, so toggling it needs only a task restart, not a rebuild. Both routes are public. Every other route still needs a token: click **Authorize** in the UI and paste a member or M2M Auth0 JWT (without the `Bearer ` prefix).
+The flag is read when the server starts, so toggling it needs only a task restart, not a rebuild. Both routes are public. Every other route still needs a token: click **Authorize** in the UI and paste a member or Keycloak service JWT (without the `Bearer ` prefix).
 
 Mastra's own `server.build.swaggerUI` / `openAPIDocs` aren't used, because they don't work behind the ALB:
 
 - Mastra hard-codes Swagger UI at `/swagger-ui`, on the server root. The ALB forwards only `/v6/ai/*`, `/v6/ai-chat/*` and `/v6/ai-api/*` to this service.
-- Mastra serves its spec at `/v6/ai/openapi.json`, which Auth0 and the resource-ID middleware protect, so the UI couldn't load it.
+- Mastra serves its spec at `/v6/ai/openapi.json`, which the shared validator and resource-ID middleware protect, so the UI couldn't load it.
 - The generated spec has no security scheme, so Swagger UI would have no way to send a token.
 
-`src/utils/routes/api-docs.routes.ts` rebuilds the spec with Mastra's own generators (`@mastra/server/server-adapter`). The spec covers the built-in routes, served under `/v6/ai`, and the custom routes that carry `openapi` metadata, served from `/`. It also adds a bearer scheme. The two docs paths are added to the Auth0 providers' `public` list only while the flag is on.
+`src/utils/routes/api-docs.routes.ts` rebuilds the spec with Mastra's own generators (`@mastra/server/server-adapter`). The spec covers the built-in routes, served under `/v6/ai`, and the custom routes that carry `openapi` metadata, served from `/`. It also adds a bearer scheme. The two docs paths are added to the shared provider's `public` list only while the flag is on.
 
 Locally, `pnpm dev` also serves Mastra's default UI at `http://localhost:4111/swagger-ui`, whatever the flag says.

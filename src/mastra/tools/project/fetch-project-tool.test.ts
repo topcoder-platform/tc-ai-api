@@ -17,8 +17,6 @@ vi.mock('../../../utils/auth/m2m.service', () => ({
 import { fetchProjectTool } from './fetch-project-tool';
 import { ToolAccessDeniedError } from '../../../utils/auth/access-control';
 
-const ROLES_CLAIM = 'https://topcoder.com/roles';
-const USERID_CLAIM = 'https://topcoder.com/userId';
 
 // Minimal context for execute — the tool uses context.mastra?.getLogger?.()
 // (optional) and context.requestContext (to read the requestor's token and,
@@ -30,7 +28,7 @@ const minimalContext = {
             key === MASTRA_AUTH_TOKEN_KEY
                 ? 'fake-requestor-token'
                 : key === 'user'
-                    ? { sub: 'test-user', [USERID_CLAIM]: '88774433', [ROLES_CLAIM]: ['administrator'] }
+                    ? { sub: 'test-user', kind: 'user', isMachine: false, userId: 88774433, roles: ['administrator'] }
                     : undefined,
     },
 } as any;
@@ -417,7 +415,7 @@ describe('fetchProjectTool — RBAC', () => {
 
     it('denies callers without administrator or Talent Manager (ADR 0007 — was public)', async () => {
         mockFetchResponse(baseApiResponse());
-        const user = { sub: 'auth0|1', [USERID_CLAIM]: '1', [ROLES_CLAIM]: ['copilot'] };
+        const user = { sub: 'auth0|1', kind: 'user', isMachine: false, userId: 1, roles: ['copilot'] };
 
         await expect(
             fetchProjectTool.execute?.({ projectId: '17423' } as any, contextForUser(user)),
@@ -426,7 +424,7 @@ describe('fetchProjectTool — RBAC', () => {
 
     it('allows Talent Manager callers through RBAC', async () => {
         mockFetchResponse(baseApiResponse());
-        const user = { sub: 'auth0|1', [USERID_CLAIM]: '1', [ROLES_CLAIM]: ['Talent Manager'] };
+        const user = { sub: 'auth0|1', kind: 'user', isMachine: false, userId: 1, roles: ['Talent Manager'] };
 
         await expect(
             fetchProjectTool.execute?.({ projectId: '17423' } as any, contextForUser(user)),

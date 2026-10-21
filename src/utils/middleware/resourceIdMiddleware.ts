@@ -1,27 +1,20 @@
 import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/request-context";
 import { apiAuthLayer } from '../auth';
-import { tcUserIdClaimKey } from '../auth/tc-domain';
+import { mapUserToResourceId } from '../auth/resource-id';
+import { MASTRA_USER_CONTEXT_KEY } from '../auth/access-control';
 import { tcAILogger } from '../logger';
 import { API_PREFIX, CHAT_ROUTE_BASE_PATH } from '../server-routes';
 
 /**
- * Resource ID Middleware
- *
- * This middleware enforces resource isolation by setting the `MASTRA_RESOURCE_ID_KEY`
- * in the request context based on the authenticated user's ID.
- *
- * It performs the following steps:
- * 1. Checks for an authenticated `user` object in the request context.
- * 2. Determines the Topcoder domain (prod or dev) from `TC_API_BASE` to construct the userId claim key.
- * 3. Extracts the unique user identifier from the specific Topcoder claim (e.g., `https://topcoder-dev.com/userId`)
- *    or falls back to the `sub` claim for M2M tokens.
- * 4. Sets the `MASTRA_RESOURCE_ID_KEY` to ensure all subsequent Mastra operations are scoped to this user.
- *
- * @returns 401 Unauthorized if the user is missing or an ID cannot be extracted.
+ * Enforces Mastra memory isolation from the reserved verified-principal context.
+ * @param c Hono context. @param next Downstream continuation.
+ * @returns A 401 response or the continuation result; authentication failures are sanitized.
+ * Plain requestContext.user values cannot establish identity. If the reserved identity is
+ * absent, the shared provider authenticates the bearer/legacy apiKey token before mapping.
  */
 const resourceIdMiddlewareHandler = async (c: any, next: any) => {
     const requestContext = c.get('requestContext');
-    let user = requestContext.get('user');
+    let user = requestContext.get(MASTRA_USER_CONTEXT_KEY);
 
     if (!user) {
         const authHeader = c.req.header('authorization') || '';
@@ -34,9 +27,10 @@ const resourceIdMiddlewareHandler = async (c: any, next: any) => {
                 user = await apiAuthLayer.authenticateToken(token, c.req.raw);
                 if (user) {
                     requestContext.set('user', user);
+                    requestContext.set(MASTRA_USER_CONTEXT_KEY, user);
                 }
-            } catch (error) {
-                tcAILogger.error('Failed to authenticate token in resource middleware', { error });
+            } catch {
+                tcAILogger.error('Failed to authenticate token in resource middleware');
             }
         }
     }
@@ -46,22 +40,16 @@ const resourceIdMiddlewareHandler = async (c: any, next: any) => {
         return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    // Logic to extract userId
-    const userId = user[tcUserIdClaimKey()];
-    const sub = user['sub']; // M2M user
-
-    if (!userId && !sub) {
-        tcAILogger.error('Failed to identify userId/sub', { user });
-        return c.json({ error: 'Failed to extract userId/sub from user object' }, 401);
+    const resourceId = mapUserToResourceId(user);
+    if (!resourceId) {
+        tcAILogger.error('Invalid normalized principal in resource middleware');
+        return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    // Force all API operations to use this user's ID
-    // This takes precedence over any client-provided resourceId
-    const resourceId = userId || sub;
     requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
 
     tcAILogger.info('Auth resolved for request', {
-        authType: userId ? 'member' : 'm2m',
+        authType: user.kind === 'user' ? 'member' : 'm2m',
         resourceId,
     });
 

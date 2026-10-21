@@ -19,8 +19,6 @@ vi.mock('../../../utils/auth/m2m.service', () => ({
     },
 }));
 
-const ROLES_CLAIM = 'https://topcoder.com/roles';
-const USERID_CLAIM = 'https://topcoder.com/userId';
 const HANDLE = 'Ghostar';
 const USER_ID = '151743';
 
@@ -73,7 +71,7 @@ const MOCK_ROLES = {
 };
 
 function memberUser(roles: string[]): Record<string, unknown> {
-    return { sub: 'auth0|123', [USERID_CLAIM]: '88774433', [ROLES_CLAIM]: roles };
+    return { sub: 'auth0|123', kind: 'user', isMachine: false, userId: 88774433, roles: roles };
 }
 
 function buildContext(user: Record<string, unknown> | undefined) {
@@ -626,7 +624,7 @@ describe('fetchMemberInsightsTool — RBAC', () => {
 
     it('denies M2M callers with no matching scopes', async () => {
         const fetchSpy = mockMembersApi();
-        const m2mUser = { sub: 'client@clients', scope: 'some:other:scope' };
+        const m2mUser = { sub: 'client@clients',kind:'service',isMachine:true,clientId:'test-client',roles:[],scopes:["some:other:scope"] };
         await expect(
             fetchMemberInsightsTool.execute?.({ handle: HANDLE }, buildContext(m2mUser)),
         ).rejects.toBeInstanceOf(ToolAccessDeniedError);

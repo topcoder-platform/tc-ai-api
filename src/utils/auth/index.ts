@@ -1,21 +1,9 @@
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
-import { CompositeAuth } from '@mastra/core/server';
-import {
-  API_DOCS_PUBLIC_PATHS,
-  API_PREFIX,
-  CHAT_ROUTE_BASE_PATH,
-  CUSTOM_API_BASE_PATH,
-  isSwaggerUIEnabled,
-} from '../server-routes';
+import { MastraAuthProvider, type MastraAuthRequest } from '@mastra/core/server';
+import type { Principal } from 'tc-core-library-js';
+import { API_DOCS_PUBLIC_PATHS, API_PREFIX, CHAT_ROUTE_BASE_PATH, CUSTOM_API_BASE_PATH, isSwaggerUIEnabled } from '../server-routes';
 import { authorizeAccessPolicy } from './access-control';
-import { tcUserIdClaimKey } from './tc-domain';
-
-const mapUserToResourceId = (user: Record<string, unknown>): string | undefined => {
-  const userId = user[tcUserIdClaimKey()];
-  if (typeof userId === 'string') return userId;
-  // M2M tokens don't carry the TC userId claim; fall back to the subject
-  return typeof user.sub === 'string' ? user.sub : undefined;
-};
+import { mapUserToResourceId } from './resource-id';
+import { core } from './core';
 
 // chatRoute() (CHAT_ROUTE_BASE_PATH/:agentId) lives outside apiPrefix and never
 // sets requiresAuth, so Mastra's coreAuthMiddleware treats it as unprotected and
@@ -32,23 +20,28 @@ const PROTECTED_PATHS = [
 // explicitly — `requiresAuth: false` alone doesn't override a `protected` match.
 const PUBLIC_PATHS = isSwaggerUIEnabled() ? API_DOCS_PUBLIC_PATHS : [];
 
-export const apiAuthLayer = new CompositeAuth([
-  // TC Member Auth0 JWTs
-  new MastraAuthAuth0({
-    domain: process.env.AUTH0_DOMAIN,
-    audience: process.env.AUTH0_AUDIENCE,
-    protected: PROTECTED_PATHS,
-    public: PUBLIC_PATHS,
-    mapUserToResourceId,
-    authorizeUser: authorizeAccessPolicy,
-  }),
-  // TC M2M Auth0 JWTs
-  new MastraAuthAuth0({
-    domain: process.env.AUTH0_M2M_DOMAIN,
-    audience: process.env.AUTH0_M2M_AUDIENCE,
-    protected: PROTECTED_PATHS,
-    public: PUBLIC_PATHS,
-    mapUserToResourceId,
-    authorizeUser: authorizeAccessPolicy,
-  }),
-]);
+/**
+ * Mastra authentication adapter for the common Keycloak/member validator.
+ * The same normalized principal drives route policy, tool policy and memory isolation.
+ */
+export class CoreAuthProvider extends MastraAuthProvider<Principal> {
+  private readonly validator: ReturnType<typeof core.auth.createValidator>;
+
+  /** Sets protected/public paths and the shared validator; no arguments; invalid configuration throws. */
+  constructor() {
+    super({name: 'topcoder-shared-core', protected: PROTECTED_PATHS, public: PUBLIC_PATHS, mapUserToResourceId});
+    this.validator = core.auth.createValidator();
+  }
+
+  /** Validates a bearer token; returns a normalized principal or null; token errors are sanitized and never logged. */
+  async authenticateToken(token: string, _request?: unknown): Promise<Principal | null> {
+    try { return await this.validator.verify(token); } catch { return null; }
+  }
+
+  /** Applies endpoint policy to the verified user/request; returns allow/deny; invalid policy configuration throws. */
+  authorizeUser(user: Principal, request: MastraAuthRequest): boolean {
+    return authorizeAccessPolicy(user, request);
+  }
+}
+
+export const apiAuthLayer = new CoreAuthProvider();

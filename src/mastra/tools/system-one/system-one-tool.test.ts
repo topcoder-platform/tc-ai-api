@@ -12,8 +12,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../utils/logger', () => ({ tcAILogger: mocks.logger }));
 
-const ROLES_CLAIM = 'https://topcoder.com/roles';
-const USERID_CLAIM = 'https://topcoder.com/userId';
 const ENV_KEYS = ['OLLAMA_API_URL', 'SYS1_OLLAMA_BASE_URL', 'SYS1_MODEL', 'SYS1_ALLOWED_MODELS', 'SYS1_KEEP_ALIVE', 'DISABLE_AUTH', 'TC_API_BASE'];
 
 const SECRET_STATE = 'member 88774433 says: I was charged twice';
@@ -33,10 +31,10 @@ function contextFor(user: Record<string, unknown> | undefined) {
     return { requestContext, observe: noopObserve };
 }
 
-const admin = { sub: 'auth0|1', [USERID_CLAIM]: '1', [ROLES_CLAIM]: ['administrator'] };
-const copilot = { sub: 'auth0|2', [USERID_CLAIM]: '2', [ROLES_CLAIM]: ['copilot'] };
-const sys1Service = { sub: 'svc@clients', scope: 'read:challenges sys1:use' };
-const otherService = { sub: 'svc@clients', scope: 'read:challenges' };
+const admin = { sub: 'auth0|1', kind: 'user', isMachine: false, userId: 1, roles: ['administrator'] };
+const copilot = { sub: 'auth0|2', kind: 'user', isMachine: false, userId: 2, roles: ['copilot'] };
+const sys1Service = { sub: 'svc@clients',kind:'service',isMachine:true,clientId:'test-client',roles:[],scopes:["read:challenges", "sys1:use"] };
+const otherService = { sub: 'svc@clients',kind:'service',isMachine:true,clientId:'test-client',roles:[],scopes:["read:challenges"] };
 
 const fetchMock = vi.fn<typeof fetch>();
 let saved: Record<string, string | undefined>;

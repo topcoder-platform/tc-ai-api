@@ -68,11 +68,11 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 function memberUser(roles: string[] = []): Record<string, unknown> {
-    return { sub: 'auth0|123', [USERID_CLAIM]: '88774433', [ROLES_CLAIM]: roles };
+    return {kind:'user',isMachine:false,userId:88774433,roles,scopes:[],sub:'auth0|123',exp:Math.floor(Date.now()/1000)+120};
 }
 
 function m2mUser(scopes: string[] = []): Record<string, unknown> {
-    return { sub: 'client-id@clients', scope: scopes.join(' ') };
+    return {kind:'service',isMachine:true,clientId:'worker',roles:[],scopes,sub:'service-account',exp:Math.floor(Date.now()/1000)+120};
 }
 
 /**
@@ -90,48 +90,36 @@ function authRequest(path: string) {
 // ---------------------------------------------------------------------------
 
 describe('toAuthenticatedCaller', () => {
-    it('reads member roles from the TC roles claim', () => {
+    it('reads only normalized member roles', () => {
         const caller = toAuthenticatedCaller(memberUser(['administrator', 'copilot']));
-        expect(caller).toEqual({
+        expect(caller).toMatchObject({
             isM2M: false,
             roles: ['administrator', 'copilot'],
             scopes: [],
         });
     });
 
-    it('treats a token without the TC userId claim as M2M and splits the scope claim', () => {
+    it('reads scopes only from normalized service identities', () => {
         const caller = toAuthenticatedCaller(m2mUser(['challengesRAG:admin', 'read:challenges']));
-        expect(caller).toEqual({
+        expect(caller).toMatchObject({
             isM2M: true,
             roles: [],
             scopes: ['challengesRAG:admin', 'read:challenges'],
         });
     });
 
-    it('ignores a non-array roles claim and non-string entries', () => {
-        expect(toAuthenticatedCaller({ [USERID_CLAIM]: '1', [ROLES_CLAIM]: 'admin' }).roles).toEqual([]);
-        expect(
-            toAuthenticatedCaller({ [USERID_CLAIM]: '1', [ROLES_CLAIM]: ['ok', 42, null] }).roles,
-        ).toEqual(['ok']);
-    });
-
-    it('honours ACCESS_CONTROL_ROLES_CLAIM as an override', () => {
+    it('ignores raw namespace claims and configurable role-claim overrides', () => {
         process.env.ACCESS_CONTROL_ROLES_CLAIM = 'custom/roles';
-        const caller = toAuthenticatedCaller({
-            [USERID_CLAIM]: '1',
-            [ROLES_CLAIM]: ['ignored'],
-            'custom/roles': ['administrator'],
-        });
-        expect(caller.roles).toEqual(['administrator']);
+        for(const raw of [{[USERID_CLAIM]:'1',[ROLES_CLAIM]:['administrator']},
+          {'custom/roles':['administrator']},{scope:'sys1:use'},{permissions:['sys1:use']},{isMachine:true}]) {
+          expect(toAuthenticatedCaller(raw).principal).toBeUndefined();
+          expect(checkAccess(toAuthenticatedCaller(raw),{mode:'public'})).toBe(false);
+        }
     });
-
-    it('derives the claim domain from TC_API_BASE', () => {
-        process.env.TC_API_BASE = 'https://api.topcoder-dev.com';
-        const caller = toAuthenticatedCaller({
-            'https://topcoder-dev.com/userId': '1',
-            'https://topcoder-dev.com/roles': ['administrator'],
-        });
-        expect(caller).toMatchObject({ isM2M: false, roles: ['administrator'] });
+    it('never grants member OAuth scopes service permissions', () => {
+        const user={...memberUser(),scope:'sys1:use',scopes:['sys1:use']};
+        expect(toAuthenticatedCaller(user).scopes).toEqual([]);
+        expect(checkAccess(toAuthenticatedCaller(user),{mode:'restricted',scopes:['sys1:use']})).toBe(false);
     });
 });
 
@@ -382,7 +370,7 @@ describe('authorizeAccessPolicy', () => {
         expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/telemetry'))).toBe(true);
     });
 
-    it('re-asserts the MastraAuthAuth0 baseline checks it shadows', () => {
+    it('rejects missing normalized identity or expired principals', () => {
         // No sub/id at all.
         expect(authorizeAccessPolicy({ [USERID_CLAIM]: '1' }, authRequest(INGEST))).toBe(false);
         expect(authorizeAccessPolicy(null, authRequest(INGEST))).toBe(false);

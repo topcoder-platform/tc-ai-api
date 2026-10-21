@@ -25,7 +25,7 @@ const minimalContext = {
             key === MASTRA_AUTH_TOKEN_KEY
                 ? 'fake-requestor-token'
                 : key === 'user'
-                    ? { sub: 'test-user' }
+                    ? {sub:'test-user',kind:'user',isMachine:false,userId:123,roles:[],scopes:[]}
                     : undefined,
     },
 } as any;

@@ -1,33 +1,16 @@
-import { createRequire } from 'node:module';
+import { core } from './core';
 import { M2mConfig } from '../../config/m2m.config';
 
-const require = createRequire(import.meta.url);
-const m2mAuth = require('tc-core-library-js').auth.m2m;
-
-/**
- * Service to get M2M token with auth0 configs
- */
+/** Supplies a cached, verified Keycloak service token for explicitly enabled downstream tool fallbacks. */
 export class M2MService {
-  private static m2m: ReturnType<typeof m2mAuth> | null = null;
-
-  constructor() {
-    const config = M2mConfig.auth0;
-    M2MService.m2m = m2mAuth({
-      AUTH0_URL: config.url,
-      AUTH0_AUDIENCE: config.audience,
-      AUTH0_PROXY_SERVER_URL: config.proxyUrl,
-    });
-  }
+  private static m2m: ReturnType<typeof core.auth.m2m> | undefined;
 
   /**
-   * Get M2M token.
-   * @returns the M2M token
+   * Obtains the configured workload token, retaining one shared-core cache across instances.
+   * Takes no arguments; returns the verified access token; configuration/issuance/verification errors propagate.
    */
-  async getM2MToken() {
-    const config = M2mConfig.auth0;
-    return (await M2MService.m2m!.getMachineToken(
-      config.clientId,
-      config.clientSecret,
-    )) as string;
+  async getM2MToken(): Promise<string> {
+    M2MService.m2m ??= core.auth.m2m(M2mConfig);
+    return M2MService.m2m.getMachineToken();
   }
 }

@@ -5,7 +5,7 @@
  * Two enforcement points, one shared policy core:
  *
  *  - Agents & workflows: `authorizeAccessPolicy` is passed as `authorizeUser`
- *    to both MastraAuthAuth0 providers in `apiAuthLayer`. Mastra's own
+ *    to the shared CoreAuthProvider in `apiAuthLayer`. Mastra's own
  *    `coreAuthMiddleware` already invokes that hook on every protected request
  *    and 403s when it returns false.
  *  - Tools: `withAccessPolicy` wraps a tool's `execute` at its export site, so
@@ -24,38 +24,32 @@ import {
 } from '../../config/access-control.config';
 import { tcAILogger } from '../logger';
 import { API_PREFIX, CHAT_ROUTE_BASE_PATH, RAG_ADMIN_ROUTE_BASE_PATH } from '../server-routes';
-import { resolveTcDomain, tcUserIdClaimKey } from './tc-domain';
+import type { Principal } from 'tc-core-library-js';
+import { core } from './core';
 
 // ---------------------------------------------------------------------------
 // Claim extraction
 // ---------------------------------------------------------------------------
 
-/**
- * JWT claim key carrying the member's role names. Confirmed against a real
- * decoded prod member token: `https://topcoder.com/roles`, a plain string
- * array including "administrator". ACCESS_CONTROL_ROLES_CLAIM overrides it if
- * a tenant ever diverges from the convention.
- */
-const rolesClaimKey = (): string =>
-    process.env.ACCESS_CONTROL_ROLES_CLAIM || `https://${resolveTcDomain()}/roles`;
-
+/** The service policy view of a shared-core principal; raw claims never determine identity. */
 export interface AuthenticatedCaller {
-    /** M2M tokens don't carry the TC userId claim (mirrors resourceIdMiddleware). */
     isM2M: boolean;
-    /** Member role names, [] when absent or not a string array. */
     roles: string[];
-    /** OAuth `scope` claim, space-delimited, [] when absent. */
     scopes: string[];
+    principal?: Principal;
 }
 
+/**
+ * Converts a shared normalized principal into the policy view.
+ * @param user Verified caller from Mastra; raw/unknown identities are denied.
+ * @returns Roles for members, scopes for services, and the original principal; does not throw.
+ */
 export function toAuthenticatedCaller(user: Record<string, unknown>): AuthenticatedCaller {
-    const isM2M = !user[tcUserIdClaimKey()];
-    const rawRoles = user[rolesClaimKey()];
-    const roles = Array.isArray(rawRoles)
-        ? rawRoles.filter((r): r is string => typeof r === 'string')
-        : [];
-    const scopes = typeof user.scope === 'string' ? user.scope.split(' ').filter(Boolean) : [];
-    return { isM2M, roles, scopes };
+    const isM2M = user.kind === 'service' && user.isMachine === true;
+    const isMember = user.kind === 'user' && user.isMachine === false;
+    const roles = isMember && Array.isArray(user.roles) ? user.roles.filter((r): r is string => typeof r === 'string') : [];
+    const scopes = isM2M && Array.isArray(user.scopes) ? user.scopes.filter((s): s is string => typeof s === 'string') : [];
+    return { isM2M, roles, scopes, principal: isM2M || isMember ? user as Principal : undefined };
 }
 
 /** Case-insensitive role match — aligns with member-api `hasSensitiveDataRole` and JWT variance. */
@@ -77,12 +71,16 @@ export function callerHasAnyRole(roles: string[], allowedRoles: string[]): boole
  * caller against `scopes`, a member caller against `roles`. A `restricted`
  * policy configuring only one dimension implicitly denies the other credential
  * type — this is the intended design, not an oversight.
+ * @param caller View of the shared verified principal. @param policy Resolved target policy.
+ * @returns Allow/deny; service alternatives delegate exact matching to core.hasScopes.
+ * @throws Error for malformed required scopes (configuration error).
  */
 export function checkAccess(caller: AuthenticatedCaller, policy: AccessPolicy): boolean {
+    if (!caller.principal) return false;
     if (policy.mode === 'public') return true;
     if (policy.mode === 'deny') return false;
     if (caller.isM2M) {
-        return !!policy.scopes?.length && policy.scopes.some((s) => caller.scopes.includes(s));
+        return !!policy.scopes?.length && core.auth.hasScopes(caller.principal, policy.scopes, 'any');
     }
     return (
         !!policy.roles?.length &&
@@ -206,20 +204,19 @@ function parseTarget(pathname: string): { category: AccessCategory; targetId: st
 }
 
 /**
- * Passed as `authorizeUser` to both MastraAuthAuth0 providers in apiAuthLayer.
+ * Passed as `authorizeUser` to the shared CoreAuthProvider in apiAuthLayer.
  * Mastra `.bind(this)`s it onto the provider, so it must never read `this`.
  *
- * Note: supplying `authorizeUser` in the provider options SHADOWS
- * MastraAuthAuth0's own prototype authorizeUser, so its baseline sub/exp
- * checks are re-asserted here rather than lost.
+ * Requires normalized identity and unexpired claims; signature/issuer/audience are validated by core.
+ * @param user Verified principal. @param request Mastra request containing the URL.
+ * @returns Allow/deny; malformed policy settings throw during resolution.
  */
 export function authorizeAccessPolicy(
     user: Record<string, unknown> | null | undefined,
     request: MastraAuthRequest,
 ): boolean {
-    // Baseline checks inherited from MastraAuthAuth0.authorizeUser.
-    if (!user || !(user.sub || user.id)) return false;
-    if (typeof user.exp === 'number' && user.exp * 1000 < Date.now()) return false;
+    if (!user || !toAuthenticatedCaller(user).principal) return false;
+    if (typeof user.exp !== 'number' || user.exp * 1000 <= Date.now()) return false;
 
     // authorizeUser receives a MastraAuthRequest (`{ raw, headers, header() }`),
     // NOT a Request — `request.url` is undefined on it. getWebRequest() is

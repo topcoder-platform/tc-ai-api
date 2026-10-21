@@ -1,3 +1,5 @@
+> Keycloak branch update: historical Auth0 provider/claim extraction and M2M settings below are superseded on `keycloak_m2M` by [shared-core authentication](../keycloak-m2m.md). Policies and requestor-token propagation remain; service issuance uses Keycloak, scope checks use common `hasScopes`, and identity comes only from the normalized principal. Arbitrary role-claim overrides are removed.
+
 # ADR 0002 — Requestor-token-first authorization for Topcoder platform API calls, with per-tool M2M fallback
 
 - **Status:** **Accepted** (proposed 2026-08-25, accepted 2026-08-25) — implemented on this branch

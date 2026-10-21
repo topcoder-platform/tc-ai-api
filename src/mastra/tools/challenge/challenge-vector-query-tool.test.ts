@@ -44,7 +44,7 @@ const { buildMetadataFilter } = _testing;
 
 const minimalContext = {
     mastra: undefined,
-    requestContext: { get: (key: string) => (key === 'user' ? { sub: 'test-user' } : undefined) },
+    requestContext: { get: (key: string) => (key === 'user' ? {sub:'test-user',kind:'user',isMachine:false,userId:123,roles:[],scopes:[]} : undefined) },
 } as any;
 
 async function executeTool(input: Record<string, unknown>): Promise<any> {

@@ -16,8 +16,6 @@ vi.mock('../../../utils/auth/m2m.service', () => ({
 import { fetchChallengeResourcesTool } from './fetch-challenge-resources-tool';
 
 const CHALLENGE_UUID = '550e8400-e29b-41d4-a716-446655440000';
-const ROLES_CLAIM = 'https://topcoder.com/roles';
-const USERID_CLAIM = 'https://topcoder.com/userId';
 
 const ROLE_IDS = {
     copilot: 'cfe12b3f-2a24-4639-9d8b-ec86726f76bd',
@@ -90,7 +88,7 @@ const MOCK_RESOURCES = [
 ];
 
 function memberUser(roles: string[]): Record<string, unknown> {
-    return { sub: 'auth0|123', [USERID_CLAIM]: '88774433', [ROLES_CLAIM]: roles };
+    return { sub: 'auth0|123', kind: 'user', isMachine: false, userId: 88774433, roles: roles };
 }
 
 function buildContext(user: Record<string, unknown> | undefined) {

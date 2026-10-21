@@ -1,3 +1,5 @@
+> Keycloak branch update: historical Auth0 provider/claim extraction and M2M settings below are superseded on `keycloak_m2M` by [shared-core authentication](../keycloak-m2m.md). Policies and requestor-token propagation remain; service issuance uses Keycloak, scope checks use common `hasScopes`, and identity comes only from the normalized principal. Arbitrary role-claim overrides are removed.
+
 # ADR 0009 — System One (`sys1`): provider-agnostic decision tool, exposed to services through a tracked workflow
 
 - **Status:** **Accepted — implemented** (2026-10-05) on `sys1`; see *Implementation notes* at the end. Live verification against a real Ollama ≥ 0.35 (plan step 6) is still open.

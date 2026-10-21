@@ -24,7 +24,6 @@ import { searchMembersTool } from './search-members-tool';
 import { ToolAccessDeniedError } from '../../../utils/auth/access-control';
 import { convertCountries, convertCountryToAlpha3 } from './search-members-tool';
 
-const ROLES_CLAIM = 'https://topcoder.com/roles';
 const REACT_ID = '4458454c-9a97-4332-a545-6546e240dab6';
 const SFDC_ID = 'c8670c34-1020-4255-9296-6ea4fb8893e1';
 
@@ -48,7 +47,7 @@ function adminContext() {
             get: (key: string) => {
                 if (key === MASTRA_AUTH_TOKEN_KEY) return 'admin-jwt';
                 if (key === 'user') {
-                    return { sub: 'auth0|1', 'https://topcoder.com/userId': '1', [ROLES_CLAIM]: ['administrator'] };
+                    return { sub: 'auth0|1', kind: 'user', isMachine: false, userId: 1, roles: ['administrator'] };
                 }
                 return undefined;
             },
@@ -63,7 +62,7 @@ function talentManagerContext() {
             get: (key: string) => {
                 if (key === MASTRA_AUTH_TOKEN_KEY) return 'tm-jwt';
                 if (key === 'user') {
-                    return { sub: 'auth0|2', 'https://topcoder.com/userId': '2', [ROLES_CLAIM]: ['Talent Manager'] };
+                    return { sub: 'auth0|2', kind: 'user', isMachine: false, userId: 2, roles: ['Talent Manager'] };
                 }
                 return undefined;
             },
@@ -78,7 +77,7 @@ function memberContext() {
             get: (key: string) => {
                 if (key === MASTRA_AUTH_TOKEN_KEY) return 'member-jwt';
                 if (key === 'user') {
-                    return { sub: 'auth0|3', 'https://topcoder.com/userId': '3', [ROLES_CLAIM]: ['member'] };
+                    return { sub: 'auth0|3', kind: 'user', isMachine: false, userId: 3, roles: ['member'] };
                 }
                 return undefined;
             },
@@ -310,7 +309,7 @@ describe('searchMembersTool', () => {
             requestContext: {
                 get: (key: string) => {
                     if (key === MASTRA_AUTH_TOKEN_KEY) return 'm2m-token';
-                    if (key === 'user') return { sub: 'client@clients', scope: 'some:other:scope' };
+                    if (key === 'user') return { sub: 'client@clients',kind:'service',isMachine:true,clientId:'test-client',roles:[],scopes:["some:other:scope"] };
                     return undefined;
                 },
             },

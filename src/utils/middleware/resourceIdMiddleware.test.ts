@@ -29,7 +29,7 @@ function createContext(options?: {
 }) {
     const requestContext = new Map<string, unknown>();
     if (options?.user) {
-        requestContext.set('user', options.user);
+        requestContext.set('mastra__user', options.user);
     }
 
     const json = vi.fn((payload: unknown, status: number) => ({ payload, status }));
@@ -76,7 +76,7 @@ describe('resourceIdMiddleware', () => {
 
     it('sets resource id from existing user in request context', async () => {
         const user = {
-            'https://topcoder-dev.com/userId': '12345',
+            kind:'user',isMachine:false,userId:12345,
             sub: 'sub-1',
         };
         const { c, requestContext, json } = createContext({ user });
@@ -96,7 +96,7 @@ describe('resourceIdMiddleware', () => {
 
     it('hydrates user from bearer token when request context user is missing', async () => {
         const user = {
-            'https://topcoder-dev.com/userId': '777',
+            kind:'user',isMachine:false,userId:777,
             sub: 'sub-777',
         };
         authenticateTokenMock.mockResolvedValueOnce(user);
@@ -117,7 +117,7 @@ describe('resourceIdMiddleware', () => {
 
     it('hydrates user from apiKey query token when bearer token is absent', async () => {
         const user = {
-            sub: 'm2m-subject',
+            kind:'service',isMachine:true,iss:'https://issuer.example.test',clientId:'worker',sub:'m2m-subject',
         };
         authenticateTokenMock.mockResolvedValueOnce(user);
 
@@ -127,12 +127,12 @@ describe('resourceIdMiddleware', () => {
         await resourceIdMiddleware.handler(c, next);
 
         expect(authenticateTokenMock).toHaveBeenCalledWith('query-token', c.req.raw);
-        expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('m2m-subject');
+        expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('service:https%3A%2F%2Fissuer.example.test:worker');
         expect(next).toHaveBeenCalledOnce();
         expect(json).not.toHaveBeenCalled();
         expect(loggerInfoMock).toHaveBeenCalledWith('Auth resolved for request', {
             authType: 'm2m',
-            resourceId: 'm2m-subject',
+            resourceId: 'service:https%3A%2F%2Fissuer.example.test:worker',
         });
     });
 
@@ -150,7 +150,7 @@ describe('resourceIdMiddleware', () => {
         expect(loggerErrorMock).toHaveBeenCalledWith('User object missing in context!');
     });
 
-    it('returns 401 when user has neither userId claim nor sub', async () => {
+    it('returns 401 when reserved context is not a normalized identity', async () => {
         const user = { email: 'no-id@example.com' };
         const { c, json } = createContext({ user });
         const next = vi.fn(async () => undefined);
@@ -158,10 +158,19 @@ describe('resourceIdMiddleware', () => {
         const result = await resourceIdMiddleware.handler(c, next);
 
         expect(result).toEqual({
-            payload: { error: 'Failed to extract userId/sub from user object' },
+            payload: { error: 'Unauthorized' },
             status: 401,
         });
         expect(next).not.toHaveBeenCalled();
-        expect(json).toHaveBeenCalledWith({ error: 'Failed to extract userId/sub from user object' }, 401);
+        expect(json).toHaveBeenCalledWith({ error: 'Unauthorized' }, 401);
     });
+    it('does not trust an injected plain user context', async()=>{
+        const {c,requestContext,json}=createContext();
+        requestContext.set('user',{kind:'user',isMachine:false,userId:999,roles:['administrator']});
+        const next=vi.fn();
+        await resourceIdMiddleware.handler(c,next);
+        expect(json).toHaveBeenCalledWith({error:'Unauthorized'},401);
+        expect(next).not.toHaveBeenCalled();
+    });
+
 });

@@ -14,8 +14,6 @@ vi.mock('../../../utils/auth/m2m.service', () => ({
 import { fetchClientProjectsTool } from './fetch-client-projects-tool';
 import { ToolAccessDeniedError } from '../../../utils/auth/access-control';
 
-const ROLES_CLAIM = 'https://topcoder.com/roles';
-const USERID_CLAIM = 'https://topcoder.com/userId';
 
 const CLIENT = { id: '71000412', name: 'ANHEUSER-BUSCH', codeName: 'CUS-173826' };
 const BILLING_ACCOUNT = { id: 70016070, name: 'RPC Rewrite', clientId: '71000412' };
@@ -29,7 +27,7 @@ const PROJECT = {
 };
 
 function memberUser(roles: string[]): Record<string, unknown> {
-    return { sub: 'auth0|123', [USERID_CLAIM]: '88774433', [ROLES_CLAIM]: roles };
+    return { sub: 'auth0|123', kind: 'user', isMachine: false, userId: 88774433, roles: roles };
 }
 
 /**

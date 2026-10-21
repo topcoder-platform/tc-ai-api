@@ -19,8 +19,6 @@ vi.mock('../../../utils/logger', () => ({
     tcAILogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const ROLES_CLAIM = 'https://topcoder.com/roles';
-const USERID_CLAIM = 'https://topcoder.com/userId';
 const ENV_KEYS = ['OLLAMA_API_URL', 'SYS1_OLLAMA_BASE_URL', 'SYS1_MODEL', 'SYS1_ALLOWED_MODELS', 'DISABLE_AUTH', 'TC_API_BASE'];
 
 // 1x1 PNG
@@ -60,15 +58,15 @@ interface Caller {
 
 const adminA: Caller = {
     resourceId: '1001',
-    user: { sub: 'auth0|1001', [USERID_CLAIM]: '1001', [ROLES_CLAIM]: ['administrator'] },
+    user: { sub: 'auth0|1001', kind: 'user', isMachine: false, userId: 1001, roles: ['administrator'] },
 };
 const adminB: Caller = {
     resourceId: '1002',
-    user: { sub: 'auth0|1002', [USERID_CLAIM]: '1002', [ROLES_CLAIM]: ['administrator'] },
+    user: { sub: 'auth0|1002', kind: 'user', isMachine: false, userId: 1002, roles: ['administrator'] },
 };
 const copilot: Caller = {
     resourceId: '1003',
-    user: { sub: 'auth0|1003', [USERID_CLAIM]: '1003', [ROLES_CLAIM]: ['copilot'] },
+    user: { sub: 'auth0|1003', kind: 'user', isMachine: false, userId: 1003, roles: ['copilot'] },
 };
 
 /** What the HTTP layer puts on the context: the verified user and resourceId. */
