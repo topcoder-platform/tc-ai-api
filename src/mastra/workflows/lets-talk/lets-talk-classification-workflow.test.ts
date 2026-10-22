@@ -69,7 +69,18 @@ const {
     verifyModelOutput,
 } = await import('./lets-talk-classification-workflow');
 
-const CLASS_IDS = ['JUNK', 'COMMUNITY_GENERAL', 'COMMUNITY_SUPPORT', 'SALES_LEAD'];
+// The default class set, in configured (tie-break) order.
+const CLASS_IDS = [
+    'JUNK',
+    'COMMUNITY_OPPORTUNITY',
+    'COMMUNITY_SKILLS',
+    'COMMUNITY_SUPPORT',
+    'COMMUNITY_GENERAL',
+    'WIPRO_QUERIES',
+    'SALES_LEAD',
+];
+/** Every class at 0 — spread first, then set the classes a case cares about. */
+const ZERO: Record<string, number> = Object.fromEntries(CLASS_IDS.map((id) => [id, 0]));
 
 const submission = {
     submissionId: '3f1c2a9e-6b7d-4e8f-9a01-2b3c4d5e6f70',
@@ -84,7 +95,7 @@ const submission = {
 };
 
 const VALID_ANSWER = {
-    confidences: { JUNK: 0.02, COMMUNITY_GENERAL: 0.05, COMMUNITY_SUPPORT: 0.03, SALES_LEAD: 0.9 },
+    confidences: { ...ZERO, JUNK: 0.02, COMMUNITY_GENERAL: 0.05, COMMUNITY_SUPPORT: 0.03, SALES_LEAD: 0.9 },
     detectedLanguage: 'es',
     rationale: 'A company asks for a React development team for a six-month project.',
 };
@@ -231,6 +242,7 @@ describe('lets-talk-classification workflow — the prompt', () => {
         expect(text).toContain('emailDomain: acme.es');
         expect(text).toContain('isFreeMailDomain: false');
         expect(text).toContain('isDisposableDomain: false');
+        expect(text).toContain('isWiproDomain: false');
         expect(text).toContain('isTopcoderMember: true');
         expect(text).toContain(submission.message);
 
@@ -262,7 +274,7 @@ describe('lets-talk-classification workflow — retries and verification', () =>
     });
 
     it('L4: repairs a sum that stays off in code, without a corrective re-run', async () => {
-        const offSum = { ...VALID_ANSWER, confidences: { JUNK: 0.1, COMMUNITY_GENERAL: 0.1, COMMUNITY_SUPPORT: 0.1, SALES_LEAD: 0.5 } };
+        const offSum = { ...VALID_ANSWER, confidences: { ...ZERO, JUNK: 0.1, COMMUNITY_GENERAL: 0.1, COMMUNITY_SUPPORT: 0.1, SALES_LEAD: 0.5 } };
         script.answers = [JSON.stringify(offSum)];
         const { runId, result } = await start(submission);
 
@@ -279,7 +291,8 @@ describe('lets-talk-classification workflow — retries and verification', () =>
     });
 
     it('L4: repairs a class the model keeps omitting from the recovered text', async () => {
-        const missing = { ...VALID_ANSWER, confidences: { JUNK: 0.1, COMMUNITY_GENERAL: 0.1, SALES_LEAD: 0.8 } };
+        const { COMMUNITY_SUPPORT: _omitted, ...withoutSupport } = ZERO;
+        const missing = { ...VALID_ANSWER, confidences: { ...withoutSupport, JUNK: 0.1, COMMUNITY_GENERAL: 0.1, SALES_LEAD: 0.8 } };
         script.answers = [JSON.stringify(missing)];
         const { runId, result } = await start(submission);
 
@@ -318,7 +331,7 @@ describe('lets-talk-classification workflow — retries and verification', () =>
     });
 
     it('fails the run with LETS_TALK_INVALID_MODEL_OUTPUT after two unrecoverable attempts — no class is guessed', async () => {
-        script.answers = [JSON.stringify({ ...VALID_ANSWER, confidences: { JUNK: 0, COMMUNITY_GENERAL: 0, COMMUNITY_SUPPORT: 0, SALES_LEAD: 0 } })];
+        script.answers = [JSON.stringify({ ...VALID_ANSWER, confidences: ZERO })];
         const { runId, result } = await start(submission);
 
         expect(result.status).toBe('failed');
@@ -365,6 +378,15 @@ describe('prepareSubmission', () => {
         });
         expect(JSON.stringify(prepared)).not.toMatch(/someone|88774411/i);
         expect(prepareSubmission({ ...submission, workEmail: 'x@gmail.com' }, { maxMessageChars: 5000 }).modelView.isFreeMailDomain).toBe(true);
+    });
+
+    it('flags Wipro corporate domains, subdomains included', () => {
+        const flag = (workEmail: string) => prepareSubmission({ ...submission, workEmail }, { maxMessageChars: 5000 }).modelView.isWiproDomain;
+        expect(flag('ravi.k@wipro.com')).toBe(true);
+        expect(flag('ravi.k@WIPRO.COM')).toBe(true);
+        expect(flag('ravi.k@in.wipro.com')).toBe(true);
+        expect(flag('ravi.k@notwipro.com')).toBe(false);
+        expect(flag('ravi.k@acme.es')).toBe(false);
     });
 
     it('normalizes whitespace and truncates the message', () => {
@@ -418,8 +440,11 @@ describe('verifyModelOutput', () => {
         );
         expect(verification).toMatchObject({ ok: false, repairable: true });
         expect(verification.issues).toEqual([
-            'confidences.COMMUNITY_GENERAL missing or not a number — set to 0',
+            'confidences.COMMUNITY_OPPORTUNITY missing or not a number — set to 0',
+            'confidences.COMMUNITY_SKILLS missing or not a number — set to 0',
             'confidences.COMMUNITY_SUPPORT missing or not a number — set to 0',
+            'confidences.COMMUNITY_GENERAL missing or not a number — set to 0',
+            'confidences.WIPRO_QUERIES missing or not a number — set to 0',
             'confidences.SALES_LEAD out of range (1.4) — clamped',
             'confidences sum to 1.2, not 1 — renormalized',
             'detectedLanguage "Spanish" is not an ISO 639-1 code — set to "und"',
@@ -437,13 +462,13 @@ describe('finalizeClassification', () => {
 
     it('normalizes: missing class → 0, clamping, sum to 1', () => {
         const result = finalizeClassification('id', { ...base, confidences: { JUNK: 2, SALES_LEAD: 1 } }, CLASS_IDS, 0.5);
-        expect(result.confidences).toEqual({ JUNK: 0.5, COMMUNITY_GENERAL: 0, COMMUNITY_SUPPORT: 0, SALES_LEAD: 0.5 });
+        expect(result.confidences).toEqual({ ...ZERO, JUNK: 0.5, SALES_LEAD: 0.5 });
     });
 
     it('breaks ties in favour of the earlier configured class', () => {
         const result = finalizeClassification(
             'id',
-            { ...base, confidences: { JUNK: 0, COMMUNITY_GENERAL: 0, COMMUNITY_SUPPORT: 0.5, SALES_LEAD: 0.5 } },
+            { ...base, confidences: { ...ZERO, COMMUNITY_SUPPORT: 0.5, SALES_LEAD: 0.5 } },
             CLASS_IDS,
             0.5,
         );
@@ -451,17 +476,27 @@ describe('finalizeClassification', () => {
         expect(result.needsReview).toBe(true);
     });
 
+    it('resolves a tie with the COMMUNITY_GENERAL catch-all to the specific community class', () => {
+        const result = finalizeClassification(
+            'id',
+            { ...base, confidences: { ...ZERO, COMMUNITY_GENERAL: 0.5, COMMUNITY_OPPORTUNITY: 0.5 } },
+            CLASS_IDS,
+            0.5,
+        );
+        expect(result.classification).toBe('COMMUNITY_OPPORTUNITY');
+    });
+
     it.each([
-        [{ JUNK: 0.05, COMMUNITY_GENERAL: 0.05, COMMUNITY_SUPPORT: 0.1, SALES_LEAD: 0.8 }, false],
-        [{ JUNK: 0.2, COMMUNITY_GENERAL: 0.2, COMMUNITY_SUPPORT: 0.15, SALES_LEAD: 0.45 }, true], // below minConfidence
-        [{ JUNK: 0, COMMUNITY_GENERAL: 0.45, COMMUNITY_SUPPORT: 0, SALES_LEAD: 0.55 }, true], // margin exactly 0.1
-        [{ JUNK: 0, COMMUNITY_GENERAL: 0.39, COMMUNITY_SUPPORT: 0, SALES_LEAD: 0.61 }, false],
+        [{ ...ZERO, JUNK: 0.05, COMMUNITY_GENERAL: 0.05, COMMUNITY_SUPPORT: 0.1, SALES_LEAD: 0.8 }, false],
+        [{ ...ZERO, JUNK: 0.2, COMMUNITY_GENERAL: 0.2, COMMUNITY_SUPPORT: 0.15, SALES_LEAD: 0.45 }, true], // below minConfidence
+        [{ ...ZERO, COMMUNITY_GENERAL: 0.45, SALES_LEAD: 0.55 }, true], // margin exactly 0.1
+        [{ ...ZERO, COMMUNITY_GENERAL: 0.39, SALES_LEAD: 0.61 }, false],
     ])('computes needsReview for %j → %s', (confidences, needsReview) => {
         expect(finalizeClassification('id', { ...base, confidences }, CLASS_IDS, 0.5).needsReview).toBe(needsReview);
     });
 
     it('always needs review when the message was empty', () => {
-        const confident = { JUNK: 0.05, COMMUNITY_GENERAL: 0.05, COMMUNITY_SUPPORT: 0.1, SALES_LEAD: 0.8 };
+        const confident = { ...ZERO, JUNK: 0.05, COMMUNITY_GENERAL: 0.05, COMMUNITY_SUPPORT: 0.1, SALES_LEAD: 0.8 };
         expect(finalizeClassification('id', { ...base, confidences: confident }, CLASS_IDS, 0.5, { messageProvided: false }).needsReview).toBe(true);
         expect(finalizeClassification('id', { ...base, confidences: confident }, CLASS_IDS, 0.5, { messageProvided: true }).needsReview).toBe(false);
     });
