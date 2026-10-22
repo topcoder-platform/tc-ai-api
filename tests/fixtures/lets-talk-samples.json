@@ -188,5 +188,78 @@
     "expected": "COMMUNITY_GENERAL",
     "language": "en",
     "submission": { "interestedIn": "Community", "firstName": "Aisha", "lastName": "Bello", "workEmail": "aisha.bello@lagostechhub.org", "companyName": "Lagos Tech Hub", "message": "We run a developer community of 2,000 students and would like to introduce them to Topcoder challenges. Is there a community partnership or ambassador program?" }
+  },
+  {
+    "id": "en-opportunity-freelance-gig",
+    "expected": "COMMUNITY_OPPORTUNITY",
+    "language": "en",
+    "submission": { "interestedIn": "Joining the community", "firstName": "Daniel", "lastName": "Novak", "workEmail": "daniel.novak@gmail.com", "companyName": "Freelancer", "message": "I am a freelance React and Node.js developer with 5 years of experience. Do you have any paid gigs or projects I could pick up?" }
+  },
+  {
+    "id": "es-opportunity-internship",
+    "expected": "COMMUNITY_OPPORTUNITY",
+    "language": "es",
+    "submission": { "interestedIn": "Other", "firstName": "Sofía", "lastName": "Morales", "workEmail": "sofia.morales@hotmail.com", "companyName": "Universidad de Chile", "message": "Soy estudiante de último año de ingeniería informática. ¿Tienen pasantías remuneradas o algún trabajo para conseguir mi primera experiencia profesional?" }
+  },
+  {
+    "id": "hi-opportunity-earn-money",
+    "expected": "COMMUNITY_OPPORTUNITY",
+    "language": "hi",
+    "submission": { "interestedIn": "Design", "firstName": "Pooja", "lastName": "Yadav", "workEmail": "pooja.yadav@gmail.com", "companyName": "Self", "message": "मैं एक ग्राफिक डिज़ाइनर हूँ और घर से काम करके पैसे कमाना चाहती हूँ। क्या टॉपकोडर पर मुझे काम मिल सकता है?" }
+  },
+  {
+    "id": "en-opportunity-big-company-employee",
+    "expected": "COMMUNITY_OPPORTUNITY",
+    "language": "en",
+    "submission": { "interestedIn": "Data science", "firstName": "Kenji", "lastName": "Watanabe", "workEmail": "kenji.watanabe@accenture.com", "companyName": "Accenture", "message": "I work full time as a data engineer and would like to take on weekend projects through Topcoder to earn some extra income. How do I find paid work?" }
+  },
+  {
+    "id": "en-skills-learn-ai",
+    "expected": "COMMUNITY_SKILLS",
+    "language": "en",
+    "submission": { "interestedIn": "AI", "firstName": "Fatima", "lastName": "Zahra", "workEmail": "fatima.zahra@outlook.com", "companyName": "Student", "message": "I want to learn app development and AI from scratch. Do you have courses or a learning path for beginners?" }
+  },
+  {
+    "id": "pt-skills-practice-algorithms",
+    "expected": "COMMUNITY_SKILLS",
+    "language": "pt",
+    "member": true,
+    "submission": { "interestedIn": "Competitive programming", "firstName": "Rafael", "lastName": "Oliveira", "workEmail": "rafael.oliveira@gmail.com", "companyName": "Autônomo", "message": "Quero melhorar minhas habilidades em algoritmos e estruturas de dados. Onde posso praticar problemas antigos antes de competir nas próximas maratonas?" }
+  },
+  {
+    "id": "fr-skills-certification",
+    "expected": "COMMUNITY_SKILLS",
+    "language": "fr",
+    "submission": { "interestedIn": "Cloud", "firstName": "Hugo", "lastName": "Martin", "workEmail": "hugo.martin@gmail.com", "companyName": "Indépendant", "message": "Proposez-vous des formations ou des certifications sur AWS pour les développeurs qui veulent progresser ? J'aimerais aussi un mentor pour me guider." }
+  },
+  {
+    "id": "en-wipro-bench-domain",
+    "expected": "WIPRO_QUERIES",
+    "language": "en",
+    "submission": { "interestedIn": "Other", "firstName": "Suresh", "lastName": "Babu", "workEmail": "suresh.babu@wipro.com", "companyName": "Wipro", "message": "I am currently on the bench and was told Topcoder could help me get allocated to a project. Whom should I contact internally?" }
+  },
+  {
+    "id": "en-wipro-self-identified-freemail",
+    "expected": "WIPRO_QUERIES",
+    "language": "en",
+    "submission": { "interestedIn": "Joining the community", "firstName": "Anjali", "lastName": "Menon", "workEmail": "anjali.menon88@gmail.com", "companyName": "Wipro Technologies", "message": "I am a Wipro employee (Java developer, 6 years) looking for a new internal assignment. Can Topcoder help me find one inside Wipro?" }
+  },
+  {
+    "id": "en-wipro-client-account",
+    "expected": "WIPRO_QUERIES",
+    "language": "en",
+    "submission": { "interestedIn": "Enterprise solutions", "firstName": "Vikram", "lastName": "Iyer", "workEmail": "vikram.iyer@wipro.com", "companyName": "Wipro Limited", "message": "Our Wipro delivery team for a retail client account wants to run a hackathon through Topcoder. Who is the internal point of contact and how is it billed internally?" }
+  },
+  {
+    "id": "mixed-hi-en-wipro-upskilling",
+    "expected": "WIPRO_QUERIES",
+    "language": "hi",
+    "submission": { "interestedIn": "Training", "firstName": "Rohit", "lastName": "Singh", "workEmail": "rohit.singh@wipro.com", "companyName": "Wipro", "message": "मैं Wipro में software engineer हूँ। क्या Wipro employees के लिए Topcoder पर कोई internal upskilling program है?" }
+  },
+  {
+    "id": "en-general-empty-message",
+    "expected": "COMMUNITY_GENERAL",
+    "language": "en",
+    "submission": { "interestedIn": "Other", "firstName": "Emily", "lastName": "Clarke", "workEmail": "emily.clarke@gmail.com", "companyName": "N/A" }
   }
 ]

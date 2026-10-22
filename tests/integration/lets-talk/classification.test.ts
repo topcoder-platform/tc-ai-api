@@ -115,6 +115,16 @@ describe.skipIf(!ENABLED)("lets-talk classification — live eval", () => {
         }));
         console.table(rows);
 
+        // Per expected class, so a weak class can't hide behind the overall rate.
+        const perClass = new Map<string, { ok: number; total: number }>();
+        for (const o of outcomes) {
+            const entry = perClass.get(o.sample.expected) ?? { ok: 0, total: 0 };
+            entry.total += 1;
+            if (o.output?.classification === o.sample.expected) entry.ok += 1;
+            perClass.set(o.sample.expected, entry);
+        }
+        console.table([...perClass].map(([expected, { ok, total }]) => ({ expected, ok, total })));
+
         const ok = outcomes.filter((o) => o.output?.classification === o.sample.expected).length;
         const l2 = outcomes.reduce((sum, o) => sum + (o.meta?.processorRetries ?? 0), 0);
         const l4 = outcomes.filter((o) => (o.meta?.attempts ?? 1) > 1).length;

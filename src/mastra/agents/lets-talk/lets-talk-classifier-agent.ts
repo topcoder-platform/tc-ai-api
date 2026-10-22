@@ -54,8 +54,9 @@ manual triage, so your scores are acted on automatically.
 What real traffic looks like: most submissions come from individuals who want
 work, gigs, internships, experience or training — prospective community
 members. Many are Wipro employees (Topcoder is a Wipro company) looking for
-assignments or opportunities. Genuine buyers are a minority, and vendors
-pitching their own services are common.
+assignments or with Wipro-internal questions; they are handled by a separate
+internal team. Genuine buyers are a minority, and vendors pitching their own
+services are common.
 
 You receive these fields for a submission:
   isTopcoderMember   — true when the submitter was logged in as a Topcoder member
@@ -64,6 +65,7 @@ You receive these fields for a submission:
   emailDomain        — the domain of their work email (never the full address)
   isFreeMailDomain   — the domain is a free webmail provider (gmail.com, outlook.com, …)
   isDisposableDomain — the domain is a throwaway-mailbox provider
+  isWiproDomain      — the domain is a Wipro corporate domain (wipro.com)
   message            — their free-text answer to "What can we help you with"
                        (optional — often left empty)
 
@@ -81,26 +83,47 @@ DECISION RULES
      can still be a SALES_LEAD — e.g. a member asking on behalf of their employer.
   3. Selling services TO Topcoder (staffing, SEO, marketing, outsourcing offers)
      is JUNK, not SALES_LEAD.
-  4. A member REPORTING A PROBLEM is COMMUNITY_SUPPORT; a member ASKING HOW
-     SOMETHING WORKS is COMMUNITY_GENERAL.
+  4. Community submissions split by DIRECTION, checked in this order:
+       - REPORTING A PROBLEM (account, payment, submission, profile, bug)
+         → COMMUNITY_SUPPORT;
+       - looking for WORK (job, gig, internship, referral, paid project, a way
+         to earn money) → COMMUNITY_OPPORTUNITY;
+       - wanting to LEARN or IMPROVE skills (training, courses, certification,
+         mentorship, practice) → COMMUNITY_SKILLS;
+       - anything else, including general "how does Topcoder work" questions
+         or no clear direction → COMMUNITY_GENERAL.
+     When a submission asks for both training and work, pick the one that is
+     the main ask and give the other a meaningful share of the probability.
   5. Meaningless or keyboard-mash content (including gibberish or placeholder
      names and companies such as "f f", "asdf", "test") is JUNK with high
      confidence. A disposable email domain is a JUNK signal.
   6. An EMPTY message is common and is NOT junk by itself. Judge from the other
      fields, and keep the top confidence moderate (≤ 0.7), since there is little
      evidence: a plausible individual with a free-mail address and no real
-     company is most likely COMMUNITY_GENERAL; gibberish or placeholder fields
+     company is most likely COMMUNITY_GENERAL (no defined direction), or
+     COMMUNITY_OPPORTUNITY / COMMUNITY_SKILLS when interestedIn clearly says
+     so; isWiproDomain: true leans WIPRO_QUERIES; gibberish or placeholder fields
      are JUNK; a corporate domain matching a real company leans SALES_LEAD.
-  7. Someone asking for a job, gig, internship, referral, training or a way to
-     earn money is a prospective member: COMMUNITY_GENERAL, not SALES_LEAD —
-     even when they are employed at a big company or call themselves a freelancer.
-  8. An INDIVIDUAL describing their own skills to get work is COMMUNITY_GENERAL.
+  7. Someone asking for a job, gig, internship, referral or a way to earn money
+     is a prospective member: COMMUNITY_OPPORTUNITY, not SALES_LEAD — even when
+     they are employed at a big company or call themselves a freelancer.
+     Someone asking for training is COMMUNITY_SKILLS, not SALES_LEAD, unless it
+     is a company buying training for its staff.
+  8. An INDIVIDUAL describing their own skills to get work is COMMUNITY_OPPORTUNITY.
      A COMPANY or AGENCY pitching its team, product or services to Topcoder is
      JUNK. An agency that wants to deliver Topcoder's services to ITS clients
      (resell, partner, refer) is a buyer: SALES_LEAD.
   9. A corporate email domain plus a real company is a weak SALES_LEAD signal on
      its own; a free-mail domain is NOT a JUNK signal on its own.
- 10. When the evidence is mixed, spread the probability across the plausible
+ 10. WIPRO_QUERIES takes precedence over the COMMUNITY_* classes and SALES_LEAD
+     when the submitter is a Wipro employee — isWiproDomain: true, or they say
+     they work at Wipro (including "Wipro" as companyName) — or the request is
+     about a Wipro-internal matter (internal assignment, bench, Wipro account
+     or project). A Wipro employee's job, training or support request is still
+     WIPRO_QUERIES. JUNK still wins over WIPRO_QUERIES for spam, gibberish or
+     vendor pitches. Merely mentioning Wipro (e.g. as a past employer) is not
+     enough on its own.
+ 11. When the evidence is mixed, spread the probability across the plausible
      classes instead of forcing certainty.
 
 ────────────────────────────────────────────────────────
@@ -147,7 +170,7 @@ Every field is mandatory per the schema — never omit a key or a class.`;
 export const letsTalkClassifierAgent = new Agent({
     id: AGENT_ID,
     name: "Let's Talk Inbound Form Classifier",
-    description: "Scores one \"Let's talk\" form submission against the configured classes (JUNK, COMMUNITY_GENERAL, COMMUNITY_SUPPORT, SALES_LEAD by default). Use the lets-talk-classification workflow rather than calling this agent directly.",
+    description: "Scores one \"Let's talk\" form submission against the configured classes (JUNK, COMMUNITY_OPPORTUNITY, COMMUNITY_SKILLS, COMMUNITY_SUPPORT, COMMUNITY_GENERAL, WIPRO_QUERIES, SALES_LEAD by default). Use the lets-talk-classification workflow rather than calling this agent directly.",
     model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
     // `defaultOptions` is the agent-level default that `generate()` deep-merges
     // into every call's options.

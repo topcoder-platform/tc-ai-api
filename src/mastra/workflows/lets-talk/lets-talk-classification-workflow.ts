@@ -28,6 +28,7 @@ import {
     getLetsTalkClassificationConfig,
     isDomainListed,
     type LetsTalkClassificationConfig,
+    WIPRO_MAIL_DOMAINS,
 } from '../../../config/lets-talk-classification.config';
 import { tcAILogger } from '../../../utils/logger';
 import {
@@ -103,6 +104,7 @@ const preparedSubmissionSchema = z.object({
         emailDomain: z.string(),
         isFreeMailDomain: z.boolean(),
         isDisposableDomain: z.boolean(),
+        isWiproDomain: z.boolean(),
         /** '' when the submitter left it empty. */
         message: z.string(),
     }),
@@ -154,6 +156,7 @@ export function prepareSubmission(
             emailDomain,
             isFreeMailDomain: isDomainListed(emailDomain, FREE_MAIL_DOMAINS),
             isDisposableDomain: isDomainListed(emailDomain, DISPOSABLE_MAIL_DOMAINS),
+            isWiproDomain: isDomainListed(emailDomain, WIPRO_MAIL_DOMAINS),
             message,
         },
         messageProvided: message.length > 0,
@@ -185,6 +188,7 @@ export function buildClassificationPrompt(view: PreparedSubmission['modelView'],
         `emailDomain: ${view.emailDomain}`,
         `isFreeMailDomain: ${view.isFreeMailDomain}`,
         `isDisposableDomain: ${view.isDisposableDomain}`,
+        `isWiproDomain: ${view.isWiproDomain}`,
         ...(view.message ? ['message:', view.message] : [`message: ${EMPTY_MESSAGE_MARKER}`]),
         SUBMISSION_END,
     ];
@@ -504,8 +508,8 @@ const finalizeClassificationStep = createStep({
 export const letsTalkClassificationWorkflow = createWorkflow({
     id: WORKFLOW_ID,
     description:
-        "Classifies one \"Let's talk\" form submission into the configured buckets (JUNK, COMMUNITY_GENERAL, " +
-        'COMMUNITY_SUPPORT, SALES_LEAD by default) with a confidence for every class. M2M only ' +
+        "Classifies one \"Let's talk\" form submission into the configured buckets (JUNK, COMMUNITY_OPPORTUNITY, " +
+        'COMMUNITY_SKILLS, COMMUNITY_SUPPORT, COMMUNITY_GENERAL, WIPRO_QUERIES, SALES_LEAD by default) with a confidence for every class. M2M only ' +
         '(scope ai:letstalk:classify). Each call is recorded as a workflow run; a run that cannot ' +
         'produce a verified classification fails instead of guessing.',
     inputSchema: letsTalkSubmissionSchema,
