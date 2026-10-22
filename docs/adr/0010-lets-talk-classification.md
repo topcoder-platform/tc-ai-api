@@ -113,6 +113,7 @@ The probes used `MockLanguageModelV3` from `ai/test` with a real `Agent`, run un
 6. **All numeric knobs are validated in the config** and fail fast, rather than being read with `Number(env || default)`.
 7. **The agent imports `model-factory` and `logger` directly**, not through the `utils` barrel, which constructs Auth0 at import. This keeps the agent importable in tests.
 8. **`message` is optional, and an empty one forces `needsReview`** (see Decision 1). The plan had it required, with "empty ⇒ JUNK with high confidence", which real traffic showed would send about half of the submissions to JUNK.
+9. **Input limits match the Let's talk form** (2026-10-22): `firstName`, `lastName` and `companyName` up to 500 characters, `memberId` up to 200, in line with forms-api-v6's form definition. With the earlier 100/100/200/64 limits, a submission the form accepts could fail classification as `LETS_TALK_INVALID_INPUT`. The prompt view isn't affected: it only shows these fields as single lines. The caller is forms-processor-v6 (its ADR 0001).
 
 ## Consequences
 
