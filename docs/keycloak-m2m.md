@@ -1,6 +1,6 @@
 # Keycloak M2M migration branch
 
-This branch pins shared core `4.0.0-keycloak.1` to immutable commit `e844764`.
+This branch pins shared core `4.0.0-keycloak.2` to immutable commit `112d54a`.
 Deploy only after this workload and its downstream receivers are configured for
 Keycloak. Existing DEV application deployments remain on Auth0.
 

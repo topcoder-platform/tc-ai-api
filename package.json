@@ -48,7 +48,7 @@
     "csv-parse": "^7.0.3",
     "i18n-iso-countries": "^7.14.0",
     "js-tiktoken": "^1.0.21",
-    "tc-core-library-js": "https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/e844764e1c2cadcc01fd5e05029590319802af09",
+    "tc-core-library-js": "https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/112d54a3ed66423e7305e94e174937823e76124e",
     "turndown": "^7.2.4",
     "zod": "^4.6.5"
   },
