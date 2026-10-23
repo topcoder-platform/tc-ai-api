@@ -129,7 +129,7 @@ tc-ai-api/
 | `LETS_TALK_CLASSIFIER_MAX_RETRIES`  | No       | `2`                                    | L0 — AI SDK transport retries (throttling, 5xx, network)          |
 | `LETS_TALK_CLASSIFIER_MAX_PROCESSOR_RETRIES` | No | `2`                                 | L2 — feedback retries of an invalid model answer, per call        |
 | `LETS_TALK_CLASSIFY_MAX_ATTEMPTS`   | No       | `2`                                    | L4 — corrective attempts in total; then the run fails             |
-| `LETS_TALK_CLASSES_JSON`            | No       | the 4 default classes                  | JSON array of `{"id","description","examples"?,"counterExamples"?}` — 2–20 unique `UPPER_SNAKE` ids; invalid ⇒ boot fails. Changing it changes the output contract |
+| `LETS_TALK_CLASSES_JSON`            | No       | the 7 default classes                  | JSON array of `{"id","description","examples"?,"counterExamples"?}` — 2–20 unique `UPPER_SNAKE` ids; invalid ⇒ boot fails. Changing it changes the output contract |
 | `LETS_TALK_MAX_MESSAGE_CHARS`       | No       | `5000`                                 | `message` is truncated to this before the model call              |
 | `LETS_TALK_MIN_CONFIDENCE`          | No       | `0.5`                                  | Below this top confidence the output sets `needsReview: true`     |
 | `MASTRA_EVAL_MODEL`                 | No       | `mistral:latest`                       | Ollama model used for evaluation scorers                         |
