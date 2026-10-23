@@ -114,11 +114,16 @@ tc-ai-api/
 | Variable                            | Required | Default                                | Description                                                      |
 | ----------------------------------- | -------- | -------------------------------------- | ---------------------------------------------------------------- |
 | `PORT`                              | No       | `3000`                                 | HTTP server port                                                 |
-| `M2M_PROVIDER` | Yes | — | Must be `keycloak` on this branch |
-| `KEYCLOAK_ISSUER` | Yes | — | Exact service realm issuer |
-| `KEYCLOAK_AUDIENCE` | Yes | — | Expected API audience |
-| `KEYCLOAK_TOKEN_URL` | Yes | — | Managed Keycloak issuance endpoint |
-| `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | For service issuance | — | Workload-specific credentials from encrypted storage |
+| `USE_KEYCLOAK` | No | unset (Auth0) | `true` gets outbound M2M tokens from Keycloak (`KEYCLOAK_*`); unset/empty/`false` uses the Auth0 `M2M_AUTH_*` settings. Any other value fails. See [provider switch](docs/keycloak-m2m.md#provider-switch-use_keycloak) |
+| `KEYCLOAK_ISSUER` | When `USE_KEYCLOAK=true` | — | Exact service realm issuer (with `KEYCLOAK_AUDIENCE`, also trusts Keycloak service tokens in Auth0 mode) |
+| `KEYCLOAK_AUDIENCE` | When `USE_KEYCLOAK=true` | — | Expected API audience |
+| `KEYCLOAK_TOKEN_URL` | When `USE_KEYCLOAK=true` | — | Managed Keycloak issuance endpoint |
+| `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | For Keycloak service issuance | — | Workload-specific credentials from encrypted storage |
+| `M2M_AUTH_URL` | No | `https://topcoder-dev.auth0.com/oauth/token` | Auth0 token URL when `USE_KEYCLOAK` is not true |
+| `M2M_AUTH_AUDIENCE` | No | `https://m2m.topcoder-dev.com/` | Auth0 audience when `USE_KEYCLOAK` is not true |
+| `M2M_AUTH_PROXY_SERVER_URL` | No | `https://auth0proxy.topcoder-dev.com/token` | Auth0 proxy that receives the token request when `USE_KEYCLOAK` is not true |
+| `M2M_AUTH_CLIENT_ID` / `M2M_AUTH_CLIENT_SECRET` | For Auth0 service issuance | — | Auth0 workload credentials when `USE_KEYCLOAK` is not true |
+| `LEGACY_M2M_ISSUERS` / `LEGACY_M2M_AUDIENCE` | Optional | — | Trust inbound Auth0 service tokens (the only machine trust in Auth0 mode) |
 | `VALID_ISSUERS` | For member access | — | JSON array of trusted member issuers |
 | `AUTH_USER_AUDIENCES` | For member access | — | JSON array of accepted member audiences |
 | `AUTH_SECRET` | For legacy member HMAC | — | Existing member signing secret, never a service key |
@@ -237,7 +242,9 @@ postgresql://<user>:<password>@<host>:<port>/<database>?schema=<schema>
 
 `CoreAuthProvider` delegates signature, issuer, audience, lifetime, and principal
 classification to the pinned `tc-core-library-js` validator. Member tokens continue
-to use explicitly configured Auth0 issuers; service tokens use the Keycloak M2M realm.
+to use explicitly configured Auth0 issuers. Service tokens use the Keycloak M2M realm when
+`USE_KEYCLOAK=true` (plus Auth0 service tokens while `LEGACY_M2M_*` is set); otherwise Auth0
+service tokens via `LEGACY_M2M_*` (plus Keycloak tokens while `KEYCLOAK_ISSUER`/`AUDIENCE` are set).
 All `/v6/ai/*`, `/v6/ai-chat/*`, and `/v6/ai-api/*` paths remain protected, with the
 existing explicit Swagger documentation exception when enabled.
 
@@ -253,8 +260,9 @@ bearer/legacy `apiKey` token itself when that context is absent. A plain client-
 the same mapping and override client-supplied memory resource IDs.
 
 Mastra continues to propagate the authenticated requestor token to downstream tools.
-Only explicitly enabled tool fallbacks request this workload's Keycloak service token;
-there is no Auth0 issuance fallback. `DISABLE_AUTH=true` remains a local development
+Only explicitly enabled tool fallbacks request this workload's service token, from the
+provider `USE_KEYCLOAK` selects (Keycloak when `true`, the Auth0 `M2M_AUTH_*` settings
+otherwise). A failed Keycloak request is never retried against Auth0. `DISABLE_AUTH=true` remains a local development
 option and must not be used on an accessible deployment.
 
 ### Access control
@@ -966,9 +974,11 @@ Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallenges
 
 ### 4. Token issuers
 
-Shared core discovers keys only from configured member issuers and the configured
-Keycloak realm. Service issuance uses `KEYCLOAK_TOKEN_URL`; client credentials and
-audience must be explicitly configured. No Auth0 machine issuance/proxy is used.
+Shared core discovers keys only from configured member issuers, `LEGACY_M2M_ISSUERS` and
+the configured Keycloak realm. With `USE_KEYCLOAK=true` service issuance uses
+`KEYCLOAK_TOKEN_URL`; client credentials and audience must be explicitly configured.
+Otherwise it posts to `M2M_AUTH_PROXY_SERVER_URL` for `M2M_AUTH_URL`/`M2M_AUTH_AUDIENCE`,
+as before the Keycloak migration.
 
 ### 5. PostgreSQL
 
