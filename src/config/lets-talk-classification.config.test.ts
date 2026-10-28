@@ -40,7 +40,15 @@ describe('lets-talk-classification.config — getLetsTalkClassificationConfig', 
 
     it('returns the defaults with an empty environment, without throwing', () => {
         const config = getLetsTalkClassificationConfig();
-        expect(config.classIds).toEqual(['JUNK', 'COMMUNITY_GENERAL', 'COMMUNITY_SUPPORT', 'SALES_LEAD']);
+        expect(config.classIds).toEqual([
+            'JUNK',
+            'COMMUNITY_OPPORTUNITY',
+            'COMMUNITY_SKILLS',
+            'COMMUNITY_SUPPORT',
+            'COMMUNITY_GENERAL',
+            'WIPRO_QUERIES',
+            'SALES_LEAD',
+        ]);
         expect(config.classes).toEqual(DEFAULT_LETS_TALK_CLASSES);
         expect(config).toMatchObject({
             maxMessageChars: 5000,
@@ -60,6 +68,11 @@ describe('lets-talk-classification.config — getLetsTalkClassificationConfig', 
         const config = getLetsTalkClassificationConfig();
         expect(config.classIds).toEqual(['SPAM', 'PARTNER_INQUIRY']);
         expect(config.classes[1].examples).toEqual(['"Let us co-market."']);
+    });
+
+    it('accepts the defaults themselves as LETS_TALK_CLASSES_JSON — the starting point for a custom set', () => {
+        process.env.LETS_TALK_CLASSES_JSON = JSON.stringify(DEFAULT_LETS_TALK_CLASSES);
+        expect(getLetsTalkClassificationConfig().classes).toEqual(DEFAULT_LETS_TALK_CLASSES);
     });
 
     it.each([

@@ -92,14 +92,26 @@ describe('letsTalkSubmissionSchema', () => {
     });
 
     it.each([
-        ['firstName', 101],
-        ['lastName', 101],
-        ['companyName', 201],
+        ['firstName', 501],
+        ['lastName', 501],
+        ['companyName', 501],
         ['interestedIn', 201],
-        ['memberId', 65],
+        ['memberId', 201],
         ['message', 20_001],
     ])('rejects an over-long %s', (key, length) => {
         expect(letsTalkSubmissionSchema.safeParse({ ...submission, [key]: 'x'.repeat(length) }).success).toBe(false);
+    });
+
+    it('accepts every length the Let\'s talk form accepts', () => {
+        expect(
+            letsTalkSubmissionSchema.safeParse({
+                ...submission,
+                firstName: 'x'.repeat(500),
+                lastName: 'x'.repeat(500),
+                companyName: 'x'.repeat(500),
+                memberId: '1'.repeat(200),
+            }).success,
+        ).toBe(true);
     });
 
     it('trims fields and rejects whitespace-only required values', () => {

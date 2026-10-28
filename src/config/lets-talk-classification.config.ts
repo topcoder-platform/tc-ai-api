@@ -37,6 +37,9 @@ export interface LetsTalkClassificationConfig {
     maxOutputTokens: number;
 }
 
+// Configured order is the tie-break order: the specific community classes come
+// before COMMUNITY_GENERAL, the "no defined direction" catch-all, so an exact
+// tie between a specific class and the catch-all resolves to the specific one.
 export const DEFAULT_LETS_TALK_CLASSES: readonly LetsTalkClass[] = [
     {
         id: 'JUNK',
@@ -52,26 +55,41 @@ export const DEFAULT_LETS_TALK_CLASSES: readonly LetsTalkClass[] = [
         ],
         counterExamples: [
             'A company asking Topcoder for developers → SALES_LEAD, not JUNK.',
-            'An individual freelancer describing their own skills to get work → COMMUNITY_GENERAL, not JUNK.',
+            'An individual freelancer describing their own skills to get work → COMMUNITY_OPPORTUNITY, not JUNK.',
             'An empty message with plausible name and company → not JUNK by itself.',
             'A short but genuine question in any language → never JUNK for being short or non-English.',
         ],
     },
     {
-        id: 'COMMUNITY_GENERAL',
+        id: 'COMMUNITY_OPPORTUNITY',
         description:
-            'Topcoder community members or prospective members asking general questions: how to join, how challenges work, payments overview, events, partnerships with the community.',
+            'Individuals (members or prospective members) looking for WORK through Topcoder: jobs, gigs, freelance projects, internships, referrals, paid assignments, ways to earn money, or offering their own skills to get work.',
         examples: [
-            '"How do I join Topcoder and start competing in challenges?"',
-            '"Are there any upcoming TCO or community events in Europe?"',
-            '"How are challenge prizes paid out in general?"',
             '"I am a fresher / student, can you help me get a job or projects to gain experience?"',
-            '"I work at Wipro as a SAP consultant and am open to new assignments."',
-            '"I want to learn app development and AI."',
+            '"I am a freelance React developer with 5 years of experience — do you have any gigs for me?"',
+            '"Are there any internship openings at Topcoder?"',
+            '"How can I earn money on Topcoder as a designer?"',
         ],
         counterExamples: [
-            'A company that wants to hire talent or run challenges → SALES_LEAD.',
-            '"My payment for challenge X never arrived" → COMMUNITY_SUPPORT (a problem, not a how-to).',
+            'A company that wants to hire talent → SALES_LEAD.',
+            '"I want to learn React / practise for interviews" → COMMUNITY_SKILLS (learning, not work).',
+            'A Wipro employee looking for a new assignment → WIPRO_QUERIES.',
+            'An agency pitching its team to Topcoder → JUNK.',
+        ],
+    },
+    {
+        id: 'COMMUNITY_SKILLS',
+        description:
+            'Individuals who want to LEARN or IMPROVE their own skills: training, courses, learning paths, certifications, mentorship, practice problems, competitive-programming practice, preparing for challenges or interviews.',
+        examples: [
+            '"I want to learn app development and AI."',
+            '"Do you offer training or certification in cloud technologies?"',
+            '"Where can I practise algorithm problems to get better before competing?"',
+            '"Can someone mentor me to improve my UI design skills?"',
+        ],
+        counterExamples: [
+            'Learning in order to get paid work right away ("train me and give me a job") → COMMUNITY_OPPORTUNITY when the job is the main ask.',
+            'A company asking for training for ITS employees → SALES_LEAD.',
         ],
     },
     {
@@ -88,6 +106,36 @@ export const DEFAULT_LETS_TALK_CLASSES: readonly LetsTalkClass[] = [
         ],
     },
     {
+        id: 'COMMUNITY_GENERAL',
+        description:
+            'Community members or prospective members with no defined direction: general questions about Topcoder (how to join, how challenges or reviews work, payment methods in general, events, community programs or partnerships), or a plausible individual whose request does not clearly fit any other community class.',
+        examples: [
+            '"How do I join Topcoder and start competing in challenges?"',
+            '"Are there any upcoming community events in Europe?"',
+            '"How are challenge prizes paid out in general?"',
+            '"We run a student developer community — is there an ambassador program?"',
+        ],
+        counterExamples: [
+            'Asking for work, gigs or a job → COMMUNITY_OPPORTUNITY.',
+            'Asking to learn, train or practise → COMMUNITY_SKILLS.',
+            'Reporting a problem → COMMUNITY_SUPPORT.',
+        ],
+    },
+    {
+        id: 'WIPRO_QUERIES',
+        description:
+            'Submissions from Wipro employees (Topcoder is a Wipro company) or about Wipro-internal matters: internal assignments or bench/redeployment, internal programs or access, Wipro teams wanting to use Topcoder for a Wipro account or project, and other Wipro-internal questions.',
+        examples: [
+            '"I work at Wipro as a SAP consultant and am open to new assignments."',
+            '"I am on the Wipro bench — how can I get allocated to Topcoder projects?"',
+            '"Our Wipro delivery team wants to run a challenge for one of our client accounts — who is the internal contact?"',
+        ],
+        counterExamples: [
+            'Merely naming Wipro as a past employer or a competitor, with no Wipro-internal ask → judge on the request.',
+            'Spam or a vendor pitch from a Wipro-looking address → JUNK.',
+        ],
+    },
+    {
         id: 'SALES_LEAD',
         description:
             'Organizations or individuals interested in buying Topcoder services: talent, crowdsourcing, projects, enterprise engagements, pricing requests, demos.',
@@ -100,7 +148,8 @@ export const DEFAULT_LETS_TALK_CLASSES: readonly LetsTalkClass[] = [
         ],
         counterExamples: [
             'A vendor offering to sell services or staff TO Topcoder → JUNK.',
-            'An individual asking Topcoder for a job or paid work → COMMUNITY_GENERAL.',
+            'An individual asking Topcoder for a job or paid work → COMMUNITY_OPPORTUNITY.',
+            'A Wipro team buying for a Wipro account → WIPRO_QUERIES.',
         ],
     },
 ];
@@ -226,6 +275,9 @@ export const DISPOSABLE_MAIL_DOMAINS: ReadonlySet<string> = new Set([
     'sharklasers.com', 'tempail.com', 'temp-mail.org', 'tempmail.com', 'throwawaymail.com',
     'trashmail.com', 'yopmail.com',
 ]);
+
+/** Wipro's corporate email domains — a deterministic WIPRO_QUERIES signal. */
+export const WIPRO_MAIL_DOMAINS: ReadonlySet<string> = new Set(['wipro.com']);
 
 /** True when `domain` or any parent domain (`eu.mailinator.com` → `mailinator.com`) is listed. */
 export function isDomainListed(domain: string, list: ReadonlySet<string>): boolean {

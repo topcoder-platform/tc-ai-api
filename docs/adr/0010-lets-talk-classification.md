@@ -2,7 +2,28 @@
 
 - **Status:** **Accepted — implemented** (2026-10-20) on `PM-6624_letstalk-classificaiton-workflow`.
 - **Date:** 2026-10-20
+- **Revised:** 2026-10-22, revision 2 (class split, see below).
 - **Related:** [ADR 0003](0003-bedrock-prompt-caching-by-default.md) (prompt caching), [ADR 0004](0004-role-based-access-for-agents-workflows-tools.md) (access policies and aliases), [ADR 0009](0009-system-one-tool.md) (tracked, service-triggered workflow; in-step input validation, W3)
+
+## Revision 2 — `COMMUNITY_GENERAL` split (2026-10-22)
+
+`COMMUNITY_GENERAL` was too wide: in the pseudonymized HubSpot sample, 145 of 206 submissions landed in it, so downstream routing could not act on it. It is split by the **direction** of the request:
+
+| Class | Covers |
+| --- | --- |
+| `COMMUNITY_OPPORTUNITY` | Looking for work: jobs, gigs, internships, referrals, paid projects, ways to earn, or offering one's own skills to get work. |
+| `COMMUNITY_SKILLS` | Learning or improving one's own skills: training, courses, certification, mentorship, practice. |
+| `WIPRO_QUERIES` | Wipro employees and Wipro-internal matters: internal assignments, bench, Wipro accounts or projects. |
+| `COMMUNITY_GENERAL` | Kept as the catch-all: general "how does Topcoder work" questions, or no defined direction. |
+
+The default set is now `JUNK, COMMUNITY_OPPORTUNITY, COMMUNITY_SKILLS, COMMUNITY_SUPPORT, COMMUNITY_GENERAL, WIPRO_QUERIES, SALES_LEAD`, in that order.
+
+- **Order matters.** Configured order is the tie-break order, so `COMMUNITY_GENERAL` comes after the specific community classes: an exact tie with the catch-all resolves to the specific class.
+- **Community decision order.** The instructions check community submissions in this order: problem → `COMMUNITY_SUPPORT`, work → `COMMUNITY_OPPORTUNITY`, learning → `COMMUNITY_SKILLS`, otherwise `COMMUNITY_GENERAL`.
+- **Wipro precedence.** `WIPRO_QUERIES` takes precedence over the `COMMUNITY_*` classes and `SALES_LEAD` when the submitter is a Wipro employee, or when the request is Wipro-internal. A Wipro team buying for a Wipro client account is `WIPRO_QUERIES`, not `SALES_LEAD`. `JUNK` still wins for spam and vendor pitches.
+- **New model signal `isWiproDomain`.** It is computed in code from the email domain against `WIPRO_MAIL_DOMAINS` (`wipro.com` and its subdomains), next to `isFreeMailDomain` / `isDisposableDomain`. A Wipro employee writing from a free-mail address is still recognized from the message or `companyName`.
+- **Contract change for the caller.** The output now has seven keys in `confidences`, and three new `classification` values. No consumer existed yet, so nothing downstream needed to change.
+- **Not re-measured live.** The live result under *Tests* predates the split, and the eval must be re-run. The 206-sample real-traffic fixture (not yet committed) must be relabeled first, because its 145 `COMMUNITY_GENERAL` labels predate the split.
 
 ## Context
 
@@ -31,12 +52,12 @@ Submissions to the public "Let's talk" form are triaged by hand today. They need
 
 **The message is optional.** "What can we help you with?" is the only form field without a `*`, and in real traffic it is empty in roughly half of the submissions. An empty or missing message is valid input. The model is shown `message: (left empty — the field is optional)` and classifies from the other fields with moderate confidence. Finalize then **always sets `needsReview: true`**, so a human checks every class that rests on names, company and email domain alone.
 
-**Classes come from config.** `LETS_TALK_CLASSES_JSON` overrides the four defaults. It must hold 2–20 classes with unique `UPPER_SNAKE` ids, and each class has an optional `examples` / `counterExamples` list. The config is validated when the agent module is imported, so a bad value fails the boot. The output schemas (`z.enum(classIds)` and a confidence object keyed by every class) and the agent instructions are generated from the same list. **Changing the class set changes the caller-facing contract.**
+**Classes come from config.** `LETS_TALK_CLASSES_JSON` overrides the seven defaults (four before revision 2). It must hold 2–20 classes with unique `UPPER_SNAKE` ids, and each class has an optional `examples` / `counterExamples` list. The config is validated when the agent module is imported, so a bad value fails the boot. The output schemas (`z.enum(classIds)` and a confidence object keyed by every class) and the agent instructions are generated from the same list. **Changing the class set changes the caller-facing contract.**
 
 **Security and personal data.** What the model receives:
 
 - `isTopcoderMember`, never the member id;
-- the email domain plus code-computed `isFreeMailDomain` / `isDisposableDomain` flags, never the address;
+- the email domain plus code-computed `isFreeMailDomain` / `isDisposableDomain` / `isWiproDomain` flags, never the address;
 - the name, company, selector value and message.
 
 It never receives the submission id, the timestamp or any UTM value. The schema strips UTM and other unknown keys before the run record is written. The submission is wrapped in `---BEGIN/END SUBMISSION---` delimiters, and the instructions treat embedded instructions as a JUNK signal. On top of the plan, two hardening steps:
@@ -92,6 +113,7 @@ The probes used `MockLanguageModelV3` from `ai/test` with a real `Agent`, run un
 6. **All numeric knobs are validated in the config** and fail fast, rather than being read with `Number(env || default)`.
 7. **The agent imports `model-factory` and `logger` directly**, not through the `utils` barrel, which constructs Auth0 at import. This keeps the agent importable in tests.
 8. **`message` is optional, and an empty one forces `needsReview`** (see Decision 1). The plan had it required, with "empty ⇒ JUNK with high confidence", which real traffic showed would send about half of the submissions to JUNK.
+9. **Input limits match the Let's talk form** (2026-10-22): `firstName`, `lastName` and `companyName` up to 500 characters, `memberId` up to 200, in line with forms-api-v6's form definition. With the earlier 100/100/200/64 limits, a submission the form accepts could fail classification as `LETS_TALK_INVALID_INPUT`. The prompt view isn't affected: it only shows these fields as single lines. The caller is forms-processor-v6 (its ADR 0001).
 
 ## Consequences
 
@@ -99,14 +121,14 @@ The probes used `MockLanguageModelV3` from `ai/test` with a real `Agent`, run un
 - `meta.tokenUsage` sums the usage of the response each L4 attempt finally used. Calls on strategies the wrapper abandoned are not visible to the step, so in the rare fallback case the figure is a lower bound. Bedrock's `requestMetadata` cost tags (`role: agent-lets-talk-classifier-agent`) remain the authoritative cost source.
 - `StructuredOutputValidator` is generic. Any agent can adopt it, but it must then be called with `errorStrategy: 'warn'`.
 - A change to the class set is a contract change for the caller. The output always contains every configured class.
-- **The system prompt is not cached.** Haiku 4.5 only caches a prefix of at least 4,096 tokens, and a whole run averaged 3,870 tokens in the live eval, so Bedrock caching (ADR 0003) silently never applies. Each run pays full input price: about $0.004 at Haiku 4.5 list price. Adding classes or examples could push the prompt over the minimum and turn caching on without a code change.
+- **The system prompt is not cached.** Haiku 4.5 only caches a prefix of at least 4,096 tokens, and a whole run averaged 3,870 tokens in the live eval, so Bedrock caching (ADR 0003) silently never applies. Each run pays full input price: about $0.004 at Haiku 4.5 list price. Adding classes or examples could push the prompt over the minimum and turn caching on without a code change. Revision 2 adds three classes with examples, so the next live eval should check whether the prompt now crosses that minimum.
 
 ## Tests
 
 Unit tests (`pnpm test`) cover the config, the schemas and L1, the processor, the pure helpers, access control and registration. The workflow tests run a real Mastra engine with in-memory LibSQL, the real agent, processor and wrapper, and a scripted model. That way L2 retries, L3 plain-text recovery, L4 repair, the corrective re-run, the 18-call ceiling, the run record and personal-data minimization in the prompt are all exercised end to end.
 
-The live eval is `tests/integration/lets-talk/classification.test.ts` with `tests/fixtures/lets-talk-samples.json`: 30 samples in en/es/pt/fr/de/hi/zh plus mixed-language cases. It is opt-in with `LETS_TALK_EVAL=true` and reports a table plus accuracy, L2/L4 rates and tokens per run.
+The live eval is `tests/integration/lets-talk/classification.test.ts` with `tests/fixtures/lets-talk-samples.json`: 42 samples in en/es/pt/fr/de/hi/zh plus mixed-language cases. Revision 2 added 12 of them, covering the new classes and their boundaries (a Wipro team buying for a client account, a big-company employee looking for side work, a Wipro employee asking about training, an empty message). The report now also breaks accuracy down per class. It is opt-in with `LETS_TALK_EVAL=true` and reports a table plus accuracy, L2/L4 rates and tokens per run.
 
-**Live result (2026-10-20, Claude Haiku 4.5 on Bedrock):** accuracy 29/30 (96.7%), 0 L2 processor retries, 0 L4 corrective re-runs, 3,870 tokens per run on average. That clears the ≥ 90% accuracy and < 2% L4 criteria. No retries occurred, so the run shows that well-formed answers pass through untouched. It does not exercise the retry path live; that remains covered by the scripted-model unit tests.
+**Live result (2026-10-20, Claude Haiku 4.5 on Bedrock, before revision 2 — four classes, 30 samples):** accuracy 29/30 (96.7%), 0 L2 processor retries, 0 L4 corrective re-runs, 3,870 tokens per run on average. That clears the ≥ 90% accuracy and < 2% L4 criteria. No retries occurred, so the run shows that well-formed answers pass through untouched. It does not exercise the retry path live; that remains covered by the scripted-model unit tests.
 
 Done: live eval (see *Tests*); `ai:letstalk:classify` scope created in Auth0 and granted to the triggering M2M client (2026-10-20).

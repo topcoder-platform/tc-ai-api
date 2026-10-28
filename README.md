@@ -129,7 +129,7 @@ tc-ai-api/
 | `LETS_TALK_CLASSIFIER_MAX_RETRIES`  | No       | `2`                                    | L0 — AI SDK transport retries (throttling, 5xx, network)          |
 | `LETS_TALK_CLASSIFIER_MAX_PROCESSOR_RETRIES` | No | `2`                                 | L2 — feedback retries of an invalid model answer, per call        |
 | `LETS_TALK_CLASSIFY_MAX_ATTEMPTS`   | No       | `2`                                    | L4 — corrective attempts in total; then the run fails             |
-| `LETS_TALK_CLASSES_JSON`            | No       | the 4 default classes                  | JSON array of `{"id","description","examples"?,"counterExamples"?}` — 2–20 unique `UPPER_SNAKE` ids; invalid ⇒ boot fails. Changing it changes the output contract |
+| `LETS_TALK_CLASSES_JSON`            | No       | the 7 default classes                  | JSON array of `{"id","description","examples"?,"counterExamples"?}` — 2–20 unique `UPPER_SNAKE` ids; invalid ⇒ boot fails. Changing it changes the output contract |
 | `LETS_TALK_MAX_MESSAGE_CHARS`       | No       | `5000`                                 | `message` is truncated to this before the model call              |
 | `LETS_TALK_MIN_CONFIDENCE`          | No       | `0.5`                                  | Below this top confidence the output sets `needsReview: true`     |
 | `MASTRA_EVAL_MODEL`                 | No       | `mistral:latest`                       | Ollama model used for evaluation scorers                         |
@@ -803,7 +803,7 @@ curl -X POST "$TC_AI_API/v6/ai/workflows/system-one/start-async?runId=$(uuidgen)
 
 > See [ADR 0010](docs/adr/0010-lets-talk-classification.md) for the design, the verification layers and the spike results.
 
-Sorts inbound "Let's talk" form submissions into predefined buckets with no manual triage: `JUNK`, `COMMUNITY_GENERAL`, `COMMUNITY_SUPPORT`, `SALES_LEAD` by default (configurable through `LETS_TALK_CLASSES_JSON`). The `lets-talk-classification` workflow (validate-submission → classify-submission → finalize-classification) wraps `lets-talk-classifier-agent`. Access is **M2M-only**: a token with the `ai:letstalk:classify` scope. Every member is denied, administrator included, on both the workflow and the agent routes. The scope must exist on the `AUTH0_M2M_AUDIENCE` API and be granted to the triggering client.
+Sorts inbound "Let's talk" form submissions into predefined buckets with no manual triage: `JUNK`, `COMMUNITY_OPPORTUNITY` (looking for work), `COMMUNITY_SKILLS` (learning or improving skills), `COMMUNITY_SUPPORT` (a problem to fix), `COMMUNITY_GENERAL` (no defined direction), `WIPRO_QUERIES` (Wipro employees and Wipro-internal matters) and `SALES_LEAD` by default (configurable through `LETS_TALK_CLASSES_JSON`). The `lets-talk-classification` workflow (validate-submission → classify-submission → finalize-classification) wraps `lets-talk-classifier-agent`. Access is **M2M-only**: a token with the `ai:letstalk:classify` scope. Every member is denied, administrator included, on both the workflow and the agent routes. The scope must exist on the `AUTH0_M2M_AUDIENCE` API and be granted to the triggering client.
 
 ```bash
 curl -X POST "$TC_AI_API/v6/ai/workflows/lets-talk-classification/start-async" \
@@ -819,13 +819,14 @@ curl -X POST "$TC_AI_API/v6/ai/workflows/lets-talk-classification/start-async" \
 { "status": "success", "result": {
     "submissionId": "3f1c2a9e-6b7d-4e8f-9a01-2b3c4d5e6f70",
     "classification": "SALES_LEAD", "confidence": 0.9,
-    "confidences": { "JUNK": 0.02, "COMMUNITY_GENERAL": 0.05, "COMMUNITY_SUPPORT": 0.03, "SALES_LEAD": 0.9 },
+    "confidences": { "JUNK": 0.02, "COMMUNITY_OPPORTUNITY": 0.02, "COMMUNITY_SKILLS": 0, "COMMUNITY_SUPPORT": 0.01,
+                     "COMMUNITY_GENERAL": 0.03, "WIPRO_QUERIES": 0.02, "SALES_LEAD": 0.9 },
     "needsReview": false, "detectedLanguage": "es",
     "rationale": "A company asks for a React development team for a six-month project." } }
 ```
 
 - **Input.** `submissionId` (UUID v4), `submittedAt` (UTC, `Z` suffix), optional `memberId`, plus `interestedIn`, `firstName`, `lastName`, `workEmail`, `companyName` and an **optional** `message` (empty in about half of real submissions). Unknown keys such as UTM parameters are dropped silently, so the raw form payload can be forwarded as-is.
-- **What the model sees.** The name, company, selector value and message, plus the email **domain** with code-computed free-mail / disposable flags, and `isTopcoderMember`. It never sees the email address, the member id, the submission id or the timestamp.
+- **What the model sees.** The name, company, selector value and message, plus the email **domain** with code-computed free-mail / disposable / Wipro (`wipro.com`) flags, and `isTopcoderMember`. It never sees the email address, the member id, the submission id or the timestamp.
 - **Output.** `classification` is always the argmax of `confidences`, computed in code (ties go to the earlier configured class). `confidences` covers every configured class and sums to 1. `needsReview` is `true` when the message was empty, when the top confidence is below `LETS_TALK_MIN_CONFIDENCE`, or when the top two are within 0.1 of each other.
 - **Verification and retries.** A broken model answer goes through layers: transport retries, tolerant coercions, processor feedback retries, strategy fallback with JSON repair, then a code-side check with one corrective re-run. A run that still has no usable answer **fails**; no class is ever guessed. At most 18 model calls per run with the defaults; typically 1. The classify step's output in the run record carries `meta` (`strategy`, `attempts`, `processorRetries`, `repaired`, `issuesFixedInCode`, `tokenUsage`).
 - **Failures arrive as HTTP 200** with `{ "status": "failed", "error": { "message": "[LETS_TALK_…] …", "status": <code> } }`: `LETS_TALK_INVALID_INPUT` (400, lists each field path) or `LETS_TALK_INVALID_MODEL_OUTPUT` (502, lists the issues). Provider errors (e.g. Bedrock unreachable after retries) fail the run with the provider's message. Re-triggering is the caller's job.

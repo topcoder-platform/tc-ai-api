@@ -19,6 +19,9 @@ import { getLetsTalkClassificationConfig } from '../../../config/lets-talk-class
 // Input
 // ---------------------------------------------------------------------------
 
+// Field limits match the Let's talk form in forms-api-v6 (names/company 500,
+// email 254, member id 200), so every submission the form accepts can be
+// classified. The message is truncated further before it reaches the model.
 export const letsTalkSubmissionSchema = z.object({
     submissionId: z
         .uuid({ version: 'v4' })
@@ -27,22 +30,22 @@ export const letsTalkSubmissionSchema = z.object({
         .iso.datetime()
         .describe('ISO-8601 UTC timestamp of the submission (must end in "Z"). Informational only; not sent to the model.'),
     memberId: z
-        .string().trim().min(1).max(64).optional()
-        .describe('Topcoder member id when the submitter was logged in. Its presence is a strong COMMUNITY_GENERAL / COMMUNITY_SUPPORT signal. The model only receives isTopcoderMember: true/false, never the id.'),
+        .string().trim().min(1).max(200).optional()
+        .describe('Topcoder member id when the submitter was logged in. Its presence is a strong signal for a COMMUNITY_* class. The model only receives isTopcoderMember: true/false, never the id.'),
     interestedIn: z
         .string().trim().min(1).max(200)
         .describe('Value of the "What are you interested in?" selector. A hint only — the free-text message wins on conflict.'),
     firstName: z
-        .string().trim().min(1).max(100)
+        .string().trim().min(1).max(500)
         .describe('Submitter first name as typed. Gibberish or keyboard-mash names are a JUNK signal.'),
     lastName: z
-        .string().trim().min(1).max(100)
+        .string().trim().min(1).max(500)
         .describe('Submitter last name as typed. Gibberish or keyboard-mash names are a JUNK signal.'),
     workEmail: z
         .email().max(254)
-        .describe('Submitter work email. Only the domain reaches the model, with code-computed free-mail / disposable flags. A corporate domain is a weak SALES_LEAD signal; a disposable domain is a JUNK signal.'),
+        .describe('Submitter work email. Only the domain reaches the model, with code-computed free-mail / disposable / Wipro flags. A corporate domain is a weak SALES_LEAD signal; a disposable domain is a JUNK signal; a Wipro domain is a strong WIPRO_QUERIES signal.'),
     companyName: z
-        .string().trim().min(1).max(200)
+        .string().trim().min(1).max(500)
         .describe('Company or organization name. A real company combined with a buying intent signals SALES_LEAD.'),
     message: z
         .string().trim().max(20_000).optional()
