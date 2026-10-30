@@ -74,9 +74,9 @@ describe('resourceIdMiddleware', () => {
         process.env.TC_API_BASE = originalTcApiBase;
     });
 
-    it('sets resource id from existing user in request context', async () => {
+    it.each(['12345', 12345])('sets a string resource id from user ID %s', async userId => {
         const user = {
-            'https://topcoder-dev.com/userId': '12345',
+            'https://topcoder-dev.com/userId': userId,
             sub: 'sub-1',
         };
         const { c, requestContext, json } = createContext({ user });

@@ -247,18 +247,24 @@ postgresql://<user>:<password>@<host>:<port>/<database>?schema=<schema>
 
 ### Auth0 Composite Authentication
 
-Authentication is handled by `CompositeAuth` from `@mastra/core/server` (`src/utils/auth/index.ts`), which evaluates incoming JWTs against **two** Auth0 tenants, in order:
+Authentication is handled by `CompositeAuth` from `@mastra/core/server` (`src/utils/auth/index.ts`), with two `SharedJwtAuth` adapters that call `createJwtVerifier` from `tc-core-library-js`. Incoming JWTs are checked against **two** configured Auth0 tenants, in order:
 
 1. **Member tokens** — issued by `AUTH0_DOMAIN` with audience `AUTH0_AUDIENCE`
 2. **M2M (machine-to-machine) tokens** — issued by `AUTH0_M2M_DOMAIN` with audience `AUTH0_M2M_AUDIENCE`
 
-A request is authorized if it passes validation against **either** tenant. Both providers declare `protected: ['/v6/ai/*', '/v6/ai-chat/*', '/v6/ai-api/*']` (the server's `apiPrefix` plus each custom-route base path — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default. `/v6/ai-chat/*` has to be listed explicitly because `chatRoute()` is registered outside `apiPrefix` and never sets `requiresAuth`, so Mastra's `isProtectedPath` check would otherwise skip it — including its authorization step (see [Access control](#access-control)).
+The shared verifier pins RS256, the exact issuer (`https://<domain>/`) and each tenant's configured audience. It verifies signatures using cached JWKS keys, requires expiration, and checks not-before and issued-at timestamps. Client-credentials tokens must also match `AUTH0_M2M_AUDIENCE`; a scope claim or missing member ID alone does not establish machine identity. Conflicting machine/human claims are rejected. The existing `AUTH0_*` settings remain required; this service retains its explicit tenant policies rather than adopting the broader shared issuer allowlist.
+
+A request is authenticated if it passes validation against **either** tenant. Route authorization still uses `authorizeAccessPolicy`. Both providers declare `protected: ['/v6/ai/*', '/v6/ai-chat/*', '/v6/ai-api/*']` (the server's `apiPrefix` plus each custom-route base path — see [Framework Setup](#framework-setup--mastra)); Mastra's built-in `protected`/`public` defaults only cover `/api/*`, so without this override every built-in route would be silently unauthenticated once `apiPrefix` is changed from the default. `/v6/ai-chat/*` has to be listed explicitly because `chatRoute()` is registered outside `apiPrefix` and never sets `requiresAuth`, so Mastra's `isProtectedPath` check would otherwise skip it — including its authorization step (see [Access control](#access-control)).
 
 Both providers also set `mapUserToResourceId`, deriving the caller's Topcoder user id from the JWT claim `https://<domain>/userId` (member tokens) or `sub` (M2M tokens) — see `tcUserIdClaimKey()` / `mapUserToResourceId` in `src/utils/auth/index.ts`. Mastra's core auth flow stores that value under `MASTRA_RESOURCE_ID_KEY` in the request context automatically, and it takes precedence over any client-supplied `resourceId`/`memory.resource` — this is what actually enforces per-user memory/thread isolation; the `Resource ID Middleware` below is a belt-and-suspenders check on top of it, not the primary mechanism.
 
 The same core auth flow also stores the **raw bearer token** that authenticated the request under `MASTRA_AUTH_TOKEN_KEY` in the request context. This is the "requestor token" referenced throughout this section and in ADR 0002 — see [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) below.
 
 Authentication can be fully disabled by setting `DISABLE_AUTH=true` (useful for local development).
+
+The dependency is pinned to `github:topcoder-platform/tc-core-library-js#v4.0.0-rc.1`, matching the other v6 service migrations. The build restores this GitHub reference in Mastra's generated manifest before installing output dependencies; Mastra otherwise rewrites it to an unpublished npm version. Run `pnpm build` to include this packaging step. Outbound service credentials use its typed `createM2MClient` API with the existing `M2M_AUTH_*` settings. One client is reused across `M2MService` instances so token caching and concurrent request deduplication remain effective. Requestor-token forwarding and each tool's explicit fallback policy are unchanged.
+
+There is no Bus API publisher or `tc-bus-api-wrapper` dependency in this service. The new release includes `createBusApiClient` for future publishers, but this migration adds no event publishing behavior. See the [shared library migration guide](https://github.com/topcoder-platform/tc-core-library-js/blob/v4.0.0-rc.1/MIGRATION.md) for its JWT, M2M, and bus contracts.
 
 ### Resource ID Middleware
 
@@ -291,7 +297,7 @@ Authentication answers *"is this a valid caller?"*; access control answers *"may
 | `deny` | Nobody, regardless of role or scope |
 | `restricted` | Member callers must hold one of `roles`; M2M callers must hold one of `scopes` |
 
-`restricted` keeps the two dimensions **separate**: a member token is checked only against `roles`, an M2M token only against `scopes`. A policy that configures just one dimension therefore implicitly denies the other credential type.
+`restricted` uses the shared verifier's `isMachine` flag to distinguish caller types and keeps the two dimensions **separate**: a member token is checked only against `roles`, an M2M token only against `scopes`. A policy that configures just one dimension therefore implicitly denies the other credential type.
 
 **Three-layer resolution**, per `(category, targetId)`, resolved lazily and memoised:
 
@@ -915,8 +921,8 @@ sequenceDiagram
     participant Client
     participant Server as Mastra HTTP Server
     participant CoreAuth as Mastra core auth flow
-    participant MemberAuth as Auth0 (Member)
-    participant M2MAuth as Auth0 (M2M)
+    participant MemberAuth as Shared JWT verifier (Member)
+    participant M2MAuth as Shared JWT verifier (M2M)
     participant ResMiddleware as resourceIdMiddleware
 
     Client->>Server: Request to /v6/ai/* or /chat/:agentId<br/>Authorization: Bearer <JWT>

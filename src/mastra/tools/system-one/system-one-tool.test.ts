@@ -35,8 +35,8 @@ function contextFor(user: Record<string, unknown> | undefined) {
 
 const admin = { sub: 'auth0|1', [USERID_CLAIM]: '1', [ROLES_CLAIM]: ['administrator'] };
 const copilot = { sub: 'auth0|2', [USERID_CLAIM]: '2', [ROLES_CLAIM]: ['copilot'] };
-const sys1Service = { sub: 'svc@clients', scope: 'read:challenges sys1:use' };
-const otherService = { sub: 'svc@clients', scope: 'read:challenges' };
+const sys1Service = { sub: 'svc@clients', isMachine: true, scope: 'read:challenges sys1:use' };
+const otherService = { sub: 'svc@clients', isMachine: true, scope: 'read:challenges' };
 
 const fetchMock = vi.fn<typeof fetch>();
 let saved: Record<string, string | undefined>;
