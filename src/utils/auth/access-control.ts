@@ -4,8 +4,8 @@
  *
  * Two enforcement points, one shared policy core:
  *
- *  - Agents & workflows: `authorizeAccessPolicy` is passed as `authorizeUser`
- *    to both MastraAuthAuth0 providers in `apiAuthLayer`. Mastra's own
+ *  - Agents & workflows: both SharedJwtAuth providers in `apiAuthLayer` call
+ *    `authorizeAccessPolicy` from `authorizeUser`. Mastra's own
  *    `coreAuthMiddleware` already invokes that hook on every protected request
  *    and 403s when it returns false.
  *  - Tools: `withAccessPolicy` wraps a tool's `execute` at its export site, so
@@ -24,7 +24,7 @@ import {
 } from '../../config/access-control.config';
 import { tcAILogger } from '../logger';
 import { API_PREFIX, CHAT_ROUTE_BASE_PATH, RAG_ADMIN_ROUTE_BASE_PATH } from '../server-routes';
-import { resolveTcDomain, tcUserIdClaimKey } from './tc-domain';
+import { resolveTcDomain } from './tc-domain';
 
 // ---------------------------------------------------------------------------
 // Claim extraction
@@ -40,7 +40,7 @@ const rolesClaimKey = (): string =>
     process.env.ACCESS_CONTROL_ROLES_CLAIM || `https://${resolveTcDomain()}/roles`;
 
 export interface AuthenticatedCaller {
-    /** M2M tokens don't carry the TC userId claim (mirrors resourceIdMiddleware). */
+    /** Machine identity is established by the shared JWT verifier. */
     isM2M: boolean;
     /** Member role names, [] when absent or not a string array. */
     roles: string[];
@@ -49,7 +49,7 @@ export interface AuthenticatedCaller {
 }
 
 export function toAuthenticatedCaller(user: Record<string, unknown>): AuthenticatedCaller {
-    const isM2M = !user[tcUserIdClaimKey()];
+    const isM2M = user.isMachine === true;
     const rawRoles = user[rolesClaimKey()];
     const roles = Array.isArray(rawRoles)
         ? rawRoles.filter((r): r is string => typeof r === 'string')
@@ -206,18 +206,15 @@ function parseTarget(pathname: string): { category: AccessCategory; targetId: st
 }
 
 /**
- * Passed as `authorizeUser` to both MastraAuthAuth0 providers in apiAuthLayer.
- * Mastra `.bind(this)`s it onto the provider, so it must never read `this`.
- *
- * Note: supplying `authorizeUser` in the provider options SHADOWS
- * MastraAuthAuth0's own prototype authorizeUser, so its baseline sub/exp
- * checks are re-asserted here rather than lost.
+ * Called by both SharedJwtAuth providers in apiAuthLayer.
+ * Keep the existing subject/expiry authorization checks in addition to the
+ * shared verifier's signature, issuer, audience and token lifetime checks.
  */
 export function authorizeAccessPolicy(
     user: Record<string, unknown> | null | undefined,
     request: MastraAuthRequest,
 ): boolean {
-    // Baseline checks inherited from MastraAuthAuth0.authorizeUser.
+    // Preserve the existing subject/expiry authorization requirements.
     if (!user || !(user.sub || user.id)) return false;
     if (typeof user.exp === 'number' && user.exp * 1000 < Date.now()) return false;
 

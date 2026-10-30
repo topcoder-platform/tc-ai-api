@@ -310,7 +310,7 @@ describe('searchMembersTool', () => {
             requestContext: {
                 get: (key: string) => {
                     if (key === MASTRA_AUTH_TOKEN_KEY) return 'm2m-token';
-                    if (key === 'user') return { sub: 'client@clients', scope: 'some:other:scope' };
+                    if (key === 'user') return { sub: 'client@clients', isMachine: true, scope: 'some:other:scope' };
                     return undefined;
                 },
             },

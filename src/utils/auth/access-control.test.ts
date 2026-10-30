@@ -72,7 +72,7 @@ function memberUser(roles: string[] = []): Record<string, unknown> {
 }
 
 function m2mUser(scopes: string[] = []): Record<string, unknown> {
-    return { sub: 'client-id@clients', scope: scopes.join(' ') };
+    return { sub: 'client-id@clients', isMachine: true, scope: scopes.join(' ') };
 }
 
 /**
@@ -99,13 +99,19 @@ describe('toAuthenticatedCaller', () => {
         });
     });
 
-    it('treats a token without the TC userId claim as M2M and splits the scope claim', () => {
+    it('uses verified machine identity and splits the scope claim', () => {
         const caller = toAuthenticatedCaller(m2mUser(['challengesRAG:admin', 'read:challenges']));
         expect(caller).toEqual({
             isM2M: true,
             roles: [],
             scopes: ['challengesRAG:admin', 'read:challenges'],
         });
+    });
+
+    it('does not infer machine identity from a missing user ID or a scope claim', () => {
+        const user = { sub: 'human-subject', scope: 'ai:letstalk:classify', isMachine: false };
+        expect(toAuthenticatedCaller(user).isM2M).toBe(false);
+        expect(toAuthenticatedCaller({ sub: 'human-subject', scope: user.scope }).isM2M).toBe(false);
     });
 
     it('ignores a non-array roles claim and non-string entries', () => {
@@ -382,7 +388,7 @@ describe('authorizeAccessPolicy', () => {
         expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/telemetry'))).toBe(true);
     });
 
-    it('re-asserts the MastraAuthAuth0 baseline checks it shadows', () => {
+    it('preserves the subject and expiry authorization checks', () => {
         // No sub/id at all.
         expect(authorizeAccessPolicy({ [USERID_CLAIM]: '1' }, authRequest(INGEST))).toBe(false);
         expect(authorizeAccessPolicy(null, authRequest(INGEST))).toBe(false);
