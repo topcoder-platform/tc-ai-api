@@ -221,6 +221,14 @@ export function authorizeAccessPolicy(
     if (!user || !(user.sub || user.id)) return false;
     if (typeof user.exp === 'number' && user.exp * 1000 < Date.now()) return false;
 
+    // Deny configured, verified subjects before any route policy, including
+    // public-policy agents and uncategorized memory/workspace routes.
+    const blockedSubjects = parseList(process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS) ?? [];
+    if (typeof user.sub === 'string' && blockedSubjects.includes(user.sub)) {
+        tcAILogger.warn('[access-control] denied: blocked subject');
+        return false;
+    }
+
     // authorizeUser receives a MastraAuthRequest (`{ raw, headers, header() }`),
     // NOT a Request — `request.url` is undefined on it. getWebRequest() is
     // Mastra's own helper for recovering the underlying Request.
