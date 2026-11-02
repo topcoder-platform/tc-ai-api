@@ -283,6 +283,18 @@ For each matching request it:
 
 This ensures **resource isolation** — each user's agent memory and workflow state are segregated.
 
+### Attachment and optional-route handling
+
+`skillsMatchingAgent` accepts text only: image/file parts and legacy attachments,
+including inline data, trigger a processor rejection before model execution.
+All agents reject remote attachment URLs before any download, including URLs in
+recalled thread history. The processor rejection is returned through Mastra's
+tripwire response; clients should display its reason instead of retrying.
+
+Workspace file reads return `400` for directories, `404` for missing files, and
+`403` for paths outside the workspace. Tool-provider routes return `404` when
+the optional Mastra editor is not configured.
+
 ### Access control
 
 > See [ADR 0004](docs/adr/0004-role-based-access-for-agents-workflows-tools.md) for the design rationale.

@@ -9,9 +9,10 @@
  * reach, such as the ECS credentials endpoint (169.254.170.2) or
  * host.docker.internal. This was seen in production in Nov 2026.
  *
- * None of our agents takes attachments, so every non-`data:` URL in an
- * attachment slot is refused. Inline `data:` URLs and raw base64 are allowed
- * because they make no network request.
+ * Remote attachments are unsupported, so every non-`data:` URL in an
+ * attachment slot is refused. Inline `data:` URLs and raw base64 make no
+ * network request and remain allowed unless the agent opts into textOnly.
+ * The skills extraction agent rejects all attachments, including inline data.
  *
  * Why `processInputStep` and not `processInput` or an HTTP middleware: the step
  * hook receives `messageList.get.all.db()`, which includes history recalled from
@@ -27,6 +28,7 @@ import { tcAILogger } from '../../utils/logger';
 export const REMOTE_ASSET_GUARD_ID = 'remote-asset-guard';
 export const REMOTE_ASSET_REJECTION_REASON =
     'Attachments referenced by URL are not supported. Send text only, or inline the file as base64 data.';
+export const TEXT_ONLY_REJECTION_REASON = 'This agent accepts text only. Remove image and file attachments.';
 
 /** Same parse Mastra applies before deciding to download; `data:` needs no network. */
 function asRemoteUrl(value: unknown): URL | undefined {
@@ -71,7 +73,16 @@ export class RemoteAssetGuard implements Processor<typeof REMOTE_ASSET_GUARD_ID>
     readonly id = REMOTE_ASSET_GUARD_ID;
     readonly name = 'Remote asset guard';
 
+    constructor(private readonly options: { textOnly?: boolean } = {}) {}
+
     processInputStep({ messages, abort, requestContext }: ProcessInputStepArgs): void {
+        if (this.options.textOnly && messages.some((message) => {
+            const content = message.content;
+            return content.parts?.some((part) => part.type === 'file' || (part.type as string) === 'image') ||
+                !!content.experimental_attachments?.length;
+        })) {
+            abort(TEXT_ONLY_REJECTION_REASON);
+        }
         const urls = findRemoteAssetUrls(messages);
         if (urls.length === 0) return;
 
@@ -85,3 +96,4 @@ export class RemoteAssetGuard implements Processor<typeof REMOTE_ASSET_GUARD_ID>
 }
 
 export const remoteAssetGuard = new RemoteAssetGuard();
+export const textOnlyAssetGuard = new RemoteAssetGuard({ textOnly: true });

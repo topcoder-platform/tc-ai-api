@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agent, TripWire } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MockLanguageModelV3 } from 'ai/test';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
 
 const { warnMock } = vi.hoisted(() => ({ warnMock: vi.fn() }));
 vi.mock('../../utils/logger', () => ({
@@ -13,6 +15,8 @@ import {
     REMOTE_ASSET_REJECTION_REASON,
     RemoteAssetGuard,
     remoteAssetGuard,
+    textOnlyAssetGuard,
+    TEXT_ONLY_REJECTION_REASON,
 } from './remote-asset-guard';
 
 function dbMessage(content: Record<string, unknown>, role: MastraDBMessage['role'] = 'user'): MastraDBMessage {
@@ -34,6 +38,10 @@ describe('findRemoteAssetUrls', () => {
         ['docker host', 'http://host.docker.internal/'],
         ['public https', 'https://example.com/a.png'],
         ['file scheme', 'file:///etc/passwd'],
+        ['IPv6 loopback', 'http://[::1]/'],
+        ['IPv4-mapped IPv6', 'http://[::ffff:127.0.0.1]/'],
+        ['decimal loopback', 'http://2130706433/'],
+        ['redirect or rebinding host', 'https://example.com/redirect-to-metadata'],
     ])('flags a file part pointing at %s', (_label, url) => {
         const messages = [dbMessage({ parts: [{ type: 'file', data: url, mimeType: 'image/png' }] })];
         expect(findRemoteAssetUrls(messages).map(String)).toEqual([new URL(url).toString()]);
@@ -80,6 +88,15 @@ describe('RemoteAssetGuard.processInputStep', () => {
         expect(new RemoteAssetGuard().processInputStep({ messages, abort } as never)).toBeUndefined();
         expect(warnMock).not.toHaveBeenCalled();
     });
+
+    it.each([
+        { parts: [{ type: 'file', data: 'data:text/plain;base64,aGk=', mimeType: 'text/plain' }] },
+        { parts: [{ type: 'image', image: 'aGk=' }] },
+        { experimental_attachments: [{ url: 'data:text/plain;base64,aGk=' }] },
+    ])('rejects inline attachments for the text-only skills agent', (content) => {
+        expect(() => textOnlyAssetGuard.processInputStep({ messages: [dbMessage(content)], abort } as never))
+            .toThrow(TEXT_ONLY_REJECTION_REASON);
+    });
 });
 
 /**
@@ -98,7 +115,7 @@ describe('RemoteAssetGuard on a real agent', () => {
         globalThis.fetch = originalFetch;
     });
 
-    function makeAgent(withGuard: boolean) {
+    function makeAgent(withGuard: boolean, memory?: Memory, textOnly = false) {
         const doGenerate = vi.fn(async () => ({
             content: [{ type: 'text', text: 'ok' }],
             finishReason: { unified: 'stop', raw: 'stop' },
@@ -111,7 +128,8 @@ describe('RemoteAssetGuard on a real agent', () => {
             name: 'guard-test-agent',
             instructions: 'test',
             model,
-            ...(withGuard ? { inputProcessors: [remoteAssetGuard] } : {}),
+            ...(withGuard ? { inputProcessors: [textOnly ? textOnlyAssetGuard : remoteAssetGuard] } : {}),
+            memory,
         });
         return { agent, doGenerate };
     }
@@ -143,9 +161,40 @@ describe('RemoteAssetGuard on a real agent', () => {
     });
 
     it('with the guard, text-only input still reaches the model', async () => {
-        const { agent, doGenerate } = makeAgent(true);
+        const { agent, doGenerate } = makeAgent(true, undefined, true);
         const result = await agent.generate('Java, React');
         expect(doGenerate).toHaveBeenCalledTimes(1);
         expect(result.text).toBe('ok');
+    });
+
+    it('rejects inline images before the skills model is called', async () => {
+        const { agent, doGenerate } = makeAgent(true, undefined, true);
+        const result = await agent.generate([{
+            role: 'user', content: [{ type: 'image', image: 'data:image/png;base64,iVBORw0KGgo=' }],
+        }]).catch((error: unknown) => ({ error }));
+        expect(JSON.stringify(result)).toContain(TEXT_ONLY_REJECTION_REASON);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(doGenerate).not.toHaveBeenCalled();
+    });
+
+    it('blocks a remote attachment recalled from persisted thread history', async () => {
+        const storage = new LibSQLStore({ id: 'guard-history-test', url: ':memory:' });
+        const memory = new Memory({ storage, options: { lastMessages: 10, generateTitle: false } });
+        try {
+            await memory.createThread({ threadId: 'thread', resourceId: 'member' });
+            await memory.saveMessages({ messages: [{
+                ...dbMessage({ parts: [{ type: 'file', url: 'http://169.254.170.2/v2/credentials', mimeType: 'image/png' }] }),
+                threadId: 'thread', resourceId: 'member',
+            }] });
+            const { agent, doGenerate } = makeAgent(true, memory);
+            const result = await agent.generate('Extract skills', {
+                memory: { thread: 'thread', resource: 'member' },
+            }).catch((error: unknown) => ({ error }));
+            expect(JSON.stringify(result)).toContain(REMOTE_ASSET_REJECTION_REASON);
+            expect(fetchSpy).not.toHaveBeenCalled();
+            expect(doGenerate).not.toHaveBeenCalled();
+        } finally {
+            await storage.close();
+        }
     });
 });

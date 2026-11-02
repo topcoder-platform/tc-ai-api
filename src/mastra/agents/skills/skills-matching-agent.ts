@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { remoteAssetGuard } from '../../processors/remote-asset-guard';
+import { textOnlyAssetGuard } from '../../processors/remote-asset-guard';
 import { Memory } from '@mastra/memory';
 import { createModel } from '../../../utils';
 import { PostgresStore } from '@mastra/pg';
@@ -35,8 +35,8 @@ Output requirements:
 `,
   },
   model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
-  // Blocks SSRF through attachment URLs (see remote-asset-guard.ts).
-  inputProcessors: [remoteAssetGuard],
+  // Rejects attachments, including recalled history, before model conversion.
+  inputProcessors: [textOnlyAssetGuard],
   scorers: IS_LOCAL_DEV
     ? {
       answerRelevancy: {
