@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { remoteAssetGuard } from '../../processors/remote-asset-guard';
 import { createModel } from '../../../utils';
 
 const PROVIDER_NAME = process.env.JD_REWRITER_AI_PROVIDER || 'AWSBedrock';
@@ -15,6 +16,8 @@ export const jdRewriterAgent = new Agent({
    id: AGENT_ID,
    name: 'Job Description Rewriter',
    model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
+   // Blocks SSRF through attachment URLs (see remote-asset-guard.ts).
+   inputProcessors: [remoteAssetGuard],
    // `defaultOptions` is the agent-level default that `generate()` deep-merges
    // into every call's options.
    defaultOptions: {

@@ -1177,3 +1177,15 @@ Mastra's own `server.build.swaggerUI` / `openAPIDocs` aren't used, because they 
 `src/utils/routes/api-docs.routes.ts` rebuilds the spec with Mastra's own generators (`@mastra/server/server-adapter`). The spec covers the built-in routes, served under `/v6/ai`, and the custom routes that carry `openapi` metadata, served from `/`. It also adds a bearer scheme. The two docs paths are added to the Auth0 providers' `public` list only while the flag is on.
 
 Locally, `pnpm dev` also serves Mastra's default UI at `http://localhost:4111/swagger-ui`, whatever the flag says.
+
+### Agent attachments and optional API capabilities
+
+Agent input processors reject remote image/file URLs before Mastra converts the
+prompt or downloads attachments, including attachments recalled from thread
+memory. The skills matching agent accepts text only; other configured agents
+continue to accept inline data. Rejections use Mastra's normal tripwire response.
+
+Tool and processor provider catalogs return 404 when no editor is configured.
+The observability logs and branches endpoints return 404 when the configured
+storage adapter inherits Mastra's unsupported base implementation. Supported
+adapters and trace endpoints keep their normal behavior.
