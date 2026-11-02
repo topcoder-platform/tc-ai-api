@@ -1171,3 +1171,7 @@ Mastra's own `server.build.swaggerUI` / `openAPIDocs` aren't used, because they 
 `src/utils/routes/api-docs.routes.ts` rebuilds the spec with Mastra's own generators (`@mastra/server/server-adapter`). The spec covers the built-in routes, served under `/v6/ai`, and the custom routes that carry `openapi` metadata, served from `/`. It also adds a bearer scheme. The two docs paths are added to the Auth0 providers' `public` list only while the flag is on.
 
 Locally, `pnpm dev` also serves Mastra's default UI at `http://localhost:4111/swagger-ui`, whatever the flag says.
+
+### Shared JWT denylists
+
+Core `v4.0.0-rc.2` rejects authenticated JWTs whose subject or normalized user ID matches `ACCESS_CONTROL_BLOCKED_SUBJECTS` or `ACCESS_CONTROL_BLOCKED_USER_IDS`. Deployment binds both names to SecureStrings under `/config/common/global-appvar/`. Values are comma-separated exact identifiers. Replace ECS tasks after changing either parameter; existing verifier instances do not reload them.
