@@ -163,6 +163,7 @@ tc-ai-api/
 | `BEDROCK_PROMPT_CACHE_TTL`          | No       | `5m`                                   | Bedrock cache checkpoint TTL — `5m` or `1h`                       |
 | `ACCESS_CONTROL_DEFAULT_POLICY`     | No       | `public`                               | Global fallback policy for any agent/workflow/tool with no explicit policy — `public` or `deny` |
 | `ACCESS_CONTROL_ROLES_CLAIM`        | No       | `https://<TC_API_BASE domain>/roles`   | JWT claim key carrying member role names — override only if a tenant diverges from the convention |
+| `ACCESS_CONTROL_BLOCKED_SUBJECTS`   | No       | empty                                  | Comma-separated JWT subjects denied across protected API routes, before role/scope policies |
 | `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_MODE` | No | —                              | Per-target override: `public` or `deny`. See [Access control](#access-control) |
 | `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_ROLES` | No | —                             | Per-target override: comma-separated member roles (implies `restricted`) |
 | `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_SCOPES` | No | —                            | Per-target override: comma-separated M2M scopes (implies `restricted`) |
@@ -282,6 +283,15 @@ This ensures **resource isolation** — each user's agent memory and workflow st
 > See [ADR 0004](docs/adr/0004-role-based-access-for-agents-workflows-tools.md) for the design rationale.
 
 Authentication answers *"is this a valid caller?"*; access control answers *"may **this** caller invoke **this** agent / workflow / tool / admin route?"*. All are off the same policy core in `src/utils/auth/access-control.ts`.
+
+`ACCESS_CONTROL_BLOCKED_SUBJECTS` denies exact, case-sensitive JWT `sub` values
+before any route policy, including administrator access and routes that allow
+any authenticated caller. Separate multiple subjects with commas; whitespace
+and empty entries are ignored. An unset or empty value adds no subject blocks.
+Manage the production value in SSM Parameter Store at
+`/config/tc-ai-api/appvar/ACCESS_CONTROL_BLOCKED_SUBJECTS`. The deployment loads
+app variables into the container environment, so changing the parameter requires
+a new deployment to take effect; it is not polled on each request.
 
 **Policy model** — every target resolves to exactly one policy:
 

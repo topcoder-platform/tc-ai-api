@@ -38,6 +38,7 @@ const MANAGED_ENV = [
     'DISABLE_AUTH',
     'ACCESS_CONTROL_DEFAULT_POLICY',
     'ACCESS_CONTROL_ROLES_CLAIM',
+    'ACCESS_CONTROL_BLOCKED_SUBJECTS',
 ];
 const originalEnv: Record<string, string | undefined> = {};
 
@@ -86,6 +87,10 @@ function authRequest(path: string) {
 }
 
 describe('blocked subject', () => {
+    beforeEach(() => {
+        process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS = 'auth0|500034025';
+    });
+
     it.each([
         '/v6/ai/agents/skillsMatchingAgent/generate',
         '/v6/ai/agents/skillsMatchingAgent/stream',
@@ -104,6 +109,27 @@ describe('blocked subject', () => {
         const request = authRequest('/v6/ai/agents/skillsMatchingAgent/generate');
         expect(authorizeAccessPolicy(memberUser(), request)).toBe(true);
         expect(authorizeAccessPolicy({ ...memberUser(), id: 'auth0|500034025' }, request)).toBe(true);
+    });
+
+    it('supports multiple comma-separated subjects with whitespace and empty entries', () => {
+        process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS = ' auth0|500034025, , client-id@clients ,';
+        const request = authRequest('/v6/ai/memory/threads');
+        expect(authorizeAccessPolicy({ sub: 'auth0|500034025' }, request)).toBe(false);
+        expect(authorizeAccessPolicy(m2mUser(), request)).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(), request)).toBe(true);
+    });
+
+    it.each([undefined, '', ' ,  , '])('does not block any subject when the list is %s', (value) => {
+        if (value === undefined) delete process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS;
+        else process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS = value;
+        expect(authorizeAccessPolicy({ sub: 'auth0|500034025' }, authRequest('/v6/ai/memory/threads'))).toBe(true);
+    });
+
+    it('matches complete, case-sensitive subjects rather than substrings', () => {
+        const request = authRequest('/v6/ai/memory/threads');
+        for (const sub of ['auth0|5000340250', 'auth0|50003402', 'AUTH0|500034025']) {
+            expect(authorizeAccessPolicy({ sub }, request)).toBe(true);
+        }
     });
 });
 
