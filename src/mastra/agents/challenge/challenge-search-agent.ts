@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { remoteAssetGuard } from '../../processors/remote-asset-guard';
 import { createModel } from '../../../utils';
 import { challengeVectorQueryTool } from '../../tools/challenge/challenge-vector-query-tool';
 import { Memory } from '@mastra/memory';
@@ -45,6 +46,8 @@ export const challengeSearchAgent = new Agent({
     id: AGENT_ID,
     name: 'Topcoder Challenge Assistant',
     model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
+    // Blocks SSRF through attachment URLs (see remote-asset-guard.ts).
+    inputProcessors: [remoteAssetGuard],
     memory: new Memory({
         options: {
             lastMessages: 25,
