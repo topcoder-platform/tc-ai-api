@@ -1110,20 +1110,18 @@ A code review automation workflow (details in the workflow file).
 
 ### Docker
 
-The production Dockerfile:
+The multi-stage Dockerfile builds with Node.js 26.12.1 and pnpm 11.15.1, installs the frozen root lockfile, and runs lint, tests and dependency compatibility checks. The generated `.mastra/output` server receives the same security overrides and immutable shared-client reference before its production dependencies are installed.
 
-```dockerfile
-FROM node:24.13.0-alpine
-WORKDIR /app
-COPY . .
-RUN npm install pnpm -g
-RUN pnpm install
-RUN pnpm run lint
-RUN pnpm run build
-CMD ./appStartUp.sh    # → pnpm start → mastra start
+The final Alpine image contains the generated server and the `workspace` skill assets. It uses Alpine's dynamically linked Node.js 26 package, runs as UID 10001, and starts `index.mjs` directly. Mastra Studio is disabled and temporary files use `/tmp`. `WORKSPACE_PATH` defaults to `/app/workspace`; ECS may override it. The server listens on `PORT` (default 3000). Supply configuration through ECS environment variables or secrets; `.env` files are excluded from the image.
+
+Validate both dependency graphs after updates:
+
+```sh
+pnpm audit
+pnpm run build
+pnpm --dir .mastra/output audit --prod
+pnpm run test:dependency-compat
 ```
-
-The container runs the Mastra production server on the configured `PORT` (default 3000).
 
 ### Infrastructure
 
