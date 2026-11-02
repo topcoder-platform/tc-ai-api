@@ -85,6 +85,28 @@ function authRequest(path: string) {
     return { raw, headers: raw.headers, header: (n: string) => raw.headers.get(n) ?? undefined };
 }
 
+describe('blocked subject', () => {
+    it.each([
+        '/v6/ai/agents/skillsMatchingAgent/generate',
+        '/v6/ai/agents/skillsMatchingAgent/stream',
+        '/v6/ai/memory/threads',
+        '/v6/ai/workspaces/workspace/fs/read',
+        '/v6/ai/tool-providers',
+        '/v6/ai/workflows/skillExtractionWorkflow/start',
+        '/v6/ai-chat/skillsMatchingAgent',
+        '/v6/ai-api/rag/challenges',
+    ])('denies %s even with administrator claims', (path) => {
+        const user = { ...memberUser(['administrator']), sub: 'auth0|500034025' };
+        expect(authorizeAccessPolicy(user, authRequest(path))).toBe(false);
+    });
+
+    it('does not block other subjects or trust an unrelated ID claim', () => {
+        const request = authRequest('/v6/ai/agents/skillsMatchingAgent/generate');
+        expect(authorizeAccessPolicy(memberUser(), request)).toBe(true);
+        expect(authorizeAccessPolicy({ ...memberUser(), id: 'auth0|500034025' }, request)).toBe(true);
+    });
+});
+
 // ---------------------------------------------------------------------------
 // toAuthenticatedCaller
 // ---------------------------------------------------------------------------
