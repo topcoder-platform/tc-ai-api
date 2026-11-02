@@ -3,9 +3,11 @@ import type { Middleware } from '@mastra/core/server';
 import { ObservabilityStorage } from '@mastra/core/storage';
 import { API_PREFIX } from '../server-routes';
 
+type RouteMiddleware = Extract<Middleware, { path: string }>;
+
 /** Hide optional endpoints that the configured service cannot provide. */
-export const optionalCapabilitiesMiddleware: Middleware[] = [
-    ...['tool-providers', 'processor-providers'].map((route): Middleware => ({
+export const optionalCapabilitiesMiddleware: RouteMiddleware[] = [
+    ...['tool-providers', 'processor-providers'].map((route): RouteMiddleware => ({
         path: `${API_PREFIX}/${route}/*`,
         handler: async (c, next) => {
             const mastra: Mastra = c.get('mastra');
@@ -15,7 +17,7 @@ export const optionalCapabilitiesMiddleware: Middleware[] = [
             await next();
         },
     })),
-    ...(['logs', 'branches'] as const).map((route): Middleware => ({
+    ...(['logs', 'branches'] as const).map((route): RouteMiddleware => ({
         path: `${API_PREFIX}/observability/${route}`,
         handler: async (c, next) => {
             const mastra: Mastra = c.get('mastra');
