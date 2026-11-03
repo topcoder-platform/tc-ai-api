@@ -14,6 +14,8 @@ install_deploysuite: &install_deploysuite
   command: |
     git clone --branch v1.4.19 https://github.com/topcoder-platform/tc-deploy-scripts ../buildscript
     cp ./../buildscript/master_deploy.sh .
+    python3 scripts/bind-global-denylists.py master_deploy.sh
+    bash -n master_deploy.sh
     cp ./../buildscript/buildenv.sh .
     cp ./../buildscript/awsconfiguration.sh .
     cp ./../buildscript/psvar-processor.sh .

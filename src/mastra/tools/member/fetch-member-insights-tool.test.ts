@@ -626,7 +626,7 @@ describe('fetchMemberInsightsTool — RBAC', () => {
 
     it('denies M2M callers with no matching scopes', async () => {
         const fetchSpy = mockMembersApi();
-        const m2mUser = { sub: 'client@clients', scope: 'some:other:scope' };
+        const m2mUser = { sub: 'client@clients', isMachine: true, scope: 'some:other:scope' };
         await expect(
             fetchMemberInsightsTool.execute?.({ handle: HANDLE }, buildContext(m2mUser)),
         ).rejects.toBeInstanceOf(ToolAccessDeniedError);

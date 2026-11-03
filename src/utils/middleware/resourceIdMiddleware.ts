@@ -57,7 +57,7 @@ const resourceIdMiddlewareHandler = async (c: any, next: any) => {
 
     // Force all API operations to use this user's ID
     // This takes precedence over any client-provided resourceId
-    const resourceId = userId || sub;
+    const resourceId = String(userId || sub);
     requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
 
     tcAILogger.info('Auth resolved for request', {
