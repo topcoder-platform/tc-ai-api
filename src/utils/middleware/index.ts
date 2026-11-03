@@ -1,3 +1,4 @@
+import { optionalCapabilitiesMiddleware } from './optionalCapabilitiesMiddleware';
 import { resourceIdMiddleware, chatResourceIdMiddleware } from './resourceIdMiddleware';
 import { toolProvidersMiddleware } from './toolProvidersMiddleware';
 
@@ -10,3 +11,4 @@ if (process.env.DISABLE_AUTH !== 'true') {
 }
 
 middlewareConfig.push(toolProvidersMiddleware);
+middlewareConfig.push(...optionalCapabilitiesMiddleware);

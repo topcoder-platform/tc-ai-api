@@ -1197,3 +1197,15 @@ Locally, `pnpm dev` also serves Mastra's default UI at `http://localhost:4111/sw
 ### Shared JWT denylists
 
 Core `v4.0.0-rc.2` rejects authenticated JWTs whose subject or normalized user ID matches `ACCESS_CONTROL_BLOCKED_SUBJECTS` or `ACCESS_CONTROL_BLOCKED_USER_IDS`. Deployment binds both names to SecureStrings under `/config/common/global-appvar/`. Values are comma-separated exact identifiers. Replace ECS tasks after changing either parameter; existing verifier instances do not reload them.
+
+### Agent attachments and optional API capabilities
+
+Agent input processors reject remote image/file URLs before Mastra converts the
+prompt or downloads attachments, including attachments recalled from thread
+memory. The skills matching agent accepts text only; other configured agents
+continue to accept inline data. Rejections use Mastra's normal tripwire response.
+
+Tool and processor provider catalogs return 404 when no editor is configured.
+The observability logs and branches endpoints return 404 when the configured
+storage adapter inherits Mastra's unsupported base implementation. Supported
+adapters and trace endpoints keep their normal behavior.
