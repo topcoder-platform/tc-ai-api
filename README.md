@@ -327,16 +327,29 @@ a new deployment to take effect; it is not polled on each request.
 2. **Code default** — `DEFAULT_ACCESS_POLICIES` in `src/config/access-control.config.ts`
 3. **Global default** — `ACCESS_CONTROL_DEFAULT_POLICY` (`public` unless set to `deny`)
 
-`<CATEGORY>` is `AGENT`, `WORKFLOW`, `TOOL` or `ROUTE`. `<TARGET_KEY>` is the resource's own **`.id`**, upper-snake-cased — `challenge-bulk-ingestion` → `CHALLENGE_BULK_INGESTION`, `skillsMatchingAgent` → `SKILLS_MATCHING_AGENT`. Always the `.id` passed to `new Agent`/`createWorkflow`/`createTool`, **never** the object-property name it's registered under in `src/mastra/index.ts` — 9 of the 10 registrations differ, and a policy keyed on the wrong one silently never matches. An invalid `_MODE` throws an actionable error on first resolution rather than falling back silently.
+`<CATEGORY>` is `AGENT`, `WORKFLOW`, `TOOL` or `ROUTE`. `<TARGET_KEY>` is the resource's own **`.id`**, upper-snake-cased — `challenge-bulk-ingestion` → `CHALLENGE_BULK_INGESTION`, `skillsMatchingAgent` → `SKILLS_MATCHING_AGENT`. Always the `.id` passed to `new Agent`/`createWorkflow`/`createTool`, **never** the object-property name it's registered under in `src/mastra/index.ts` — 12 of the 13 registrations (5 agents, 8 workflows) differ; only `skillsMatchingAgent`'s key equals its `.id`. A policy keyed on the wrong one silently never matches. An invalid `_MODE` throws an actionable error on first resolution rather than falling back silently.
 
 Because Mastra's `getAgentById`/`getWorkflowById` fall back to the registry key, **both spellings reach the same resource over HTTP** — `/v6/ai/workflows/challenge-ingestion/start` and `/v6/ai/workflows/challengeIngestionWorkflow/start` are the same workflow. `TARGET_ID_ALIASES` maps every differing registry key to its canonical `.id`, and `resolveAccessPolicy()` canonicalises through it before any lookup, so a restriction can't be bypassed by addressing the target the other way. **Adding a restricted policy for a resource whose registry key differs from its `.id` means adding its alias entry too**; the unit tests assert both spellings resolve identically.
 
 **Shipped defaults.** These targets are restricted out of the box:
 
 ```
+skillsMatchingAgent        roles: [administrator, Talent Manager, Copilot]  scopes: none — all M2M denied    (agent)
+skill-extraction-workflow  roles: [administrator, Talent Manager, Copilot]  scopes: none — all M2M denied    (workflow)
+challenge-parser-agent     roles: [administrator, Talent Manager, Copilot]  scopes: none — all M2M denied    (agent)
+challenge-context          roles: [administrator, Talent Manager, Copilot]  scopes: none — all M2M denied    (workflow)
+challenge-search-agent     roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (agent)
+challenge-search           roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (workflow)
+jd-rewriter-agent          roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (agent)
+jd-autowrite               roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (workflow)
 challenge-ingestion        roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
 challenge-bulk-ingestion   roles: [administrator]                  scopes: [challengesRAG:admin]   (workflow)
 rag-challenges             roles: [administrator]                  scopes: [challengesRAG:admin]   (route)
+challenge-vector-query     roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
+openai-compat              deny — /v6/ai/v1/*                                                       (route)
+schedules                  deny — /v6/ai/schedules/*                                                (route)
+datasets                   deny — /v6/ai/datasets/*, /v6/ai/experiments/*                           (route)
+catalog                    roles: [administrator]                  scopes: none — all M2M denied    (route: bare GET /agents, /workflows, /tools, /system)
 system-one                 roles: [administrator]                  scopes: [sys1:use]              (workflow AND tool)
 lets-talk-classification   roles: none — all members denied        scopes: [ai:letstalk:classify]  (workflow)
 lets-talk-classifier-agent roles: none — all members denied        scopes: [ai:letstalk:classify]  (agent)
@@ -347,16 +360,22 @@ fetch-project-by-id        roles: [administrator, Talent Manager]  scopes: none 
 fetch-client-projects      roles: [administrator, Talent Manager]  scopes: none — all M2M denied    (tool)
 ```
 
-The first three all rewrite the shared challenge vector index. The last three (`fetch-challenge-resources`, `fetch-project-by-id`, `fetch-client-projects`) are different: they're `restricted` to match the RBAC platform-ui already enforces one layer up on the only UI surface that reaches them, not because the underlying data is sensitive to write. `fetch-project-by-id` was `public` before [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md) — it's now restricted because it also surfaces a project's client/billing identity, not just project detail.
+The first eight pair each member-facing agent with the workflow that invokes it in-process, so the agent route isn't a bypass of the workflow gate (and vice versa): skills extraction and challenge context are open to `administrator`, `Talent Manager` and `Copilot` members; challenge search and JD autowrite to `administrator` and `Talent Manager` only. None configures `scopes`, so every M2M caller is denied on all eight. If a service client ever needs one of them, set **both** `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_ROLES` (repeating the role list) **and** `_SCOPES` — an env override *replaces* the code default rather than merging with it, so a `_SCOPES`-only override drops the roles and locks every member out.
+
+`challenge-ingestion`, `challenge-bulk-ingestion` and `rag-challenges` all rewrite the shared challenge vector index. The last three (`fetch-challenge-resources`, `fetch-project-by-id`, `fetch-client-projects`) are different: they're `restricted` to match the RBAC platform-ui already enforces one layer up on the only UI surface that reaches them, not because the underlying data is sensitive to write. `fetch-project-by-id` was `public` before [ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md) — it's now restricted because it also surfaces a project's client/billing identity, not just project detail.
 
 `system-one` ([ADR 0009](docs/adr/0009-system-one-tool.md)) has the same policy in two categories — the workflow (the service entry point, gated at the auth hook) and the tool (re-checked inside the workflow's `evaluate` step). **Override both together** (`ACCESS_POLICY_WORKFLOW_SYSTEM_ONE_*` and `ACCESS_POLICY_TOOL_SYSTEM_ONE_*`): widening only the workflow yields runs that start and then fail with `Access denied for tool "system-one"`. The `sys1:use` permission must exist on the `AUTH0_M2M_AUDIENCE` API and be granted to the consuming service clients.
 
-Everything else is `public`, i.e. unchanged from pre-ADR-0004 behavior. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
+`challenge-vector-query` is reachable directly at `POST /v6/ai/tools/challenge-vector-query/execute` and returns indexed challenge text with caller-chosen `groups`/`projectId` filters and no server-side tenant scoping (see the ADR 0001 security note), so it carries the same roles as `challenge-search-agent` and `challenge-search` — the direct tool route must never be weaker than the agent and workflow that wrap it.
+
+The three `deny` route slugs close Mastra's built-in families that run an agent or workflow named in the request **body** or in a stored record (`agent_id` on the OpenAI-compatible `/v1/responses`, `workflowId`/`agentId` on `POST /schedules`, dataset experiment targets), which the auth hook cannot resolve to a per-target policy. Open one with `ACCESS_POLICY_ROUTE_<SLUG>_MODE` / `_ROLES` / `_SCOPES` only once a consumer is named. `catalog` covers the bare listings, whose responses include every agent's full system prompt and tool schemas.
+
+Everything else — the remaining tools (`fetch-challenge-by-id`, `search-challenges`, the two standardized-skills tools) — is `public`, i.e. unchanged from pre-ADR-0004 behavior. Every registered agent and workflow now ships `restricted`. Note that `challengesRAG:admin` must exist as a permission on the `AUTH0_M2M_AUDIENCE` API resource in Auth0 and be granted to the relevant M2M client(s), otherwise every M2M caller is denied on those two workflows.
 
 **Three enforcement points:**
 
-- **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*` and `/v6/ai-chat/:agentId`. Non-invocation paths (memory, threads, telemetry, scorers) are out of scope and pass through. Mastra Studio uses these same paths, so it gets no bypass.
-- **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Currently one entry: `/v6/ai-api/rag/challenges` → `rag-challenges`, restricted to `administrator` / `challengesRAG:admin` out of the box.
+- **Agents & workflows** — `authorizeAccessPolicy` is supplied as `authorizeUser` to both Auth0 providers. Mastra's own `coreAuthMiddleware` already invokes that hook on every protected request and returns **403** when it returns `false`. It parses the request path into `('agent', id)` / `('workflow', id)`, covering `/v6/ai/agents/:id/*`, `/v6/ai/workflows/:id/*`, `/v6/ai-chat/:agentId` and Mastra's A2A endpoint `/v6/ai/a2a/:agentId/*` (which runs the named agent and therefore resolves to that agent's policy). **Everything that parses to no target fails closed**: only `/v6/ai/memory/*` (per-user, Mastra enforces thread ownership) and `/v6/ai/workspaces/*` (mounted read-only) are allowlisted for any authenticated caller; every other uncategorised Mastra family — stored resources, editor, agent-builder, agent-controller, observability, logs, scores, vector, MCP, auth — is denied for everyone and logged. New route families that arrive with Mastra upgrades are therefore closed until deliberately opened via `ROUTE_PATH_TARGETS` or the allowlist. Mastra Studio uses these same paths, so it gets no bypass.
+- **Custom admin routes** (`ROUTE`) — this repo's own `registerApiRoute` entries are neither agents nor workflows, so they match none of the patterns above and would otherwise stay open to any authenticated caller. `ROUTE_PATH_TARGETS` maps a path prefix to a route slug, which then resolves like any other target. Entries: `/v6/ai-api/rag/challenges` → `rag-challenges` (restricted to `administrator` / `challengesRAG:admin`); `/v6/ai/v1` → `openai-compat`, `/v6/ai/schedules` → `schedules`, `/v6/ai/datasets` + `/v6/ai/experiments` → `datasets` (all `deny`, see above); and the exact list paths `/v6/ai/agents`, `/v6/ai/workflows`, `/v6/ai/tools`, `/v6/ai/system` → `catalog` (`administrator` only). The `/:id` forms of those last four are matched by the agent/workflow/tool regexes first, so the slug only ever sees the bare listing.
 - **Tools** — `withAccessPolicy()` wraps each tool's `execute` at its **export site** (e.g. the last line of `challenge-vector-query-tool.ts`). The guard travels with the exported tool object, so a future agent that adds the tool to its `tools:` map can't forget it. It reads the verified caller from `RequestContext` — the reserved `mastra__user` key first, which a request body cannot set, then `user` for in-process callers — and throws `ToolAccessDeniedError` (`status: 403`) on denial: surfaced to the LLM as a failed tool call, to a workflow step as a rejected `execute()`, or over HTTP as a **403**. Tools **are** URL-addressable: Mastra's `POST /v6/ai/tools/:toolId/execute` resolves any tool attached to a registered agent, so `authorizeAccessPolicy` also matches `/v6/ai/tools/:toolId` for an early 403 at the auth hook (ADR 0009 C1–C3).
 
 Nested, in-process invocations (`challenge-bulk-ingestion` → `challenge-ingestion`, `challenge-context` → `challenge-parser-agent`) are **not** re-gated: they never re-enter the HTTP router, and you can't reach them without passing the outer check first.
@@ -460,6 +479,7 @@ Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_M
 | **Model**   | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default |
 | **Memory**  | PostgreSQL-backed conversation memory        |
 | **Scorers** | Answer Relevancy, Prompt Alignment — sampled, only when `LOCAL_DEV=true` |
+| **Access**  | `restricted` — `roles: ['administrator', 'Talent Manager', 'Copilot']`, no `scopes` (all M2M callers denied) — same gate as `skill-extraction-workflow` |
 
 **System Prompt Behavior:**
 
@@ -480,6 +500,7 @@ The agent is used within the workflow's `generateSkillCandidateTerms` step via i
 | **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-sonnet-5')` by default |
 | **Memory** | None                                                            |
 | **Tools**  | None — pure structured-output extractor                        |
+| **Access** | `restricted` — `roles: ['administrator', 'Talent Manager', 'Copilot']`, no `scopes` (all M2M callers denied) — same gate as `challenge-context` |
 
 Reads a full challenge specification (public + private description, skills, metadata) and returns structured JSON: requirements (grouped), tech stack, runtime environment, existing-codebase status, and submission guidelines. Used by `challenge-context-workflow`'s `parse-challenge-context` step, invoked as four focused, partly-parallel extraction calls (requirements+grouping, then tech/runtime + codebase + guidelines in parallel) via `generateWithStructuredOutputFallback`, each validated against the source text afterward to prune hallucinated items.
 
@@ -491,6 +512,7 @@ Reads a full challenge specification (public + private description, skills, meta
 | **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5')` by default |
 | **Memory** | In-memory only (`Memory({ options: { lastMessages: 10 } })`) — no persistent storage backend, unlike `skillsMatchingAgent` |
 | **Tools**  | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
+| **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) — same gate as `challenge-search` |
 
 Answers natural-language questions about indexed Topcoder challenges. Infers `skills`/`type`/`track`/`groups` filters from the query and calls `challenge-vector-query`; never infers `projectId` from query text (it must arrive from the caller's context — see [Challenges Vector RAG](#challenges-vector-rag)). Grounds every answer solely in tool results. For callers needing raw ranked results with no LLM latency/cost/non-determinism, the `challenge-search` workflow shares the same underlying tool.
 
@@ -504,6 +526,7 @@ Can also answer "who's on this challenge" questions — copilot, reviewers, regi
 | **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default |
 | **Memory** | None                                                                         |
 | **Tools**  | None — pure structured-output rewriter                                      |
+| **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) — same gate as `jd-autowrite` |
 
 Rewrites a raw/rough job description into Topcoder's canonical structured format (formatted description + extracted skill keywords) for `jd-autowrite-workflow`.
 
@@ -586,6 +609,7 @@ Wraps the v6 endpoint's bare JSON array into a paginated envelope. Always reques
 | **ID**     | `challenge-vector-query`                                             |
 | **Input**  | `{ query?: string, skills?: string[], type?: string, track?: string, groups?: string[], projectId?: string \| string[], topK?: number, minScore?: number }` |
 | **Output** | `{ success: boolean, count?: number, results?: [{ text, score, metadata }], error?: string }` |
+| **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) — same gate as `challenge-search-agent` / `challenge-search`; was `public` |
 
 The shared retrieval primitive behind both the search agent and the deterministic `challenge-search` workflow — see [Challenges Vector RAG → Retrieval](#challenges-vector-rag) for filter composition and the metadata-only lookup path.
 
@@ -650,7 +674,8 @@ The core business logic lives in `skill-extraction-workflow.ts`, organized as a 
 ### Workflow: `skill-extraction-workflow` (Main)
 
 **Input:** `{ jobDescription: string }`  
-**Output:** `{ jobDescription, matches: [{ id, name, score }], skillCandidateTerms: string[] }`
+**Output:** `{ jobDescription, matches: [{ id, name, score }], skillCandidateTerms: string[] }`  
+**Access:** `restricted` — `roles: ['administrator', 'Talent Manager', 'Copilot']`, no `scopes` (all M2M callers denied) — same gate as `skillsMatchingAgent`, which it invokes in-process
 
 #### Step Pipeline
 
@@ -1158,22 +1183,28 @@ pnpm run test:dependency-compat
 
 Mastra automatically exposes the following REST endpoints:
 
-| Endpoint                                          | Method | Description                              |
-| ------------------------------------------------- | ------ | ---------------------------------------- |
-| `/api/workflows/skill-extraction-workflow/start`  | `POST` | Start the skill extraction workflow      |
-| `/api/workflows/skill-extraction-workflow/:runId` | `GET`  | Get workflow run status/result           |
-| `/api/agents/skillsMatchingAgent/generate`        | `POST` | Direct agent text generation             |
-| `/api/agents/skillsMatchingAgent/stream`          | `POST` | Direct agent streaming generation        |
-| `/api/workflows/challenge-ingestion/start`        | `POST` | Ingest one challenge by id or inline record |
-| `/api/workflows/challenge-bulk-ingestion/start`   | `POST` | Paginated bulk / incremental-sync ingestion |
-| `/api/workflows/challenge-search/start`           | `POST` | Deterministic ranked challenge search (no LLM) |
-| `/api/agents/challengeSearchAgent/generate`       | `POST` | Synthesised NL challenge search           |
-| `/api/agents/challengeSearchAgent/stream`         | `POST` | Synthesised NL challenge search (streaming) |
-| `/studio/*`                                       | `GET`  | Mastra Studio UI (development/debugging) |
-| `/v6/ai-api/docs`                                 | `GET`  | Swagger UI — only when `SWAGGER_UI_ENABLED=true` |
-| `/v6/ai-api/docs/openapi.json`                    | `GET`  | OpenAPI 3.1 spec — only when `SWAGGER_UI_ENABLED=true` |
+| Endpoint | Method | Description | Access (see [Access control](#access-control)) |
+| --- | --- | --- | --- |
+| `/v6/ai/workflows/skill-extraction-workflow/start` | `POST` | Start the skill extraction workflow | `administrator`, `Talent Manager`, `Copilot` members; M2M denied |
+| `/v6/ai/workflows/skill-extraction-workflow/runs/:runId` | `GET` | Get workflow run status/result | same as above |
+| `/v6/ai/agents/skillsMatchingAgent/generate` | `POST` | Direct agent text generation | same as above |
+| `/v6/ai/agents/skillsMatchingAgent/stream` | `POST` | Direct agent streaming generation | same as above |
+| `/v6/ai/workflows/challenge-context/start` | `POST` | Structured challenge context extraction | `administrator`, `Talent Manager`, `Copilot` members; M2M denied |
+| `/v6/ai/workflows/jd-autowrite/start` | `POST` | Rewrite a job description into canonical form | `administrator`, `Talent Manager` members; M2M denied |
+| `/v6/ai/workflows/challenge-search/start` | `POST` | Deterministic ranked challenge search (no LLM) | `administrator`, `Talent Manager` members; M2M denied |
+| `/v6/ai/agents/challenge-search-agent/generate` | `POST` | Synthesised NL challenge search | `administrator`, `Talent Manager` members; M2M denied |
+| `/v6/ai/agents/challenge-search-agent/stream` | `POST` | Synthesised NL challenge search (streaming) | same as above |
+| `/v6/ai-chat/:agentId` | `POST` | Chat-route (SSE) front door to any agent | the named agent's policy |
+| `/v6/ai/workflows/challenge-ingestion/start` | `POST` | Ingest one challenge by id or inline record | `administrator` / `challengesRAG:admin` |
+| `/v6/ai/workflows/challenge-bulk-ingestion/start` | `POST` | Paginated bulk / incremental-sync ingestion | `administrator` / `challengesRAG:admin` |
+| `/v6/ai/workflows/system-one/start-async` | `POST` | System One scoring run (ADR 0009) | `administrator` / `sys1:use` |
+| `/v6/ai/workflows/lets-talk-classification/start-async` | `POST` | "Let's talk" form triage (ADR 0010) | M2M `ai:letstalk:classify` only |
+| `/v6/ai-api/rag/challenges[/:challengeId]` | `GET` / `DELETE` | RAG index admin API | `administrator` / `challengesRAG:admin` |
+| `/v6/ai/memory/*`, `/v6/ai/workspaces/*` | various | Per-user memory threads; read-only workspace files | any authenticated caller |
+| `/studio/*` | `GET` | Mastra Studio UI (development only; disabled in the production image) | n/a |
+| `/v6/ai-api/docs`, `/v6/ai-api/docs/openapi.json` | `GET` | Swagger UI / OpenAPI 3.1 spec — only when `SWAGGER_UI_ENABLED=true` | unauthenticated |
 
-All `/api/*` endpoints are protected by Auth0 authentication (unless `DISABLE_AUTH=true`) and scoped by the resource ID middleware.
+Every registry key also works in place of the `.id` (`/v6/ai/agents/challengeSearchAgent/...`) and resolves to the same policy. All `/v6/ai/*`, `/v6/ai-chat/*` and `/v6/ai-api/*` endpoints are protected by Auth0 authentication (unless `DISABLE_AUTH=true`) and scoped by the resource ID middleware; any `/v6/ai/*` path not listed in the access-control section fails closed.
 
 ### API docs (Swagger UI)
 
