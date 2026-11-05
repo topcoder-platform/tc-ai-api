@@ -535,7 +535,7 @@ Rewrites a raw/rough job description into Topcoder's canonical structured format
 | Property   | Value                                                                       |
 | ---------- | ----------------------------------------------------------------------------- |
 | **ID**     | `lets-talk-classifier-agent`                                                 |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default, `temperature: 0` |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default |
 | **Memory** | None — stateless                                                             |
 | **Tools**  | None. Output processor: `StructuredOutputValidator` (L2 feedback retries)    |
 
