@@ -168,6 +168,10 @@ const AGENT_PATH_RE = new RegExp(`^${API_PREFIX}/agents/([^/]+)`);
 const WORKFLOW_PATH_RE = new RegExp(`^${API_PREFIX}/workflows/([^/]+)`);
 // chatRoute() is CHAT_ROUTE_BASE_PATH/:agentId — an agent by another path.
 const CHAT_PATH_RE = new RegExp(`^${CHAT_ROUTE_BASE_PATH}/([^/]+)`);
+// Mastra's built-in A2A protocol endpoint (/a2a/:agentId and its task
+// sub-routes) runs the named agent via agent.generate/stream — an agent by a
+// third path, so it resolves to the same agent policy.
+const A2A_PATH_RE = new RegExp(`^${API_PREFIX}/a2a/([^/]+)`);
 // GET /tools/:toolId and POST /tools/:toolId/execute (ADR 0009 C1).
 // /agents/:agentId/tools/:toolId/execute matches AGENT_PATH_RE first; the
 // in-execute guard (withAccessPolicy) covers the tool on that path.
@@ -181,7 +185,50 @@ const TOOL_PATH_RE = new RegExp(`^${API_PREFIX}/tools/([^/]+)`);
  */
 const ROUTE_PATH_TARGETS: { prefix: string; targetId: string }[] = [
     { prefix: `${RAG_ADMIN_ROUTE_BASE_PATH}/challenges`, targetId: 'rag-challenges' },
+    // Built-in Mastra route families that invoke agents/workflows with the
+    // target named in the request BODY or a stored record, which authorizeUser
+    // cannot read. They are gated as a whole under one slug each (deny by
+    // default in DEFAULT_ACCESS_POLICIES) rather than per target.
+    //   /v1/responses + /v1/conversations: OpenAI-compatible API, `agent_id` in body.
+    { prefix: `${API_PREFIX}/v1`, targetId: 'openai-compat' },
+    //   POST /schedules: unattended runs of any workflow/agent, no caller on the run.
+    { prefix: `${API_PREFIX}/schedules`, targetId: 'schedules' },
+    //   Datasets/experiments: run any agent/workflow/scorer by stored target id.
+    { prefix: `${API_PREFIX}/datasets`, targetId: 'datasets' },
+    { prefix: `${API_PREFIX}/experiments`, targetId: 'datasets' },
+    // Bare catalogue listings. GET /agents returns every agent's full system
+    // prompt and tool schemas; the others expose workflow/tool schemas and
+    // dependency versions. The /:id forms are matched by the regexes above
+    // first, so only the exact list paths land here.
+    { prefix: `${API_PREFIX}/agents`, targetId: 'catalog' },
+    { prefix: `${API_PREFIX}/workflows`, targetId: 'catalog' },
+    { prefix: `${API_PREFIX}/tools`, targetId: 'catalog' },
+    { prefix: `${API_PREFIX}/system`, targetId: 'catalog' },
 ];
+
+/**
+ * The only uncategorised path families that stay open to any authenticated
+ * caller. Everything else that parses to no target is DENIED (fail closed):
+ * Mastra ships new route families on upgrades (stored resources, editor,
+ * agent-builder, observability, ...) and none of them should become reachable
+ * without a deliberate entry here or in ROUTE_PATH_TARGETS.
+ *
+ *  - memory: per-user threads/messages; Mastra scopes every read/write to the
+ *    caller's MASTRA_RESOURCE_ID_KEY and enforceThreadAccess, and thread
+ *    transfer refuses without an FGA provider.
+ *  - workspaces: the instance workspace is mounted read-only
+ *    (ApiLocalFilesystem { readOnly: true }); reads expose only skill files.
+ */
+const UNCATEGORIZED_ALLOWLIST_PREFIXES: string[] = [
+    `${API_PREFIX}/memory`,
+    `${API_PREFIX}/workspaces`,
+];
+
+function isAllowlistedUncategorizedPath(pathname: string): boolean {
+    return UNCATEGORIZED_ALLOWLIST_PREFIXES.some(
+        prefix => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
+}
 
 /** null when the path addresses none of the four categories (memory, threads, telemetry, ...). */
 function parseTarget(pathname: string): { category: AccessCategory; targetId: string } | null {
@@ -193,6 +240,9 @@ function parseTarget(pathname: string): { category: AccessCategory; targetId: st
 
     const chat = CHAT_PATH_RE.exec(pathname);
     if (chat) return { category: 'agent', targetId: decodeURIComponent(chat[1]) };
+
+    const a2a = A2A_PATH_RE.exec(pathname);
+    if (a2a) return { category: 'agent', targetId: decodeURIComponent(a2a[1]) };
 
     const tool = TOOL_PATH_RE.exec(pathname);
     if (tool) return { category: 'tool', targetId: decodeURIComponent(tool[1]) };
@@ -244,8 +294,13 @@ export function authorizeAccessPolicy(
     }
 
     const target = parseTarget(pathname);
-    // Not an agent/workflow/tool/route invocation — out of this ADR's scope, unaffected.
-    if (!target) return true;
+    if (!target) {
+        // Not an agent/workflow/tool/route target. Fail closed unless the path
+        // family is explicitly allowlisted — see UNCATEGORIZED_ALLOWLIST_PREFIXES.
+        if (isAllowlistedUncategorizedPath(pathname)) return true;
+        tcAILogger.warn('[access-control] denied: uncategorised path (fail closed)', { pathname });
+        return false;
+    }
 
     const policy = resolveAccessPolicy(target.category, target.targetId);
     const allowed = checkAccess(toAuthenticatedCaller(user), policy);

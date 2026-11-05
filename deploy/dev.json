@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "environment": "dev",
+  "accountId": "811668436784",
+  "region": "us-east-1",
+  "deployRoleArn": "arn:aws:iam::811668436784:role/tc-ai-api-dev-deploy",
+  "taskRoleArn": "arn:aws:iam::811668436784:role/ai-api-bedrock-role",
+  "executionRoleArn": "arn:aws:iam::811668436784:role/ecsTaskExecutionRole",
+  "cluster": "tc-ai",
+  "service": "tc-ai-api",
+  "taskFamily": "tc-ai-api",
+  "circleciOrgId": "947bef5e-1669-415d-b83c-4fc85155b7df",
+  "circleciProjectId": "bd99beba-0b27-413e-a37c-b9166afe196c",
+  "repository": "github.com/topcoder-platform/tc-ai-api",
+  "branch": "develop",
+  "images": {
+    "tc-ai-api": "tc-ai-api"
+  }
+}
