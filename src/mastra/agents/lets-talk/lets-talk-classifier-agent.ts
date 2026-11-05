@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { remoteAssetGuard } from '../../processors/remote-asset-guard';
 import { createModel } from '../../../utils/providers/model-factory';
 import { tcAILogger } from '../../../utils/logger';
 import {
@@ -172,6 +173,8 @@ export const letsTalkClassifierAgent = new Agent({
     name: "Let's Talk Inbound Form Classifier",
     description: "Scores one \"Let's talk\" form submission against the configured classes (JUNK, COMMUNITY_OPPORTUNITY, COMMUNITY_SKILLS, COMMUNITY_SUPPORT, COMMUNITY_GENERAL, WIPRO_QUERIES, SALES_LEAD by default). Use the lets-talk-classification workflow rather than calling this agent directly.",
     model: createModel(PROVIDER_NAME, MODEL_ID, AGENT_ID),
+    // Blocks SSRF through attachment URLs (see remote-asset-guard.ts).
+    inputProcessors: [remoteAssetGuard],
     // `defaultOptions` is the agent-level default that `generate()` deep-merges
     // into every call's options.
     defaultOptions: {

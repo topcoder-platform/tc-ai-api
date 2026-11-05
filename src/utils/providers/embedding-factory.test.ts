@@ -27,7 +27,7 @@ vi.mock('../logger', () => ({
 }));
 
 // Mock auth modules so importing src/utils/index.ts does not throw
-// (MastraAuthAuth0 requires AUTH0_DOMAIN/AUTH0_AUDIENCE env vars at import)
+// (SharedJwtAuth requires AUTH0_DOMAIN/AUTH0_AUDIENCE env vars at import)
 vi.mock('../auth', () => ({
     apiAuthLayer: undefined,
 }));

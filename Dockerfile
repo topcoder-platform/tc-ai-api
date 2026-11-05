@@ -1,22 +1,22 @@
 # syntax=docker/dockerfile:1
-
-FROM node:24.13.0-alpine
-
-RUN apk add --no-cache bash git
-
+FROM node:26.12.1-alpine3.24 AS build
+RUN apk upgrade --no-cache && npm install --global pnpm@11.15.1
 WORKDIR /app
-
-# Use the exact pnpm version pinned in package.json "packageManager"
-RUN corepack enable
-
-# Copy lockfile + manifest first for layer caching
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tools/minimatch-compat ./tools/minimatch-compat
 RUN pnpm install --frozen-lockfile
-
-# Now copy the rest of the source
 COPY . .
-RUN pnpm run lint
-RUN pnpm test
-RUN pnpm run build
-RUN chmod +x appStartUp.sh
-CMD ["./appStartUp.sh"]
+RUN pnpm run test:dependency-compat && pnpm run lint && pnpm test && pnpm run build
+
+FROM alpine:3.24
+RUN apk upgrade --no-cache && apk add --no-cache 'nodejs-current~26' ca-certificates \
+    && addgroup -S -g 10001 app && adduser -S -D -u 10001 -G app -h /home/app app
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000 \
+    TMPDIR=/tmp TEMP=/tmp TMP=/tmp MASTRA_STUDIO_DISABLED=true \
+    WORKSPACE_PATH=/app/workspace
+WORKDIR /app
+COPY --from=build --chown=app:app /app/.mastra/output ./.mastra/output
+COPY --from=build --chown=app:app /app/workspace ./workspace
+USER app
+EXPOSE 3000
+CMD ["node", "/app/.mastra/output/index.mjs"]

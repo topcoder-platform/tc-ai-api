@@ -39,17 +39,50 @@ vi.mock('../../../utils/logger', () => ({
 }));
 
 import { challengeVectorQueryTool, _testing } from './challenge-vector-query-tool';
+import { ToolAccessDeniedError } from '../../../utils/auth/access-control';
 
 const { buildMetadataFilter } = _testing;
 
-const minimalContext = {
-    mastra: undefined,
-    requestContext: { get: (key: string) => (key === 'user' ? { sub: 'test-user' } : undefined) },
-} as any;
+const ROLES_CLAIM = 'https://topcoder.com/roles';
+
+// The tool is `restricted` to administrator / Talent Manager (same gate as
+// challenge-search-agent), so the default caller carries an admitted role.
+function contextForUser(user: Record<string, unknown> | undefined) {
+    return {
+        mastra: undefined,
+        requestContext: { get: (key: string) => (key === 'user' ? user : undefined) },
+    } as any;
+}
+
+const minimalContext = contextForUser({ sub: 'test-user', [ROLES_CLAIM]: ['administrator'] });
 
 async function executeTool(input: Record<string, unknown>): Promise<any> {
     return challengeVectorQueryTool.execute?.(input, minimalContext) as Promise<any>;
 }
+
+describe('challengeVectorQueryTool — RBAC', () => {
+    it('denies callers without administrator or Talent Manager (was public)', async () => {
+        const user = { sub: 'auth0|1', [ROLES_CLAIM]: ['copilot'] };
+        await expect(
+            challengeVectorQueryTool.execute?.({ query: 'test' } as any, contextForUser(user)),
+        ).rejects.toBeInstanceOf(ToolAccessDeniedError);
+    });
+
+    it('denies every M2M caller (roles only, no scopes)', async () => {
+        const user = { sub: 'svc@clients', isMachine: true, scope: 'challengesRAG:admin' };
+        await expect(
+            challengeVectorQueryTool.execute?.({ query: 'test' } as any, contextForUser(user)),
+        ).rejects.toBeInstanceOf(ToolAccessDeniedError);
+    });
+
+    it('allows Talent Manager callers through RBAC', async () => {
+        const user = { sub: 'auth0|1', [ROLES_CLAIM]: ['Talent Manager'] };
+        const result = await challengeVectorQueryTool.execute?.({} as any, contextForUser(user));
+        // Past the guard: the tool's own validation answers, not a 403.
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/At least one of query or a filter/);
+    });
+});
 
 function defaultConfig() {
     return {

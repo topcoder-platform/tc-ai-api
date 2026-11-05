@@ -6,7 +6,8 @@
  * `new Agent({ id })` / `createWorkflow({ id })` / `createTool({ id })`) —
  * NOT the object-property name it happens to be registered under in
  * src/mastra/index.ts. Mastra's getAgentById/getWorkflowById resolve by `.id`
- * first, and 9 of the 10 registrations in this repo differ from their key.
+ * first, and 12 of the 13 registrations in this repo differ from their key
+ * (only skillsMatchingAgent's matches).
  * A policy keyed on the wrong one silently never matches.
  */
 
@@ -38,8 +39,41 @@ export type AccessCategory = 'agent' | 'workflow' | 'tool' | 'route';
  * Env vars (ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_MODE/_ROLES/_SCOPES) take
  * precedence over anything here — see resolveAccessPolicy().
  */
+/**
+ * Shared member-role sets. Each agent/workflow pair below (and the tools the
+ * challenge-search agent wraps) MUST reference the same constant so the agent
+ * route can never drift from the workflow gate it fronts.
+ */
+export const MEMBER_ROLES_COPILOT_AND_UP: string[] = ['administrator', 'Talent Manager', 'Copilot'];
+export const MEMBER_ROLES_TALENT_MANAGER_AND_UP: string[] = ['administrator', 'Talent Manager'];
+
 export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, AccessPolicy>> = {
     agent: {
+        // Skills extraction is a member-facing feature. Roles only ⇒ every
+        // M2M token is denied. Keep in step with the `skill-extraction-workflow`
+        // WORKFLOW policy below, which invokes this agent in-process.
+        'skillsMatchingAgent': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_COPILOT_AND_UP,
+        },
+        // Keep in step with the `challenge-context` WORKFLOW policy below,
+        // which invokes this agent in-process. Roles only ⇒ M2M denied.
+        'challenge-parser-agent': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_COPILOT_AND_UP,
+        },
+        // Same audience as its restricted tools (ADR 0005–0008) and the
+        // `challenge-search` WORKFLOW policy below. Roles only ⇒ M2M denied.
+        'challenge-search-agent': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
+        },
+        // Keep in step with the `jd-autowrite` WORKFLOW policy below, which
+        // invokes this agent in-process. Roles only ⇒ M2M denied.
+        'jd-rewriter-agent': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
+        },
         // Same gate as the lets-talk-classification workflow (ADR 0010),
         // otherwise /agents/lets-talk-classifier-agent/generate is a public
         // bypass of it. Scopes only ⇒ every member token is denied.
@@ -49,6 +83,26 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
         },
     },
     workflow: {
+        // Keep in step with the `skillsMatchingAgent` AGENT policy above.
+        'skill-extraction-workflow': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_COPILOT_AND_UP,
+        },
+        // Keep in step with the `challenge-parser-agent` AGENT policy above.
+        'challenge-context': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_COPILOT_AND_UP,
+        },
+        // Keep in step with the `challenge-search-agent` AGENT policy above.
+        'challenge-search': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
+        },
+        // Keep in step with the `jd-rewriter-agent` AGENT policy above.
+        'jd-autowrite': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
+        },
         // Both rewrite the shared vector index — restricted out of the box so a
         // fresh deploy is safe before any operator sets an env var.
         'challenge-ingestion': {
@@ -79,27 +133,36 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
         },
     },
     tool: {
+        // Reachable directly via POST /tools/challenge-vector-query/execute.
+        // Returns indexed challenge text with caller-chosen groups/projectId
+        // filters and no server-side tenant scoping (ADR 0001 security note),
+        // so it must not be weaker than the agent and workflow that wrap it.
+        // Keep in step with `challenge-search-agent` / `challenge-search`.
+        'challenge-vector-query': {
+            mode: 'restricted',
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
+        },
         'fetch-challenge-resources': {
             mode: 'restricted',
-            roles: ['administrator', 'Talent Manager'],
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
         },
         'fetch-member-insights': {
             mode: 'restricted',
-            roles: ['administrator', 'Talent Manager'],
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
         },
         'search-members': {
             mode: 'restricted',
-            roles: ['administrator', 'Talent Manager'],
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
         },
         // Was public — restricted per ADR 0007, since it now also surfaces a
         // project's client/billing identity, not just project detail.
         'fetch-project-by-id': {
             mode: 'restricted',
-            roles: ['administrator', 'Talent Manager'],
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
         },
         'fetch-client-projects': {
             mode: 'restricted',
-            roles: ['administrator', 'Talent Manager'],
+            roles: MEMBER_ROLES_TALENT_MANAGER_AND_UP,
         },
         // The in-execute guard of the System One tool (ADR 0009); runs again
         // inside the system-one workflow's evaluate step. Keep in step with the
@@ -118,6 +181,20 @@ export const DEFAULT_ACCESS_POLICIES: Record<AccessCategory, Record<string, Acce
             mode: 'restricted',
             roles: ['administrator'],
             scopes: ['challengesRAG:admin'],
+        },
+        // Built-in Mastra families that run agents/workflows named in the
+        // request body or a stored record — the auth hook cannot resolve the
+        // real target, so the whole family is closed. Open one with an env
+        // override (ACCESS_POLICY_ROUTE_<SLUG>_MODE / _ROLES / _SCOPES) only
+        // once a consumer is named; see ROUTE_PATH_TARGETS for the paths.
+        'openai-compat': { mode: 'deny' },
+        'schedules': { mode: 'deny' },
+        'datasets': { mode: 'deny' },
+        // Bare GET /agents, /workflows, /tools, /system listings: agent system
+        // prompts, tool schemas and dependency versions. Operators only.
+        'catalog': {
+            mode: 'restricted',
+            roles: ['administrator'],
         },
     },
 };

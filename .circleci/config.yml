@@ -1,79 +1,112 @@
+# Deployment migration: see deploy/MIGRATION.md before enabling either environment.
 version: 2.1
-
-defaults: &defaults
-  docker:
-    - image: cimg/python:3.13.2-browsers
-install_dependency: &install_dependency
-  name: Installation of build and deployment dependencies.
-  command: |
-    sudo apt update
-    sudo apt install -y jq python3-pip
-    sudo pip3 install awscli --upgrade
-install_deploysuite: &install_deploysuite
-  name: Installation of install_deploysuite.
-  command: |
-    git clone --branch v1.4.19 https://github.com/topcoder-platform/tc-deploy-scripts ../buildscript
-    cp ./../buildscript/master_deploy.sh .
-    cp ./../buildscript/buildenv.sh .
-    cp ./../buildscript/awsconfiguration.sh .
-    cp ./../buildscript/psvar-processor.sh .
-
-builddeploy_steps: &builddeploy_steps
-  - checkout
-  - setup_remote_docker
-  - run: *install_dependency
-  - run: *install_deploysuite
-  - run: docker buildx build --no-cache=true -t ${APPNAME}:latest .
-  - run:
-      name: Running MasterScript.
-      command: |
-        ./awsconfiguration.sh $DEPLOY_ENV
-        source awsenvconf
-        ./psvar-processor.sh -t appenv -p /config/${APPNAME}/deployvar
-        source deployvar_env
-        ./master_deploy.sh -d ECS -e $DEPLOY_ENV -t latest -j /config/${APPNAME}/appvar -i ${APPNAME} -p FARGATE
-
+executors:
+  reviewed:
+    docker:
+    - image: cimg/aws@sha256:4cf3768db00ddf9bc439b8c84e8a60c11a14edf81c8baf76f74132144f8340d5
+commands:
+  checkout-source:
+    steps:
+    - run:
+        name: Check out the exact public source commit over HTTPS
+        command: |
+          set -euo pipefail
+          [[ "$CIRCLE_SHA1" =~ ^[0-9a-f]{40}$ ]]
+          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
+          git init --quiet .
+          git remote add origin https://github.com/topcoder-platform/tc-ai-api.git
+          git -c credential.helper= fetch --quiet --depth 1 origin "$CIRCLE_SHA1"
+          git checkout --quiet --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1"
+  checkout-suite:
+    steps:
+    - run:
+        name: Verify deployment suite v2.0.6
+        command: |
+          set -euo pipefail
+          git init --quiet /tmp/tc-deploy-scripts
+          git -C /tmp/tc-deploy-scripts remote add origin https://github.com/topcoder-platform/tc-deploy-scripts.git
+          git -C /tmp/tc-deploy-scripts fetch --quiet --depth 1 origin refs/tags/v2.0.6
+          git -C /tmp/tc-deploy-scripts checkout --quiet --detach FETCH_HEAD
+          test "$(git -C /tmp/tc-deploy-scripts rev-parse HEAD)" = 26aaf607463d4a271c0099854c1731214215a9c5
 jobs:
-  # Build & Deploy against development backend
-  'build-dev':
-    !!merge <<: *defaults
-    environment:
-      DEPLOY_ENV: 'DEV'
-      LOGICAL_ENV: 'dev'
-      APPNAME: 'tc-ai-api'
-      DEPLOYMENT_ENVIRONMENT: 'dev'
-    steps: *builddeploy_steps
-
-  'build-prod':
-    !!merge <<: *defaults
-    environment:
-      DEPLOY_ENV: 'PROD'
-      LOGICAL_ENV: 'prod'
-      APPNAME: 'tc-ai-api'
-      DEPLOYMENT_ENVIRONMENT: 'prod'
-    steps: *builddeploy_steps
-
-workflows:
-  version: 2
   build:
+    executor: reviewed
+    steps:
+    - checkout-source
+    - setup_remote_docker
+    - checkout-suite
+    - run:
+        name: Build committed source without AWS or broker credentials
+        command: |
+          set -euo pipefail
+          python3 -I /tmp/tc-deploy-scripts/build_image.py --dockerfile Dockerfile --image tc-ai-api:candidate
+          mkdir -p /tmp/release
+          docker save --output /tmp/release/image.tar tc-ai-api:candidate
+        no_output_timeout: 30m
+    - persist_to_workspace:
+        root: /tmp/release
+        paths:
+        - image.tar
+  deploy:
+    executor: reviewed
+    parameters:
+      environment:
+        type: enum
+        enum:
+        - dev
+        - prod
+    environment:
+      DEPLOY_ENV: << parameters.environment >>
+    steps:
+    - checkout-source
+    - setup_remote_docker
+    - checkout-suite
+    - attach_workspace:
+        at: /tmp/release
+    - run:
+        name: Promote a scanned digest with repository-bound OIDC
+        command: |
+          set +x
+          set -euo pipefail
+          test -f "deploy/${DEPLOY_ENV}.json"
+          docker load --input /tmp/release/image.tar
+          python3 -I deploy/release.py "deploy/${DEPLOY_ENV}.json"
+        no_output_timeout: 45m
+workflows:
+  release:
     jobs:
-      # Development builds are executed on "develop" branch only.
-      - 'build-dev':
-          context: org-global
-          filters:
-            branches:
-              only:
-                - develop
-                - challenges-rag
-                - member-serach-tool
-            tags:
-                only: /^dev-.*/
-
-      # Production builds are exectuted only on tagged commits to the
-      # master branch.
-      - 'build-prod':
-          context: org-global
-          filters:
-            branches:
-              only:
-                - master
+    - build
+    - deploy:
+        name: deploy-dev
+        environment: dev
+        requires:
+        - build
+        context: tc-ai-api-dev-deploy
+        serial-group: << pipeline.project.slug >>/deploy-dev
+        filters:
+          branches:
+            only: develop
+          tags:
+            ignore: /.*/
+    - approve-prod:
+        type: approval
+        requires:
+        - build
+        filters:
+          branches:
+            only: master
+          tags:
+            ignore: /.*/
+    - deploy:
+        name: deploy-prod
+        environment: prod
+        requires:
+        - approve-prod
+        context: tc-ai-api-prod-deploy
+        serial-group: << pipeline.project.slug >>/deploy-prod
+        filters:
+          branches:
+            only: master
+          tags:
+            ignore: /.*/

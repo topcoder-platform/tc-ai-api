@@ -38,6 +38,7 @@ const MANAGED_ENV = [
     'DISABLE_AUTH',
     'ACCESS_CONTROL_DEFAULT_POLICY',
     'ACCESS_CONTROL_ROLES_CLAIM',
+    'ACCESS_CONTROL_BLOCKED_SUBJECTS',
 ];
 const originalEnv: Record<string, string | undefined> = {};
 
@@ -72,7 +73,7 @@ function memberUser(roles: string[] = []): Record<string, unknown> {
 }
 
 function m2mUser(scopes: string[] = []): Record<string, unknown> {
-    return { sub: 'client-id@clients', scope: scopes.join(' ') };
+    return { sub: 'client-id@clients', isMachine: true, scope: scopes.join(' ') };
 }
 
 /**
@@ -84,6 +85,54 @@ function authRequest(path: string) {
     const raw = new Request(`http://localhost${path}`);
     return { raw, headers: raw.headers, header: (n: string) => raw.headers.get(n) ?? undefined };
 }
+
+describe('blocked subject', () => {
+    beforeEach(() => {
+        process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS = 'auth0|500034025';
+    });
+
+    it.each([
+        '/v6/ai/agents/skillsMatchingAgent/generate',
+        '/v6/ai/agents/skillsMatchingAgent/stream',
+        '/v6/ai/memory/threads',
+        '/v6/ai/workspaces/workspace/fs/read',
+        '/v6/ai/tool-providers',
+        '/v6/ai/workflows/skillExtractionWorkflow/start',
+        '/v6/ai-chat/skillsMatchingAgent',
+        '/v6/ai-api/rag/challenges',
+    ])('denies %s even with administrator claims', (path) => {
+        const user = { ...memberUser(['administrator']), sub: 'auth0|500034025' };
+        expect(authorizeAccessPolicy(user, authRequest(path))).toBe(false);
+    });
+
+    it('does not block other subjects or trust an unrelated ID claim', () => {
+        // A public (unconfigured) agent path, so only the subject block could deny.
+        const request = authRequest('/v6/ai/agents/some-unregistered-agent/generate');
+        expect(authorizeAccessPolicy(memberUser(), request)).toBe(true);
+        expect(authorizeAccessPolicy({ ...memberUser(), id: 'auth0|500034025' }, request)).toBe(true);
+    });
+
+    it('supports multiple comma-separated subjects with whitespace and empty entries', () => {
+        process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS = ' auth0|500034025, , client-id@clients ,';
+        const request = authRequest('/v6/ai/memory/threads');
+        expect(authorizeAccessPolicy({ sub: 'auth0|500034025' }, request)).toBe(false);
+        expect(authorizeAccessPolicy(m2mUser(), request)).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(), request)).toBe(true);
+    });
+
+    it.each([undefined, '', ' ,  , '])('does not block any subject when the list is %s', (value) => {
+        if (value === undefined) delete process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS;
+        else process.env.ACCESS_CONTROL_BLOCKED_SUBJECTS = value;
+        expect(authorizeAccessPolicy({ sub: 'auth0|500034025' }, authRequest('/v6/ai/memory/threads'))).toBe(true);
+    });
+
+    it('matches complete, case-sensitive subjects rather than substrings', () => {
+        const request = authRequest('/v6/ai/memory/threads');
+        for (const sub of ['auth0|5000340250', 'auth0|50003402', 'AUTH0|500034025']) {
+            expect(authorizeAccessPolicy({ sub }, request)).toBe(true);
+        }
+    });
+});
 
 // ---------------------------------------------------------------------------
 // toAuthenticatedCaller
@@ -99,13 +148,19 @@ describe('toAuthenticatedCaller', () => {
         });
     });
 
-    it('treats a token without the TC userId claim as M2M and splits the scope claim', () => {
+    it('uses verified machine identity and splits the scope claim', () => {
         const caller = toAuthenticatedCaller(m2mUser(['challengesRAG:admin', 'read:challenges']));
         expect(caller).toEqual({
             isM2M: true,
             roles: [],
             scopes: ['challengesRAG:admin', 'read:challenges'],
         });
+    });
+
+    it('does not infer machine identity from a missing user ID or a scope claim', () => {
+        const user = { sub: 'human-subject', scope: 'ai:letstalk:classify', isMachine: false };
+        expect(toAuthenticatedCaller(user).isM2M).toBe(false);
+        expect(toAuthenticatedCaller({ sub: 'human-subject', scope: user.scope }).isM2M).toBe(false);
     });
 
     it('ignores a non-array roles claim and non-string entries', () => {
@@ -261,8 +316,59 @@ describe('resolveAccessPolicy', () => {
     });
 
     it('defaults an unconfigured target to public', () => {
-        expect(resolveAccessPolicy('agent', 'challenge-search-agent')).toEqual({ mode: 'public' });
-        expect(resolveAccessPolicy('tool', 'challenge-vector-query')).toEqual({ mode: 'public' });
+        expect(resolveAccessPolicy('agent', 'some-unregistered-agent')).toEqual({ mode: 'public' });
+        expect(resolveAccessPolicy('tool', 'fetch-challenge-by-id')).toEqual({ mode: 'public' });
+    });
+
+    it('keeps challenge-vector-query no weaker than the agent and workflow that wrap it', () => {
+        const tool = resolveAccessPolicy('tool', 'challenge-vector-query');
+        expect(tool).toEqual({ mode: 'restricted', roles: ['administrator', 'Talent Manager'] });
+        expect(tool).toEqual(resolveAccessPolicy('agent', 'challenge-search-agent'));
+        expect(tool).toEqual(resolveAccessPolicy('workflow', 'challenge-search'));
+    });
+
+    it('denies the body-targeted route families and restricts the catalogue by default', () => {
+        for (const slug of ['openai-compat', 'schedules', 'datasets']) {
+            expect(resolveAccessPolicy('route', slug)).toEqual({ mode: 'deny' });
+        }
+        expect(resolveAccessPolicy('route', 'catalog')).toEqual({ mode: 'restricted', roles: ['administrator'] });
+    });
+
+    it('resolves the skills / challenge-context pairs to the three-role member policy with no env set', () => {
+        const expected = {
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager', 'Copilot'],
+        };
+        expect(resolveAccessPolicy('agent', 'skillsMatchingAgent')).toEqual(expected);
+        expect(resolveAccessPolicy('workflow', 'skill-extraction-workflow')).toEqual(expected);
+        expect(resolveAccessPolicy('agent', 'challenge-parser-agent')).toEqual(expected);
+        expect(resolveAccessPolicy('workflow', 'challenge-context')).toEqual(expected);
+    });
+
+    it('resolves the challenge-search / jd pairs to the two-role member policy with no env set', () => {
+        const expected = {
+            mode: 'restricted',
+            roles: ['administrator', 'Talent Manager'],
+        };
+        expect(resolveAccessPolicy('agent', 'challenge-search-agent')).toEqual(expected);
+        expect(resolveAccessPolicy('workflow', 'challenge-search')).toEqual(expected);
+        expect(resolveAccessPolicy('agent', 'jd-rewriter-agent')).toEqual(expected);
+        expect(resolveAccessPolicy('workflow', 'jd-autowrite')).toEqual(expected);
+    });
+
+    it('keeps every agent/workflow pair in step (agent route is not a bypass of its workflow gate)', () => {
+        const pairs: [string, string][] = [
+            ['skillsMatchingAgent', 'skill-extraction-workflow'],
+            ['challenge-parser-agent', 'challenge-context'],
+            ['challenge-search-agent', 'challenge-search'],
+            ['jd-rewriter-agent', 'jd-autowrite'],
+            ['lets-talk-classifier-agent', 'lets-talk-classification'],
+        ];
+        for (const [agentId, workflowId] of pairs) {
+            expect(resolveAccessPolicy('agent', agentId)).toEqual(
+                resolveAccessPolicy('workflow', workflowId),
+            );
+        }
     });
 
     it('resolves fetch-challenge-resources to the baked-in restricted policy with no env set', () => {
@@ -297,7 +403,7 @@ describe('resolveAccessPolicy', () => {
 
     it('honours ACCESS_CONTROL_DEFAULT_POLICY=deny as the global default', () => {
         process.env.ACCESS_CONTROL_DEFAULT_POLICY = 'deny';
-        expect(resolveAccessPolicy('agent', 'challenge-search-agent')).toEqual({ mode: 'deny' });
+        expect(resolveAccessPolicy('agent', 'some-unregistered-agent')).toEqual({ mode: 'deny' });
         // ...but a code default still beats the global default.
         expect(resolveAccessPolicy('workflow', 'challenge-ingestion').mode).toBe('restricted');
     });
@@ -326,7 +432,7 @@ describe('resolveAccessPolicy', () => {
 
     it('throws on an invalid ACCESS_CONTROL_DEFAULT_POLICY', () => {
         process.env.ACCESS_CONTROL_DEFAULT_POLICY = 'open';
-        expect(() => resolveAccessPolicy('agent', 'jd-rewriter-agent')).toThrow(
+        expect(() => resolveAccessPolicy('agent', 'some-unregistered-agent')).toThrow(
             /ACCESS_CONTROL_DEFAULT_POLICY/,
         );
     });
@@ -359,8 +465,48 @@ describe('authorizeAccessPolicy', () => {
 
     it('allows an agent path with no configured policy, regardless of role/scope', () => {
         expect(
-            authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/agents/challenge-search-agent/generate')),
+            authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/agents/some-unregistered-agent/generate')),
         ).toBe(true);
+    });
+
+    it('lets a Copilot member into skills extraction but not JD rewriting', () => {
+        const skills = authRequest('/v6/ai/agents/skillsMatchingAgent/generate');
+        const skillsWf = authRequest('/v6/ai/workflows/skill-extraction-workflow/start-async');
+        const jd = authRequest('/v6/ai/agents/jd-rewriter-agent/generate');
+        const jdWf = authRequest('/v6/ai/workflows/jd-autowrite/start-async');
+
+        expect(authorizeAccessPolicy(memberUser(['copilot']), skills)).toBe(true);
+        expect(authorizeAccessPolicy(memberUser(['copilot']), skillsWf)).toBe(true);
+        expect(authorizeAccessPolicy(memberUser(['copilot']), jd)).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(['copilot']), jdWf)).toBe(false);
+
+        expect(authorizeAccessPolicy(memberUser(['Talent Manager']), jd)).toBe(true);
+        expect(authorizeAccessPolicy(memberUser(['administrator']), jdWf)).toBe(true);
+    });
+
+    it('denies a plain member and every M2M caller on the member-facing agents and workflows', () => {
+        const paths = [
+            '/v6/ai/agents/skillsMatchingAgent/generate',
+            '/v6/ai-chat/skillsMatchingAgent',
+            '/v6/ai/workflows/skill-extraction-workflow/start-async',
+            '/v6/ai/agents/challenge-parser-agent/generate',
+            '/v6/ai/workflows/challenge-context/start-async',
+            '/v6/ai/agents/challenge-search-agent/generate',
+            '/v6/ai-chat/challenge-search-agent',
+            '/v6/ai/workflows/challenge-search/start-async',
+            '/v6/ai/agents/jd-rewriter-agent/generate',
+            '/v6/ai/workflows/jd-autowrite/start-async',
+            // registry-key spellings must be gated identically
+            '/v6/ai/agents/challengeSearchAgent/generate',
+            '/v6/ai/workflows/skillExtractionWorkflow/start-async',
+            '/v6/ai/workflows/jdAutowriteWorkflow/start-async',
+        ];
+        for (const path of paths) {
+            expect(authorizeAccessPolicy(memberUser([]), authRequest(path))).toBe(false);
+            expect(authorizeAccessPolicy(memberUser(['Topcoder User']), authRequest(path))).toBe(false);
+            expect(authorizeAccessPolicy(m2mUser(['challengesRAG:admin', 'sys1:use']), authRequest(path))).toBe(false);
+            expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(true);
+        }
     });
 
     it('resolves the chatRoute path to category agent and applies that agent policy', () => {
@@ -377,12 +523,86 @@ describe('authorizeAccessPolicy', () => {
         ).toBe(false);
     });
 
-    it('allows out-of-scope apiPrefix paths (memory, threads, telemetry)', () => {
+    it('allows only the allowlisted uncategorised families (memory, workspaces)', () => {
         expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/memory/threads'))).toBe(true);
-        expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/telemetry'))).toBe(true);
+        expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/memory/threads/t1/messages'))).toBe(true);
+        expect(authorizeAccessPolicy(m2mUser([]), authRequest('/v6/ai/memory/status'))).toBe(true);
+        expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/workspaces'))).toBe(true);
+        expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/workspaces/ws/fs/read'))).toBe(true);
     });
 
-    it('re-asserts the MastraAuthAuth0 baseline checks it shadows', () => {
+    it('fails closed on every other uncategorised path, even for administrators', () => {
+        const paths = [
+            '/v6/ai/telemetry',
+            '/v6/ai/observability/traces',
+            '/v6/ai/stored/agents',
+            '/v6/ai/editor/builder/settings',
+            '/v6/ai/agent-builder',
+            '/v6/ai/agent-controller',
+            '/v6/ai/vector/pg/query',
+            '/v6/ai/mcp/v0/servers',
+            '/v6/ai/scores',
+            '/v6/ai/logs',
+            '/v6/ai/auth/credentials/sign-up',
+            '/v6/ai/memories', // prefix must match a whole segment, not a substring
+        ];
+        for (const path of paths) {
+            expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(false);
+            expect(authorizeAccessPolicy(m2mUser(['challengesRAG:admin', 'sys1:use']), authRequest(path))).toBe(false);
+        }
+    });
+
+    it('resolves the A2A path to category agent and applies that agent policy', () => {
+        // lets-talk-classifier-agent is M2M-only; A2A must not be a member bypass.
+        const a2a = (id: string) => authRequest(`/v6/ai/a2a/${id}`);
+        expect(authorizeAccessPolicy(memberUser(['administrator']), a2a('lets-talk-classifier-agent'))).toBe(false);
+        expect(authorizeAccessPolicy(m2mUser(['ai:letstalk:classify']), a2a('lets-talk-classifier-agent'))).toBe(true);
+        // ...and the member-facing agents keep their role gate on this path too.
+        expect(authorizeAccessPolicy(memberUser([]), a2a('jd-rewriter-agent'))).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(['Talent Manager']), a2a('jd-rewriter-agent'))).toBe(true);
+        expect(authorizeAccessPolicy(memberUser(['copilot']), a2a('jdRewriterAgent'))).toBe(false);
+    });
+
+    it('denies the body-targeted Mastra families (OpenAI-compat, schedules, datasets) for everyone', () => {
+        const paths = [
+            '/v6/ai/v1/responses',
+            '/v6/ai/v1/conversations',
+            '/v6/ai/schedules',
+            '/v6/ai/schedules/s1/run',
+            '/v6/ai/datasets',
+            '/v6/ai/datasets/d1/experiments/e1/items/i1/run',
+            '/v6/ai/experiments',
+        ];
+        for (const path of paths) {
+            expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(false);
+            expect(authorizeAccessPolicy(m2mUser(['challengesRAG:admin', 'sys1:use']), authRequest(path))).toBe(false);
+        }
+    });
+
+    it('lets an env override re-open a denied route family for a named consumer', () => {
+        process.env.ACCESS_POLICY_ROUTE_SCHEDULES_ROLES = 'administrator';
+        _resetAccessPolicyCache();
+        expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest('/v6/ai/schedules'))).toBe(true);
+        expect(authorizeAccessPolicy(memberUser(['Talent Manager']), authRequest('/v6/ai/schedules'))).toBe(false);
+        expect(authorizeAccessPolicy(m2mUser(['sys1:use']), authRequest('/v6/ai/schedules'))).toBe(false);
+    });
+
+    it('restricts the bare catalogue listings to administrators without touching the /:id routes', () => {
+        for (const path of ['/v6/ai/agents', '/v6/ai/workflows', '/v6/ai/tools', '/v6/ai/system/packages']) {
+            expect(authorizeAccessPolicy(memberUser(['Talent Manager']), authRequest(path))).toBe(false);
+            expect(authorizeAccessPolicy(m2mUser(['sys1:use']), authRequest(path))).toBe(false);
+            expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest(path))).toBe(true);
+        }
+        // /agents/:id is still the agent's own policy, not the catalogue slug.
+        expect(
+            authorizeAccessPolicy(memberUser(['Talent Manager']), authRequest('/v6/ai/agents/jd-rewriter-agent')),
+        ).toBe(true);
+        expect(
+            authorizeAccessPolicy(memberUser(['Talent Manager']), authRequest('/v6/ai/tools/challenge-vector-query/execute')),
+        ).toBe(true);
+    });
+
+    it('preserves the subject and expiry authorization checks', () => {
         // No sub/id at all.
         expect(authorizeAccessPolicy({ [USERID_CLAIM]: '1' }, authRequest(INGEST))).toBe(false);
         expect(authorizeAccessPolicy(null, authRequest(INGEST))).toBe(false);
@@ -531,16 +751,62 @@ describe('registry-key aliases', () => {
         });
     });
 
+    /**
+     * The object-property names under `agents: { ... }` / `workflows: { ... }`
+     * in src/mastra/index.ts, read from source so this suite needs neither a
+     * database nor a model provider to know the registry.
+     */
+    function registryKeysFromSource(category: 'agent' | 'workflow'): string[] {
+        const source = readFileSync(join(__dirname, '../../mastra/index.ts'), 'utf8');
+        const block = new RegExp(`^\\s*${category}s:\\s*\\{([\\s\\S]*?)^\\s*\\},`, 'm').exec(source);
+        if (!block) throw new Error(`no ${category}s block found in src/mastra/index.ts`);
+        return block[1]
+            .split('\n')
+            .map(line => line.replace(/\/\/.*$/, '').trim().replace(/,$/, ''))
+            .filter(line => /^[A-Za-z_$][\w$]*$/.test(line));
+    }
+
+    it('reads the registry keys from src/mastra/index.ts', () => {
+        expect(registryKeysFromSource('agent')).toContain('skillsMatchingAgent');
+        expect(registryKeysFromSource('agent')).toContain('challengeSearchAgent');
+        expect(registryKeysFromSource('workflow')).toContain('skillExtractionWorkflow');
+        expect(registryKeysFromSource('workflow')).toContain('systemOneWorkflow');
+    });
+
     it('has an alias entry for every restricted code default whose key differs', () => {
         // Guards the standing footgun: adding a restricted entry keyed on `.id`
-        // without registering its registry key leaves the alias open.
-        const restrictedWorkflowIds = Object.entries(DEFAULT_ACCESS_POLICIES.workflow)
-            .filter(([, policy]) => policy.mode !== 'public')
-            .map(([id]) => id);
-        const aliasTargets = Object.values(TARGET_ID_ALIASES.workflow);
+        // without registering its registry key leaves the alias open. A policy
+        // id is covered when it IS a registry key (both spellings coincide) or
+        // when some registry key aliases to it. Derived from the registry
+        // source rather than a hand-maintained exception list, so renaming an
+        // id without an alias fails here instead of silently resolving public.
+        for (const category of ['agent', 'workflow'] as const) {
+            const restrictedIds = Object.entries(DEFAULT_ACCESS_POLICIES[category])
+                .filter(([, policy]) => policy.mode !== 'public')
+                .map(([id]) => id);
+            const covered = new Set([
+                ...registryKeysFromSource(category),
+                ...Object.values(TARGET_ID_ALIASES[category]),
+            ]);
 
-        for (const id of restrictedWorkflowIds) {
-            expect(aliasTargets).toContain(id);
+            for (const id of restrictedIds) {
+                expect(covered, `${category} "${id}" is neither a registry key nor an alias target`).toContain(id);
+            }
+        }
+    });
+
+    it('aliases every registry key whose spelling differs from its policy id', () => {
+        // The inverse guard: a registration whose key differs from any policy
+        // id or alias target would be a second, ungated spelling.
+        for (const category of ['agent', 'workflow'] as const) {
+            const policyIds = new Set(Object.keys(DEFAULT_ACCESS_POLICIES[category]));
+            const aliasKeys = new Set(Object.keys(TARGET_ID_ALIASES[category]));
+            for (const key of registryKeysFromSource(category)) {
+                expect(
+                    policyIds.has(key) || aliasKeys.has(key),
+                    `${category} registry key "${key}" has neither a policy keyed on it nor an alias entry`,
+                ).toBe(true);
+            }
         }
     });
 });
@@ -572,11 +838,13 @@ describe('route policies', () => {
     });
 
     it('does not match a path that merely starts with the same prefix', () => {
-        // /challenges-export would be a different route and must not inherit
-        // the policy by accident.
-        expect(
-            authorizeAccessPolicy(memberUser(['copilot']), authRequest('/v6/ai-api/rag/challenges-export')),
-        ).toBe(true);
+        // /challenges-export is a different (unregistered) route. It must not
+        // inherit the rag-challenges policy — it is uncategorised and therefore
+        // fails closed for everyone, including the callers rag-challenges admits.
+        const path = authRequest('/v6/ai-api/rag/challenges-export');
+        expect(authorizeAccessPolicy(memberUser(['copilot']), path)).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(['administrator']), path)).toBe(false);
+        expect(authorizeAccessPolicy(m2mUser(['challengesRAG:admin']), path)).toBe(false);
     });
 
     it('is overridable by env like any other category', () => {
@@ -678,11 +946,12 @@ describe('tool paths (ADR 0009 C1)', () => {
         ).toBe(false);
     });
 
-    it('leaves public tools and the tool listing open', () => {
+    it('leaves public tools open but restricts the bare tool listing to administrators', () => {
         expect(
             authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/tools/search-challenges/execute')),
         ).toBe(true);
-        expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/tools'))).toBe(true);
+        expect(authorizeAccessPolicy(memberUser([]), authRequest('/v6/ai/tools'))).toBe(false);
+        expect(authorizeAccessPolicy(memberUser(['administrator']), authRequest('/v6/ai/tools'))).toBe(true);
     });
 
     it('matches /agents/:agentId/tools/:toolId as an agent path first', () => {
