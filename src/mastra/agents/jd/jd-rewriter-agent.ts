@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { createModel } from '../../../utils';
 
 const PROVIDER_NAME = process.env.JD_REWRITER_AI_PROVIDER || 'AWSBedrock';
-const MODEL_ID = process.env.JD_REWRITER_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const MODEL_ID = process.env.JD_REWRITER_AI_MODEL_ID || 'us.anthropic.claude-haiku-5-5';
 const AGENT_ID = 'jd-rewriter-agent';
 
 // The rewrite emits every structured section AND a full Markdown posting

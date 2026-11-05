@@ -124,8 +124,8 @@ tc-ai-api/
 | `SYS1_TIMEOUT_MS`                   | No       | `30000`                                | Per System One provider call                                      |
 | `SYS1_KEEP_ALIVE`                   | No       | Ollama server default (5m)             | Sent as `keep_alive` (`5m`, or seconds; `0` unloads, negative pins). Callers can't set it |
 | `LETS_TALK_CLASSIFIER_AI_PROVIDER`  | No       | `AWSBedrock`                           | Model provider for `lets-talk-classifier-agent` ([ADR 0010](docs/adr/0010-lets-talk-classification.md)) |
-| `LETS_TALK_CLASSIFIER_AI_MODEL_ID`  | No       | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model id for `lets-talk-classifier-agent`                  |
-| `LETS_TALK_CLASSIFIER_MAX_OUTPUT_TOKENS` | No  | `1024`                                 | Output token cap per classification call                          |
+| `LETS_TALK_CLASSIFIER_AI_MODEL_ID`  | No       | `us.anthropic.claude-haiku-5-5` | Model id for `lets-talk-classifier-agent`                  |
+| `LETS_TALK_CLASSIFIER_MAX_OUTPUT_TOKENS` | No  | `4096`                                 | Output token cap per classification call                          |
 | `LETS_TALK_CLASSIFIER_MAX_RETRIES`  | No       | `2`                                    | L0 — AI SDK transport retries (throttling, 5xx, network)          |
 | `LETS_TALK_CLASSIFIER_MAX_PROCESSOR_RETRIES` | No | `2`                                 | L2 — feedback retries of an invalid model answer, per call        |
 | `LETS_TALK_CLASSIFY_MAX_ATTEMPTS`   | No       | `2`                                    | L4 — corrective attempts in total; then the run fails             |
@@ -158,7 +158,7 @@ tc-ai-api/
 | `RAG_CHUNK_OVERLAP`                 | No       | `50`                                   | Character overlap between recursively-split chunks                |
 | `RAG_TOP_K`                         | No       | `10`                                   | Default result count for challenge vector search                  |
 | `CHALLENGE_SEARCH_AI_PROVIDER`      | No       | `AWSBedrock`                           | Model provider for `challenge-search-agent`                       |
-| `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-4-5`        | Model id for `challenge-search-agent`                              |
+| `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-5-5`        | Model id for `challenge-search-agent`                              |
 | `BEDROCK_PROMPT_CACHE_ENABLED`      | No       | `true`                                 | Global kill switch for Bedrock prompt caching (see below)         |
 | `BEDROCK_PROMPT_CACHE_TTL`          | No       | `5m`                                   | Bedrock cache checkpoint TTL — `5m` or `1h`                       |
 | `ACCESS_CONTROL_DEFAULT_POLICY`     | No       | `public`                               | Global fallback policy for any agent/workflow/tool with no explicit policy — `public` or `deny` |
@@ -415,10 +415,10 @@ Four agents are registered in `src/mastra/index.ts`, all built via the shared `c
 
 | Agent (registry key) | ID | Default model | Memory | Tools |
 | --- | --- | --- | --- | --- |
-| `skillsMatchingAgent` | `skillsMatchingAgent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | PostgreSQL-backed | — (workflow calls skill tools directly) |
+| `skillsMatchingAgent` | `skillsMatchingAgent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | PostgreSQL-backed | — (workflow calls skill tools directly) |
 | `challengeParserAgent` | `challenge-parser-agent` | AWSBedrock `us.anthropic.claude-sonnet-5` | — | — (structured-output extractor) |
-| `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
-| `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | — | — (structured-output rewriter) |
+| `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
+| `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | — | — (structured-output rewriter) |
 
 Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_MODEL_ID` env vars (e.g. `SKILLS_EXTRACTOR_AI_PROVIDER`, `CHALLENGE_PARSER_AI_PROVIDER`, `CHALLENGE_SEARCH_AI_PROVIDER`, `JD_REWRITER_AI_PROVIDER`).
 
@@ -429,7 +429,7 @@ Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_M
 | Property    | Value                                        |
 | ----------- | -------------------------------------------- |
 | **ID**      | `skillsMatchingAgent`                        |
-| **Model**   | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default |
+| **Model**   | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default |
 | **Memory**  | PostgreSQL-backed conversation memory        |
 | **Scorers** | Answer Relevancy, Prompt Alignment — sampled, only when `LOCAL_DEV=true` |
 
@@ -460,7 +460,7 @@ Reads a full challenge specification (public + private description, skills, meta
 | Property   | Value                                                          |
 | ---------- | --------------------------------------------------------------- |
 | **ID**     | `challenge-search-agent`                                       |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5')` by default |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default |
 | **Memory** | In-memory only (`Memory({ options: { lastMessages: 10 } })`) — no persistent storage backend, unlike `skillsMatchingAgent` |
 | **Tools**  | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
 
@@ -473,7 +473,7 @@ Can also answer "who's on this challenge" questions — copilot, reviewers, regi
 | Property   | Value                                                                       |
 | ---------- | ----------------------------------------------------------------------------- |
 | **ID**     | `jd-rewriter-agent`                                                          |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default |
 | **Memory** | None                                                                         |
 | **Tools**  | None — pure structured-output rewriter                                      |
 
@@ -484,7 +484,7 @@ Rewrites a raw/rough job description into Topcoder's canonical structured format
 | Property   | Value                                                                       |
 | ---------- | ----------------------------------------------------------------------------- |
 | **ID**     | `lets-talk-classifier-agent`                                                 |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default, `temperature: 0` |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default, `temperature: 0` |
 | **Memory** | None — stateless                                                             |
 | **Tools**  | None. Output processor: `StructuredOutputValidator` (L2 feedback retries)    |
 

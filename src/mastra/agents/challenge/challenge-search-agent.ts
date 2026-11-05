@@ -11,7 +11,7 @@ import { searchMembersTool } from '../../tools/member/search-members-tool';
 import { resolveTcDomain } from '../../../utils/auth/tc-domain';
 
 const PROVIDER_NAME = process.env.CHALLENGE_SEARCH_AI_PROVIDER || 'AWSBedrock';
-const MODEL_ID = process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const MODEL_ID = process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-5-5';
 const AGENT_ID = 'challenge-search-agent';
 
 // resolveTcDomain() derives the member-facing domain from TC_API_BASE, so the

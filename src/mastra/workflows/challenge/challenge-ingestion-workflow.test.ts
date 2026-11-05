@@ -84,7 +84,7 @@ function baseConfig(overrides: Record<string, unknown> = {}) {
         chunkMaxSize: 512,
         chunkOverlap: 50,
         topK: 10,
-        challengeSearchAI: { provider: 'AWSBedrock', modelId: 'us.anthropic.claude-haiku-4-5' },
+        challengeSearchAI: { provider: 'AWSBedrock', modelId: 'us.anthropic.claude-haiku-5-5' },
         database: { connectionString: undefined, schemaName: 'ai' },
         knownTypes: [],
         knownTracks: [],
