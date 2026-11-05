@@ -90,8 +90,8 @@ importers:
         specifier: ^1.0.21
         version: 1.0.21
       tc-core-library-js:
-        specifier: https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/58de37670180e183e8378c3d203df0112a0414f6
-        version: https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/58de37670180e183e8378c3d203df0112a0414f6
+        specifier: https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/2067e74f73d7fe3442c96f375fc97f8486f79be4
+        version: https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/2067e74f73d7fe3442c96f375fc97f8486f79be4
       turndown:
         specifier: ^7.2.4
         version: 7.2.4
@@ -3196,9 +3196,9 @@ packages:
   tar-stream@3.2.2:
     resolution: {integrity: sha512-+8NeqHRjQWH9nYlwo2gamAMImZCVzI4UoEgDpWorBt9OEfppiZn+uSkskzQKPWIZyji/C8fpWO7u69G0DX0tbg==}
 
-  tc-core-library-js@https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/58de37670180e183e8378c3d203df0112a0414f6:
-    resolution: {tarball: https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/58de37670180e183e8378c3d203df0112a0414f6}
-    version: 4.0.0-rc.2
+  tc-core-library-js@https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/2067e74f73d7fe3442c96f375fc97f8486f79be4:
+    resolution: {gitHosted: true, integrity: sha512-4xzx6ycEdy8Rs5BpIOUhg/YX0cUUQpOCtTM60vcb9JF4XvqI1fLfIDmHNvZNek49dBo1Il1Lp8O/HLhKfLhhVg==, tarball: https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/2067e74f73d7fe3442c96f375fc97f8486f79be4}
+    version: 4.0.0-rc.4
     engines: {node: '>=22.13'}
 
   teex@1.0.1:
@@ -6919,7 +6919,7 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  tc-core-library-js@https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/58de37670180e183e8378c3d203df0112a0414f6:
+  tc-core-library-js@https://codeload.github.com/topcoder-platform/tc-core-library-js/tar.gz/2067e74f73d7fe3442c96f375fc97f8486f79be4:
     dependencies:
       '@types/jsonwebtoken': 9.0.10
       jsonwebtoken: 9.0.3
