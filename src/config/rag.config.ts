@@ -150,7 +150,7 @@ export function getRagConfig(): RagConfig {
     const challengeSearchProvider =
         process.env.CHALLENGE_SEARCH_AI_PROVIDER || 'AWSBedrock';
     const challengeSearchModelId =
-        process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5';
+        process.env.CHALLENGE_SEARCH_AI_MODEL_ID || 'us.anthropic.claude-haiku-5-5';
 
     const connectionString = process.env.MASTRA_DB_CONNECTION;
     // Validated for the same reason as vectorIndexName: it is interpolated

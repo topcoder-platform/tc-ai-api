@@ -56,7 +56,7 @@ describe('lets-talk-classification.config — getLetsTalkClassificationConfig', 
             maxTransportRetries: 2,
             maxProcessorRetries: 2,
             maxAttempts: 2,
-            maxOutputTokens: 1024,
+            maxOutputTokens: 4096,
         });
     });
 

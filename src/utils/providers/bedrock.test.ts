@@ -39,6 +39,7 @@ const REQUEST_METADATA_MARKER = '__requestMetadataMiddleware';
 
 describe('bedrock — isCacheCapableBedrockModel', () => {
     it.each([
+        'us.anthropic.claude-haiku-5-5',
         'us.anthropic.claude-haiku-4-5-20251001-v1:0',
         'us.anthropic.claude-sonnet-5',
         'anthropic.claude-sonnet-5',
@@ -70,7 +71,7 @@ describe('bedrock — isCacheCapableBedrockModel', () => {
 });
 
 describe('bedrock — createBedrockChatModel middleware composition', () => {
-    const CACHE_CAPABLE_MODEL = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+    const CACHE_CAPABLE_MODEL = 'us.anthropic.claude-haiku-5-5';
     const NON_CACHE_CAPABLE_MODEL = 'amazon.titan-text-express-v1';
 
     let originalCacheEnabled: string | undefined;
@@ -193,7 +194,7 @@ describe('bedrock — createBedrockChatModel middleware composition', () => {
 });
 
 describe('bedrock — cache middleware behavior', () => {
-    const CACHE_CAPABLE_MODEL = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+    const CACHE_CAPABLE_MODEL = 'us.anthropic.claude-haiku-5-5';
 
     beforeEach(() => {
         vi.clearAllMocks();

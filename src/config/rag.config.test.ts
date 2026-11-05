@@ -228,11 +228,11 @@ describe('rag.config — getRagConfig', () => {
     });
 
     describe('challenge search AI config', () => {
-        it('defaults to AWSBedrock/us.anthropic.claude-haiku-4-5', () => {
+        it('defaults to AWSBedrock/us.anthropic.claude-haiku-5-5', () => {
             const config = getRagConfig();
             expect(config.challengeSearchAI.provider).toBe('AWSBedrock');
             expect(config.challengeSearchAI.modelId).toBe(
-                'us.anthropic.claude-haiku-4-5',
+                'us.anthropic.claude-haiku-5-5',
             );
         });
 
