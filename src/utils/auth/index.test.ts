@@ -54,6 +54,7 @@ function token(claims: Record<string, unknown> = {}, signingKey = key.privateKey
       aud: 'member-api',
       sub: 'auth0|123',
       exp: now() + 300,
+      emailVerified: true,
       [userIdClaim]: '123',
       [rolesClaim]: ['administrator'],
       ...claims,
