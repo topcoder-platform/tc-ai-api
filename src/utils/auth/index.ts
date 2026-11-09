@@ -10,7 +10,7 @@ import { tcUserIdClaimKey } from './tc-domain';
 import { SharedJwtAuth } from './shared-jwt-auth';
 
 const mapUserToResourceId = (user: Record<string, unknown>): string | undefined => {
-  const userId = user[tcUserIdClaimKey()];
+  const userId = user.userId ?? user[tcUserIdClaimKey()];
   if (typeof userId === 'string' || typeof userId === 'number') return String(userId);
   // M2M tokens don't carry the TC userId claim; fall back to the subject
   return typeof user.sub === 'string' ? user.sub : undefined;
@@ -46,9 +46,21 @@ function authProvider(domain: string | undefined, audience: string | undefined):
   });
 }
 
-export const apiAuthLayer = new CompositeAuth([
-  // TC Member Auth0 JWTs
-  authProvider(process.env.AUTH0_DOMAIN, process.env.AUTH0_AUDIENCE),
-  // TC M2M Auth0 JWTs
-  authProvider(process.env.AUTH0_M2M_DOMAIN, process.env.AUTH0_M2M_AUDIENCE),
-]);
+export const apiAuthLayer = process.env.JWT_ISSUER_POLICIES
+  ? new CompositeAuth([
+      new SharedJwtAuth({
+        jwt: {
+          JWT_ISSUER_POLICIES: process.env.JWT_ISSUER_POLICIES,
+          AUTH0_AUDIENCE: process.env.AUTH0_M2M_AUDIENCE,
+        },
+        protected: PROTECTED_PATHS,
+        public: PUBLIC_PATHS,
+        mapUserToResourceId,
+      }),
+    ])
+  : new CompositeAuth([
+      // TC Member Auth0 JWTs
+      authProvider(process.env.AUTH0_DOMAIN, process.env.AUTH0_AUDIENCE),
+      // TC M2M Auth0 JWTs
+      authProvider(process.env.AUTH0_M2M_DOMAIN, process.env.AUTH0_M2M_AUDIENCE),
+    ]);

@@ -15,7 +15,10 @@ vi.mock('tc-core-library-js', async (importOriginal) => {
     createJwtVerifier: vi.fn((config: JwtConfiguration) =>
       actual.createJwtVerifier({
         ...config,
-        issuers: config.issuers?.map((policy) => ({ ...policy, jwksUri: transport.jwksUri })),
+        issuers: (config.JWT_ISSUER_POLICIES
+          ? (JSON.parse(config.JWT_ISSUER_POLICIES) as NonNullable<JwtConfiguration['issuers']>)
+          : config.issuers
+        )?.map((policy) => ({ ...policy, jwksUri: transport.jwksUri })),
       }),
     ),
   };
@@ -53,6 +56,7 @@ function token(claims: Record<string, unknown> = {}, signingKey = key.privateKey
       iss: memberIssuer,
       aud: 'member-api',
       sub: 'auth0|123',
+      iat: now(),
       exp: now() + 300,
       emailVerified: true,
       [userIdClaim]: '123',
@@ -86,6 +90,19 @@ beforeAll(async () => {
   vi.stubEnv('AUTH0_M2M_AUDIENCE', 'machine-api');
   vi.stubEnv('TC_API_BASE', 'https://api.topcoder-dev.com');
   vi.stubEnv('SWAGGER_UI_ENABLED', 'false');
+  vi.stubEnv(
+    'JWT_ISSUER_POLICIES',
+    JSON.stringify([
+      { issuer: memberIssuer, algorithm: 'RS256', audience: 'member-api' },
+      { issuer: machineIssuer, algorithm: 'RS256', audience: 'machine-api' },
+      {
+        issuer: 'https://identity.example.test',
+        algorithm: 'RS256',
+        audience: 'identity-api',
+        jwksUri: 'https://identity.example.test/v6/authorizations/.well-known/jwks.json',
+      },
+    ]),
+  );
   auth = (await import('./index')).apiAuthLayer;
 });
 
@@ -97,6 +114,23 @@ afterAll(async () => {
 });
 
 describe('shared JWT authentication through Mastra', () => {
+  it('accepts Identity tokens and maps their normalized user ID to the same resource', async () => {
+    const user = await auth.authenticateToken(
+      token({
+        iss: 'https://identity.example.test',
+        aud: 'identity-api',
+        sub: 'topcoder|123',
+        userId: '123',
+        roles: ['administrator'],
+        [userIdClaim]: undefined,
+        [rolesClaim]: undefined,
+      }),
+      request(),
+    );
+    expect(user).toMatchObject({ userId: '123', isMachine: false, roles: ['administrator'] });
+    expect(auth.mapUserToResourceId?.(user)).toBe('123');
+  });
+
   it('preserves member claims, resource isolation, and administrator access', async () => {
     const user = await auth.authenticateToken(token(), request());
     expect(user).toMatchObject({
@@ -179,7 +213,7 @@ describe('shared JWT authentication through Mastra', () => {
     await auth.authenticateToken(token(), request());
     await auth.authenticateToken(machineToken(), request());
     const before = jwksRequests;
-    expect(before).toBe(2);
+    expect(before).toBe(3);
     await auth.authenticateToken(token(), request());
     await auth.authenticateToken(machineToken(), request());
     expect(jwksRequests).toBe(before);
@@ -203,6 +237,7 @@ describe('shared JWT authentication through Mastra', () => {
   });
 
   it('fails at startup if a trusted tenant audience is missing', async () => {
+    vi.stubEnv('JWT_ISSUER_POLICIES', '');
     vi.stubEnv('AUTH0_M2M_AUDIENCE', '');
     vi.resetModules();
     await expect(import('./index')).rejects.toThrow('Auth0 domain and audience are required');
