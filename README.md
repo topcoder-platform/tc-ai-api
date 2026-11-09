@@ -161,6 +161,7 @@ tc-ai-api/
 | `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-5-5`        | Model id for `challenge-search-agent`                              |
 | `BEDROCK_PROMPT_CACHE_ENABLED`      | No       | `true`                                 | Global kill switch for Bedrock prompt caching (see below)         |
 | `BEDROCK_PROMPT_CACHE_TTL`          | No       | `5m`                                   | Bedrock cache checkpoint TTL — `5m` or `1h`                       |
+| `BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS` | No | — | Comma-separated application inference profile ARNs backed by a Claude 3.5+ model. Required when an `*_AI_MODEL_ID` is such an ARN: enables Claude handling (structured output without forced tool use) and prompt caching for it |
 | `ACCESS_CONTROL_DEFAULT_POLICY`     | No       | `public`                               | Global fallback policy for any agent/workflow/tool with no explicit policy — `public` or `deny` |
 | `ACCESS_CONTROL_ROLES_CLAIM`        | No       | `https://<TC_API_BASE domain>/roles`   | JWT claim key carrying member role names — override only if a tenant diverges from the convention |
 | `ACCESS_CONTROL_BLOCKED_SUBJECTS`   | No       | empty                                  | Comma-separated JWT subjects denied across protected API routes, before role/scope policies |
@@ -463,7 +464,7 @@ Four agents are registered in `src/mastra/index.ts`, all built via the shared `c
 | Agent (registry key) | ID | Default model | Memory | Tools |
 | --- | --- | --- | --- | --- |
 | `skillsMatchingAgent` | `skillsMatchingAgent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | PostgreSQL-backed | — (workflow calls skill tools directly) |
-| `challengeParserAgent` | `challenge-parser-agent` | AWSBedrock `us.anthropic.claude-sonnet-5` | — | — (structured-output extractor) |
+| `challengeParserAgent` | `challenge-parser-agent` | AWSBedrock `us.anthropic.claude-sonnet-5-5` | — | — (structured-output extractor) |
 | `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
 | `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | — | — (structured-output rewriter) |
 
@@ -497,7 +498,7 @@ The agent is used within the workflow's `generateSkillCandidateTerms` step via i
 | Property   | Value                                                          |
 | ---------- | --------------------------------------------------------------- |
 | **ID**     | `challenge-parser-agent`                                       |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-sonnet-5')` by default |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-sonnet-5-5')` by default |
 | **Memory** | None                                                            |
 | **Tools**  | None — pure structured-output extractor                        |
 | **Access** | `restricted` — `roles: ['administrator', 'Talent Manager', 'Copilot']`, no `scopes` (all M2M callers denied) — same gate as `challenge-context` |
