@@ -3,7 +3,7 @@ import { remoteAssetGuard } from '../../processors/remote-asset-guard';
 import { createModel } from '../../../utils';
 
 const PROVIDER_NAME = process.env.CHALLENGE_PARSER_AI_PROVIDER || 'AWSBedrock';
-const MODEL_ID = process.env.CHALLENGE_PARSER_AI_MODEL_ID || 'us.anthropic.claude-sonnet-5';
+const MODEL_ID = process.env.CHALLENGE_PARSER_AI_MODEL_ID || 'us.anthropic.claude-sonnet-5-5';
 const AGENT_ID = 'challenge-parser-agent';
 
 // Requirements extraction emits one object per requirement (id, title, a

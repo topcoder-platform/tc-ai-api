@@ -313,3 +313,73 @@ describe('bedrock — cache middleware behavior', () => {
         );
     });
 });
+
+describe('bedrock — Claude application inference profiles', () => {
+    const PROFILE_ARN = 'arn:aws:bedrock:us-east-1:111122223333:application-inference-profile/abc123xyz';
+    const OTHER_PROFILE_ARN = 'arn:aws:bedrock:us-east-1:111122223333:application-inference-profile/other456';
+
+    let originalProfileArns: string | undefined;
+    let providerCalls: unknown[][];
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        originalProfileArns = process.env.BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS;
+        delete process.env.BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS;
+        providerCalls = [];
+        mockCreateAmazonBedrock.mockImplementation(() => (...args: unknown[]) => {
+            providerCalls.push(args);
+            return { modelId: args[0] };
+        });
+        mockWrapLanguageModel.mockImplementation((opts: { model: unknown; middleware: unknown[] }) => ({
+            __wrapped: true,
+            ...opts,
+        }));
+        mockDefaultSettingsMiddleware.mockImplementation((opts: unknown) => ({
+            [REQUEST_METADATA_MARKER]: true,
+            opts,
+        }));
+    });
+
+    afterEach(() => {
+        if (originalProfileArns === undefined) {
+            delete process.env.BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS;
+        } else {
+            process.env.BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS = originalProfileArns;
+        }
+    });
+
+    it('treats an unlisted profile ARN as unknown: no modelFamily, not cache-capable', () => {
+        expect(isCacheCapableBedrockModel(PROFILE_ARN)).toBe(false);
+
+        createBedrockChatModel(PROFILE_ARN, 'test-agent');
+
+        expect(providerCalls).toEqual([[PROFILE_ARN]]);
+    });
+
+    it('passes modelFamily "anthropic" and enables caching for a listed profile ARN', () => {
+        process.env.BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS = ` ${OTHER_PROFILE_ARN} , ${PROFILE_ARN} `;
+
+        expect(isCacheCapableBedrockModel(PROFILE_ARN)).toBe(true);
+
+        const result = createBedrockChatModel(PROFILE_ARN, 'test-agent') as unknown as { middleware: unknown[] };
+
+        expect(providerCalls).toEqual([[PROFILE_ARN, { modelFamily: 'anthropic' }]]);
+        expect(result.middleware).toHaveLength(2);
+    });
+
+    it('leaves plain model IDs unchanged when the profile list is set', () => {
+        process.env.BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS = PROFILE_ARN;
+
+        createBedrockChatModel('us.anthropic.claude-sonnet-5-5', 'test-agent');
+
+        expect(providerCalls).toEqual([['us.anthropic.claude-sonnet-5-5']]);
+    });
+
+    it('throws an actionable error for a malformed BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS entry', () => {
+        process.env.BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS = `${PROFILE_ARN},us.anthropic.claude-sonnet-5-5`;
+
+        expect(() => createBedrockChatModel(PROFILE_ARN, 'test-agent')).toThrow(
+            /Invalid BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS entries: us\.anthropic\.claude-sonnet-5-5/,
+        );
+    });
+});
