@@ -9,5 +9,8 @@ export TMP=/tmp
 # Disable Mastra Studio (it tries to bundle/write files at runtime)
 export MASTRA_STUDIO_DISABLED=true
 
+# Disable Mastra anonymous telemetry (PostHog) - no outbound internet from ECS
+export MASTRA_TELEMETRY_DISABLED=true
+
 # Start the app - use pre-built output directly to avoid runtime bundling
 node /app/.mastra/output/index.mjs
