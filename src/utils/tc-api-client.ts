@@ -37,6 +37,11 @@ export interface CallTcApiOptions {
  * `TOOL_M2M_FALLBACK_CONFIG` and the requestor-token attempt fails with
  * 401/403 (or there was no requestor token to try).
  *
+ * Local-dev exception: with `DISABLE_AUTH=true` no request ever carries a
+ * bearer token, so a call with no requestor token uses the service M2M token
+ * for any tool. This never applies when a requestor token is present (a
+ * 401/403 is still returned as-is) and never when auth is enabled.
+ *
  * See docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md.
  */
 export async function callTcApi({
@@ -65,7 +70,10 @@ export async function callTcApi({
         return fetchWithToken(url, init, await m2mService.getM2MToken());
     }
 
-    if (!fallbackEnabled) {
+    // Read at call time, like access-control's DISABLE_AUTH check.
+    const authDisabled = process.env.DISABLE_AUTH === 'true';
+
+    if (!fallbackEnabled && !authDisabled) {
         throw new Error(
             `No requestor token available for tool "${toolId}" and M2M fallback is not enabled for it.`,
         );
@@ -73,6 +81,7 @@ export async function callTcApi({
 
     tcAILogger.warn('No requestor token available for Topcoder platform API call, using service M2M token', {
         toolId,
+        reason: fallbackEnabled ? 'tool-fallback-enabled' : 'auth-disabled',
     });
     return fetchWithToken(url, init, await m2mService.getM2MToken());
 }

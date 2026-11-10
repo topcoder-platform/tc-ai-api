@@ -73,7 +73,46 @@ const CACHE_CAPABLE_MODEL_PATTERNS: RegExp[] = [
 ];
 
 export function isCacheCapableBedrockModel(modelId: string): boolean {
-    return CACHE_CAPABLE_MODEL_PATTERNS.some((pattern) => pattern.test(modelId));
+    return (
+        CACHE_CAPABLE_MODEL_PATTERNS.some((pattern) => pattern.test(modelId)) ||
+        isClaudeApplicationInferenceProfile(modelId)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Application inference profiles
+// ---------------------------------------------------------------------------
+
+const APPLICATION_INFERENCE_PROFILE_ARN = /^arn:aws:bedrock:[a-z0-9-]+:\d{12}:application-inference-profile\/[a-z0-9]+$/;
+
+/**
+ * An application inference profile ARN doesn't name its underlying model, so neither
+ * the cache allowlist above nor @ai-sdk/amazon-bedrock can tell it's Claude. Without
+ * `modelFamily: 'anthropic'` the SDK falls back to a forced `json` tool for structured
+ * output, which Claude Sonnet 5.5 / Opus 5.5 reject with a 400.
+ *
+ * Opt-in, same reasoning as the cache allowlist: list only profiles backed by a
+ * Claude model that supports prompt caching (Claude 3.5+) in
+ * BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS (comma-separated).
+ */
+function getClaudeApplicationInferenceProfileArns(): Set<string> {
+    const raw = process.env.BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS;
+    if (raw === undefined || raw.trim() === '') {
+        return new Set();
+    }
+    const arns = raw.split(',').map((arn) => arn.trim()).filter(Boolean);
+    const invalid = arns.filter((arn) => !APPLICATION_INFERENCE_PROFILE_ARN.test(arn));
+    if (invalid.length > 0) {
+        throw new Error(
+            `Invalid BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS entries: ${invalid.join(', ')}. ` +
+            'Expected application inference profile ARNs (arn:aws:bedrock:<region>:<account>:application-inference-profile/<id>).',
+        );
+    }
+    return new Set(arns);
+}
+
+export function isClaudeApplicationInferenceProfile(modelId: string): boolean {
+    return getClaudeApplicationInferenceProfileArns().has(modelId);
 }
 
 function isPromptCacheEnabled(): boolean {
@@ -179,7 +218,9 @@ function createCacheMiddleware(ttl: BedrockCacheTtl, agentId: string | undefined
  * than a separate wrapper — one choke point, one `BedrockLanguageModel` cast.
  */
 export function createBedrockChatModel(modelId: string, agentId?: string): BedrockLanguageModel {
-    const model = createBedrockProvider(agentId)(modelId);
+    const model = isClaudeApplicationInferenceProfile(modelId)
+        ? createBedrockProvider(agentId)(modelId, { modelFamily: 'anthropic' })
+        : createBedrockProvider(agentId)(modelId);
 
     const shouldCache = isPromptCacheEnabled() && isCacheCapableBedrockModel(modelId);
 

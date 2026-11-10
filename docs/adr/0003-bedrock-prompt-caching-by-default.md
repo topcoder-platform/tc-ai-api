@@ -165,10 +165,10 @@ what this repo's embedding/image models use. The fix, already merged:
 
 | Agent | Default provider | Default model ID | Cache-capable by default? |
 | --- | --- | --- | --- |
-| `challengeSearchAgent` | AWSBedrock | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Yes |
-| `skillsMatchingAgent` | AWSBedrock (env-overridable) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Yes |
-| `challengeParserAgent` | AWSBedrock (env-overridable) | `us.anthropic.claude-sonnet-5` | Yes |
-| `jdRewriterAgent` | AWSBedrock (env-overridable) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Yes |
+| `challengeSearchAgent` | AWSBedrock | `us.anthropic.claude-haiku-5-5` | Yes |
+| `skillsMatchingAgent` | AWSBedrock (env-overridable) | `us.anthropic.claude-haiku-5-5` | Yes |
+| `challengeParserAgent` | AWSBedrock (env-overridable) | `us.anthropic.claude-sonnet-5-5` | Yes |
+| `jdRewriterAgent` | AWSBedrock (env-overridable) | `us.anthropic.claude-haiku-5-5` | Yes |
 
 All four current defaults are cache-capable Claude models. Every one of these is
 env-overridable per agent to a different provider or Bedrock model ID — the concrete
@@ -387,8 +387,8 @@ BEDROCK_PROMPT_CACHE_TTL="[5m|1h — default 5m]"
 - ~~Confirm the four model IDs currently in use are actually cache-enabled in the
   target AWS account/region for Bedrock~~ — **Confirmed 2026-08-28** by the repo
   owner: the two distinct model IDs actually in play
-  (`us.anthropic.claude-haiku-4-5-20251001-v1:0`,
-  `us.anthropic.claude-sonnet-5`) are cache-enabled in the target account/region.
+  (`us.anthropic.claude-haiku-5-5`,
+  `us.anthropic.claude-sonnet-5-5`) are cache-enabled in the target account/region.
   (Not independently re-verified against the live AWS account in this session — no
   AWS credentials were available in this environment to query Bedrock directly —
   this is an owner attestation, not a CLI-verified fact.)

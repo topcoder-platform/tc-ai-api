@@ -202,7 +202,7 @@ describe('generateWithStructuredOutputFallback — truncation handling', () => {
     const singleRequirement = { requirements: [requirement('REQ_01')] };
 
     function fakeAgent(generate: ReturnType<typeof vi.fn>) {
-        return { model: { modelId: 'us.anthropic.claude-sonnet-5' }, generate };
+        return { model: { modelId: 'us.anthropic.claude-sonnet-5-5' }, generate };
     }
 
     it('stops after the first truncated attempt instead of retrying other strategies', async () => {

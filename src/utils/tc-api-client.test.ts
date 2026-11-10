@@ -37,6 +37,8 @@ function mockFetchResponse(status: number) {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv('DISABLE_AUTH', '');
     for (const key of Object.keys(fallbackConfigMock)) delete fallbackConfigMock[key];
     m2mTokenMock.mockResolvedValue('fake-m2m-token');
 });
@@ -243,6 +245,57 @@ describe('callTcApi — forceM2M', () => {
 
         const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
         expect((init.headers as Record<string, string>).Authorization).toBe('Bearer requestor-token');
+        expect(m2mTokenMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('callTcApi — DISABLE_AUTH (local dev, no requestor token)', () => {
+    it('uses the M2M token for a tool without fallback when auth is disabled and no token exists', async () => {
+        vi.stubEnv('DISABLE_AUTH', 'true');
+        const fetchSpy = mockFetchResponse(200);
+
+        const response = await callTcApi({
+            toolId: 'not-listed-tool',
+            url: 'https://api.example.com/v6/thing',
+            requestContext: requestContextWithToken(undefined),
+        });
+
+        expect(response.status).toBe(200);
+        const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-m2m-token');
+        expect(loggerWarnMock).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({ toolId: 'not-listed-tool', reason: 'auth-disabled' }),
+        );
+    });
+
+    it('still returns a requestor-token 401 as-is when auth is disabled', async () => {
+        vi.stubEnv('DISABLE_AUTH', 'true');
+        const fetchSpy = mockFetchResponse(401);
+
+        const response = await callTcApi({
+            toolId: 'not-listed-tool',
+            url: 'https://api.example.com/v6/thing',
+            requestContext: requestContextWithToken('requestor-token'),
+        });
+
+        expect(response.status).toBe(401);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(m2mTokenMock).not.toHaveBeenCalled();
+    });
+
+    it.each(['false', '1', 'TRUE'])('still throws without a token when DISABLE_AUTH is %j', async (value) => {
+        vi.stubEnv('DISABLE_AUTH', value);
+        const fetchSpy = mockFetchResponse(200);
+
+        await expect(
+            callTcApi({
+                toolId: 'not-listed-tool',
+                url: 'https://api.example.com/v6/thing',
+                requestContext: requestContextWithToken(undefined),
+            }),
+        ).rejects.toThrow(/No requestor token available/);
+        expect(fetchSpy).not.toHaveBeenCalled();
         expect(m2mTokenMock).not.toHaveBeenCalled();
     });
 });

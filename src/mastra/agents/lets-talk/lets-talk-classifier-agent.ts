@@ -17,7 +17,7 @@ import {
 const IS_LOCAL_DEV = process.env.LOCAL_DEV === 'true';
 
 const PROVIDER_NAME = process.env.LETS_TALK_CLASSIFIER_AI_PROVIDER || 'AWSBedrock';
-const MODEL_ID = process.env.LETS_TALK_CLASSIFIER_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const MODEL_ID = process.env.LETS_TALK_CLASSIFIER_AI_MODEL_ID || 'us.anthropic.claude-haiku-5-5';
 const AGENT_ID = 'lets-talk-classifier-agent';
 
 /** Request-context key the workflow sets so processor logs carry the submission id. */
@@ -179,9 +179,10 @@ export const letsTalkClassifierAgent = new Agent({
     // into every call's options.
     defaultOptions: {
         modelSettings: {
-            // Repeatable classifications.
-            temperature: 0,
-            // The answer is a small JSON object — cap cost and runaway output.
+            // No `temperature`: Claude Haiku 5.5 rejects non-default sampling
+            // params with a 400. Repeatability comes from the schema + processors.
+            // The answer is a small JSON object, but adaptive thinking (on by
+            // default) counts toward this cap — leave room for it.
             maxOutputTokens: config.maxOutputTokens,
             // L0: AI SDK exponential-backoff retry on throttling / 5xx / network.
             maxRetries: config.maxTransportRetries,

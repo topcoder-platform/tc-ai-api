@@ -9,7 +9,7 @@ import { instanceScorers } from '../../scorers/instance-scorers';
 const IS_LOCAL_DEV = process.env.LOCAL_DEV === 'true';
 
 const PROVIDER_NAME = process.env.SKILLS_EXTRACTOR_AI_PROVIDER || 'AWSBedrock';
-const MODEL_ID = process.env.SKILLS_EXTRACTOR_AI_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const MODEL_ID = process.env.SKILLS_EXTRACTOR_AI_MODEL_ID || 'us.anthropic.claude-haiku-5-5';
 const AGENT_ID = 'skillsMatchingAgent';
 
 export const skillsMatchingAgent = new Agent({

@@ -124,8 +124,8 @@ tc-ai-api/
 | `SYS1_TIMEOUT_MS`                   | No       | `30000`                                | Per System One provider call                                      |
 | `SYS1_KEEP_ALIVE`                   | No       | Ollama server default (5m)             | Sent as `keep_alive` (`5m`, or seconds; `0` unloads, negative pins). Callers can't set it |
 | `LETS_TALK_CLASSIFIER_AI_PROVIDER`  | No       | `AWSBedrock`                           | Model provider for `lets-talk-classifier-agent` ([ADR 0010](docs/adr/0010-lets-talk-classification.md)) |
-| `LETS_TALK_CLASSIFIER_AI_MODEL_ID`  | No       | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model id for `lets-talk-classifier-agent`                  |
-| `LETS_TALK_CLASSIFIER_MAX_OUTPUT_TOKENS` | No  | `1024`                                 | Output token cap per classification call                          |
+| `LETS_TALK_CLASSIFIER_AI_MODEL_ID`  | No       | `us.anthropic.claude-haiku-5-5` | Model id for `lets-talk-classifier-agent`                  |
+| `LETS_TALK_CLASSIFIER_MAX_OUTPUT_TOKENS` | No  | `4096`                                 | Output token cap per classification call                          |
 | `LETS_TALK_CLASSIFIER_MAX_RETRIES`  | No       | `2`                                    | L0 — AI SDK transport retries (throttling, 5xx, network)          |
 | `LETS_TALK_CLASSIFIER_MAX_PROCESSOR_RETRIES` | No | `2`                                 | L2 — feedback retries of an invalid model answer, per call        |
 | `LETS_TALK_CLASSIFY_MAX_ATTEMPTS`   | No       | `2`                                    | L4 — corrective attempts in total; then the run fails             |
@@ -158,9 +158,10 @@ tc-ai-api/
 | `RAG_CHUNK_OVERLAP`                 | No       | `50`                                   | Character overlap between recursively-split chunks                |
 | `RAG_TOP_K`                         | No       | `10`                                   | Default result count for challenge vector search                  |
 | `CHALLENGE_SEARCH_AI_PROVIDER`      | No       | `AWSBedrock`                           | Model provider for `challenge-search-agent`                       |
-| `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-4-5`        | Model id for `challenge-search-agent`                              |
+| `CHALLENGE_SEARCH_AI_MODEL_ID`      | No       | `us.anthropic.claude-haiku-5-5`        | Model id for `challenge-search-agent`                              |
 | `BEDROCK_PROMPT_CACHE_ENABLED`      | No       | `true`                                 | Global kill switch for Bedrock prompt caching (see below)         |
 | `BEDROCK_PROMPT_CACHE_TTL`          | No       | `5m`                                   | Bedrock cache checkpoint TTL — `5m` or `1h`                       |
+| `BEDROCK_CLAUDE_INFERENCE_PROFILE_ARNS` | No | — | Comma-separated application inference profile ARNs backed by a Claude 3.5+ model. Required when an `*_AI_MODEL_ID` is such an ARN: enables Claude handling (structured output without forced tool use) and prompt caching for it |
 | `ACCESS_CONTROL_DEFAULT_POLICY`     | No       | `public`                               | Global fallback policy for any agent/workflow/tool with no explicit policy — `public` or `deny` |
 | `ACCESS_CONTROL_ROLES_CLAIM`        | No       | `https://<TC_API_BASE domain>/roles`   | JWT claim key carrying member role names — override only if a tenant diverges from the convention |
 | `ACCESS_CONTROL_BLOCKED_SUBJECTS`   | No       | empty                                  | Comma-separated JWT subjects denied across protected API routes, before role/scope policies |
@@ -169,7 +170,7 @@ tc-ai-api/
 | `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_SCOPES` | No | —                            | Per-target override: comma-separated M2M scopes (implies `restricted`) |
 
 > \* Auth0 variables are required unless `DISABLE_AUTH=true`.
-> \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are only exercised if a tool is explicitly opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) — no tool is today, so these aren't required for the currently-shipped behavior, only for future fallback use.
+> \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are needed whenever tc-ai-api uses its own service M2M token: tools opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) or passing `forceM2M`, the `challenge-context` workflow's challenge fetch, and — under `DISABLE_AUTH=true` — every Topcoder platform call made without a requestor token.
 
 ---
 
@@ -411,7 +412,7 @@ Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authoriz
 
 | Tool | Auth |
 | --- | --- |
-| `fetch-challenge-by-id` | Requestor token only — no fallback configured |
+| `fetch-challenge-by-id` | Requestor token only — no fallback configured. The `challenge-context` workflow does **not** go through the tool for its fetch: it calls the same `fetchChallenge` helper in-process with `forceM2M` (service M2M token), gated by the workflow's own access policy — see the [ADR 0002 addendum](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md#addendum--2026-11-10-challenge-context-workflow-reads-with-m2m-disable_auth-uses-m2m) |
 | `search-challenges` | Requestor token only — no fallback configured |
 | `fetch-project-by-id` | Requestor token only — no fallback configured, and **never** `forceM2M` for any caller, including its billing-account client enrichment call (ADR 0007) |
 | `fetch-challenge-resources` | Requestor token when the caller is `administrator`; tc-ai-api's own M2M token (`forceM2M`) for any other RBAC-allowed caller (e.g. `Talent Manager`) — see [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) |
@@ -462,10 +463,10 @@ Four agents are registered in `src/mastra/index.ts`, all built via the shared `c
 
 | Agent (registry key) | ID | Default model | Memory | Tools |
 | --- | --- | --- | --- | --- |
-| `skillsMatchingAgent` | `skillsMatchingAgent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | PostgreSQL-backed | — (workflow calls skill tools directly) |
-| `challengeParserAgent` | `challenge-parser-agent` | AWSBedrock `us.anthropic.claude-sonnet-5` | — | — (structured-output extractor) |
-| `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
-| `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` | — | — (structured-output rewriter) |
+| `skillsMatchingAgent` | `skillsMatchingAgent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | PostgreSQL-backed | — (workflow calls skill tools directly) |
+| `challengeParserAgent` | `challenge-parser-agent` | AWSBedrock `us.anthropic.claude-sonnet-5-5` | — | — (structured-output extractor) |
+| `challengeSearchAgent` | `challenge-search-agent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | In-memory, last 10 messages | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
+| `jdRewriterAgent` | `jd-rewriter-agent` | AWSBedrock `us.anthropic.claude-haiku-5-5` | — | — (structured-output rewriter) |
 
 Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_MODEL_ID` env vars (e.g. `SKILLS_EXTRACTOR_AI_PROVIDER`, `CHALLENGE_PARSER_AI_PROVIDER`, `CHALLENGE_SEARCH_AI_PROVIDER`, `JD_REWRITER_AI_PROVIDER`).
 
@@ -476,7 +477,7 @@ Every default is overridable per-agent via `<AGENT>_AI_PROVIDER` / `<AGENT>_AI_M
 | Property    | Value                                        |
 | ----------- | -------------------------------------------- |
 | **ID**      | `skillsMatchingAgent`                        |
-| **Model**   | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default |
+| **Model**   | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default |
 | **Memory**  | PostgreSQL-backed conversation memory        |
 | **Scorers** | Answer Relevancy, Prompt Alignment — sampled, only when `LOCAL_DEV=true` |
 | **Access**  | `restricted` — `roles: ['administrator', 'Talent Manager', 'Copilot']`, no `scopes` (all M2M callers denied) — same gate as `skill-extraction-workflow` |
@@ -497,7 +498,7 @@ The agent is used within the workflow's `generateSkillCandidateTerms` step via i
 | Property   | Value                                                          |
 | ---------- | --------------------------------------------------------------- |
 | **ID**     | `challenge-parser-agent`                                       |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-sonnet-5')` by default |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-sonnet-5-5')` by default |
 | **Memory** | None                                                            |
 | **Tools**  | None — pure structured-output extractor                        |
 | **Access** | `restricted` — `roles: ['administrator', 'Talent Manager', 'Copilot']`, no `scopes` (all M2M callers denied) — same gate as `challenge-context` |
@@ -509,7 +510,7 @@ Reads a full challenge specification (public + private description, skills, meta
 | Property   | Value                                                          |
 | ---------- | --------------------------------------------------------------- |
 | **ID**     | `challenge-search-agent`                                       |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5')` by default |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default |
 | **Memory** | In-memory only (`Memory({ options: { lastMessages: 10 } })`) — no persistent storage backend, unlike `skillsMatchingAgent` |
 | **Tools**  | `challengeVectorQueryTool`, `fetchProjectTool`, `fetchChallengeTool`, `fetchChallengeResourcesTool`, `fetchClientProjectsTool` |
 | **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) — same gate as `challenge-search` |
@@ -523,7 +524,7 @@ Can also answer "who's on this challenge" questions — copilot, reviewers, regi
 | Property   | Value                                                                       |
 | ---------- | ----------------------------------------------------------------------------- |
 | **ID**     | `jd-rewriter-agent`                                                          |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default |
 | **Memory** | None                                                                         |
 | **Tools**  | None — pure structured-output rewriter                                      |
 | **Access** | `restricted` — `roles: ['administrator', 'Talent Manager']`, no `scopes` (all M2M callers denied) — same gate as `jd-autowrite` |
@@ -535,7 +536,7 @@ Rewrites a raw/rough job description into Topcoder's canonical structured format
 | Property   | Value                                                                       |
 | ---------- | ----------------------------------------------------------------------------- |
 | **ID**     | `lets-talk-classifier-agent`                                                 |
-| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')` by default, `temperature: 0` |
+| **Model**  | `createModel('AWSBedrock', 'us.anthropic.claude-haiku-5-5')` by default |
 | **Memory** | None — stateless                                                             |
 | **Tools**  | None. Output processor: `StructuredOutputValidator` (L2 feedback retries)    |
 
@@ -1031,6 +1032,8 @@ sequenceDiagram
 
 `fetch-challenge-by-id`, `search-challenges`, and `fetch-project-by-id` are **not** listed in `TOOL_M2M_FALLBACK_CONFIG` today, so for them the "else" branch never fires — a 401/403 from the requestor's own token is returned as-is.
 
+With `DISABLE_AUTH=true` (local development) no request carries a bearer token at all, so `callTcApi()` uses the service M2M token for **any** tool when there is no requestor token — including the tools above that otherwise never escalate. This needs working `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` locally, never applies when a requestor token is present, and never applies with auth enabled.
+
 `fetch-challenge-resources` (ADR 0005) doesn't fit this diagram: its upstream API returns `200` with a silently empty result for an under-privileged caller rather than a `401`/`403`, so there's nothing for the reactive fallback above to react to. It instead decides the credential *before* calling `callTcApi()` — `forceM2M: true` unless the caller is `administrator` — via `shouldForceM2M`, then calls once with whichever credential it picked. See [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) Decision 3/4.
 
 ### Agent Interaction — Term Extraction Detail
@@ -1100,7 +1103,7 @@ These are **unauthenticated** calls (no bearer token forwarded). The API base UR
 | `{TC_API_BASE}/v6/billing-accounts?clientId=` | `GET` | List a client's billing accounts (paginated) | `fetchClientProjectsTool` (ADR 0007) |
 | `{TC_API_BASE}/v6/projects?billingAccountId=` | `GET` | List a billing account's projects (paginated via headers, not a body envelope) | `fetchClientProjectsTool` (ADR 0007) |
 
-Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallengesTool` — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No reactive M2M fallback is configured for either. `fetchProjectTool` is also requestor-token-only, including for its billing-account enrichment call, and **never** escalates to M2M ([ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md)) — even though, unlike the two above, it's now `restricted` rather than `public`. `fetchClientProjectsTool` also forwards the requestor's token for every call and omits accounts without visible projects for non-admin callers (PM-6517). `fetchChallengeResourcesTool` branches instead (`forceM2M`, ADR 0005): the requestor's own token only when they're `administrator`, tc-ai-api's service M2M token otherwise.
+Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallengesTool` — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No reactive M2M fallback is configured for either. The one exception is `challenge-context-workflow`, whose `fetch-challenge-details` step calls the exported `fetchChallenge` helper with `forceM2M: true` (service M2M token) instead of executing the tool — `challenge-ingestion-workflow` still executes the tool with the requestor's token. `fetchProjectTool` is also requestor-token-only, including for its billing-account enrichment call, and **never** escalates to M2M ([ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md)) — even though, unlike the two above, it's now `restricted` rather than `public`. `fetchClientProjectsTool` also forwards the requestor's token for every call and omits accounts without visible projects for non-admin callers (PM-6517). `fetchChallengeResourcesTool` branches instead (`forceM2M`, ADR 0005): the requestor's own token only when they're `administrator`, tc-ai-api's service M2M token otherwise.
 
 ### 3. Ollama LLM API
 
@@ -1115,7 +1118,7 @@ Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallenges
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `https://{AUTH0_DOMAIN}/.well-known/jwks.json`             | JWKS for member token verification                                                                                                  |
 | `https://{AUTH0_M2M_DOMAIN}/.well-known/jwks.json`         | JWKS for M2M token verification                                                                                                     |
-| `{M2M_AUTH_URL}` (proxied via `M2M_AUTH_PROXY_SERVER_URL`) | Issues tc-ai-api's own service M2M token (`M2MService`) — used only as an unconfigured fallback credential, not the default for any tool today |
+| `{M2M_AUTH_URL}` (proxied via `M2M_AUTH_PROXY_SERVER_URL`) | Issues tc-ai-api's own service M2M token (`M2MService`) — used for `forceM2M` calls (incl. the `challenge-context` workflow's challenge fetch), tools opted into fallback, and token-less calls under `DISABLE_AUTH=true` |
 
 ### 5. PostgreSQL
 
