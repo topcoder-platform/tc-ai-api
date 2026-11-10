@@ -157,3 +157,14 @@ Two lower-priority open items from the original draft remain genuinely open (not
 - ~~Answers to Open Questions 1–3~~ — resolved above.
 - `MASTRA_AUTH_TOKEN_KEY` (`@mastra/core/request-context`) usage — implemented and covered by `src/utils/tc-api-client.test.ts`; no issues surfaced.
 - `M2MService`'s call pattern is now genuinely "only when a future tool opts into fallback" rather than "always" for these three tools — no code change was needed in `M2MService` itself, confirming the original assumption.
+
+## Addendum — 2026-11-10: `challenge-context` workflow reads with M2M; `DISABLE_AUTH` uses M2M
+
+Prompted by `challenge-context` failing locally under `DISABLE_AUTH=true` with `No requestor token available for tool "fetch-challenge-by-id" and M2M fallback is not enabled for it.` Two decisions, both confirmed by the requester:
+
+1. **`challenge-context` workflow fetches its challenge with the service M2M token.** Its `fetch-challenge-details` step no longer executes `fetchChallengeTool`; it calls the `fetchChallenge` helper exported from `fetch-challenge-tool.ts` with `forceM2M: true`. Who may trigger that read is gated by the workflow's own `challenge-context` access policy (copilot and up, M2M callers denied). This is a privilege widening for that audience: a caller allowed to run the workflow can now have any challenge parsed, including one their own token could not read from `/v6/challenges`.
+   - The `fetch-challenge-by-id` **tool** is unchanged: requestor token only, no entry in `TOOL_M2M_FALLBACK_CONFIG`. `forceM2M` is intentionally not a tool input — the tool is `public`, attached to `challenge-search-agent`, and URL-addressable, so an input flag would be settable by an LLM or any HTTP caller.
+   - `challenge-ingestion-workflow` is unchanged and still executes the tool with the requestor's token.
+   - This supersedes "no code changes were made to … `challenge-context-workflow.ts`" in resolution item 3 above.
+2. **With `DISABLE_AUTH=true`, `callTcApi` uses the service M2M token when there is no requestor token.** Auth-disabled runs never carry a bearer token, so every requestor-token-only tool was unusable locally. The check sits only in the no-token branch: a present requestor token is still forwarded and its `401`/`403` returned as-is, and with auth enabled the original error is still thrown. It applies to every `callTcApi` caller, including tools documented elsewhere as never escalating (`fetch-project-by-id`, `fetch-client-projects`, `search-members`) — acceptable because access control is already inert in that mode. Each use is logged at `warn` with `reason: 'auth-disabled'`.
+

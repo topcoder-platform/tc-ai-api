@@ -14,7 +14,7 @@ vi.mock('../../../utils/auth/m2m.service', () => ({
     },
 }));
 
-import { fetchChallengeTool } from './fetch-challenge-tool';
+import { fetchChallenge, fetchChallengeTool } from './fetch-challenge-tool';
 
 // Minimal context for execute — the tool uses context.mastra?.getLogger?.()
 // (optional) and context.requestContext (to read the requestor's token).
@@ -268,6 +268,54 @@ describe('fetchChallengeTool — app-version header', () => {
 
         const callArgs = fetchMock.mock.calls[0] as [string, any];
         expect(callArgs[1].headers.Authorization).toBe('Bearer fake-requestor-token');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Credential choice: the tool is requestor-only; forceM2M is reachable only
+// through the exported in-process helper (challenge-context workflow).
+// ---------------------------------------------------------------------------
+
+describe('fetchChallenge — credential choice', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        m2mTokenMock.mockResolvedValue('fake-m2m-token');
+    });
+
+    it('the tool never uses the M2M token, even if the input carries a forceM2M flag', async () => {
+        const fetchMock = mockFetchResponse(baseApiResponse());
+
+        await fetchChallengeTool.execute?.(
+            { challengeId: CHALLENGE_UUID, forceM2M: true } as any,
+            minimalContext,
+        );
+
+        const callArgs = fetchMock.mock.calls[0] as [string, any];
+        expect(callArgs[1].headers.Authorization).toBe('Bearer fake-requestor-token');
+        expect(m2mTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('the helper uses the requestor token by default', async () => {
+        const fetchMock = mockFetchResponse(baseApiResponse());
+
+        await fetchChallenge(CHALLENGE_UUID, minimalContext.requestContext);
+
+        const callArgs = fetchMock.mock.calls[0] as [string, any];
+        expect(callArgs[1].headers.Authorization).toBe('Bearer fake-requestor-token');
+        expect(m2mTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('the helper uses the service M2M token with forceM2M, with or without a requestor token', async () => {
+        const fetchMock = mockFetchResponse(baseApiResponse());
+
+        const withToken = await fetchChallenge(CHALLENGE_UUID, minimalContext.requestContext, { forceM2M: true });
+        const withoutToken = await fetchChallenge(CHALLENGE_UUID, undefined, { forceM2M: true });
+
+        expect(withToken.challenge.id).toBe('challenge-1');
+        expect(withoutToken.challenge.id).toBe('challenge-1');
+        for (const call of fetchMock.mock.calls as [string, any][]) {
+            expect(call[1].headers.Authorization).toBe('Bearer fake-m2m-token');
+        }
     });
 });
 

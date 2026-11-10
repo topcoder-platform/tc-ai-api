@@ -170,7 +170,7 @@ tc-ai-api/
 | `ACCESS_POLICY_<CATEGORY>_<TARGET_KEY>_SCOPES` | No | —                            | Per-target override: comma-separated M2M scopes (implies `restricted`) |
 
 > \* Auth0 variables are required unless `DISABLE_AUTH=true`.
-> \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are only exercised if a tool is explicitly opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) — no tool is today, so these aren't required for the currently-shipped behavior, only for future fallback use.
+> \*\* `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` are needed whenever tc-ai-api uses its own service M2M token: tools opted into `TOOL_M2M_FALLBACK_CONFIG` (`src/config/tool-auth-fallback.config.ts`) or passing `forceM2M`, the `challenge-context` workflow's challenge fetch, and — under `DISABLE_AUTH=true` — every Topcoder platform call made without a requestor token.
 
 ---
 
@@ -412,7 +412,7 @@ Mastra tools that call `TC_API_BASE` (fetching challenges/projects) are authoriz
 
 | Tool | Auth |
 | --- | --- |
-| `fetch-challenge-by-id` | Requestor token only — no fallback configured |
+| `fetch-challenge-by-id` | Requestor token only — no fallback configured. The `challenge-context` workflow does **not** go through the tool for its fetch: it calls the same `fetchChallenge` helper in-process with `forceM2M` (service M2M token), gated by the workflow's own access policy — see the [ADR 0002 addendum](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md#addendum--2026-11-10-challenge-context-workflow-reads-with-m2m-disable_auth-uses-m2m) |
 | `search-challenges` | Requestor token only — no fallback configured |
 | `fetch-project-by-id` | Requestor token only — no fallback configured, and **never** `forceM2M` for any caller, including its billing-account client enrichment call (ADR 0007) |
 | `fetch-challenge-resources` | Requestor token when the caller is `administrator`; tc-ai-api's own M2M token (`forceM2M`) for any other RBAC-allowed caller (e.g. `Talent Manager`) — see [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) |
@@ -1032,6 +1032,8 @@ sequenceDiagram
 
 `fetch-challenge-by-id`, `search-challenges`, and `fetch-project-by-id` are **not** listed in `TOOL_M2M_FALLBACK_CONFIG` today, so for them the "else" branch never fires — a 401/403 from the requestor's own token is returned as-is.
 
+With `DISABLE_AUTH=true` (local development) no request carries a bearer token at all, so `callTcApi()` uses the service M2M token for **any** tool when there is no requestor token — including the tools above that otherwise never escalate. This needs working `M2M_AUTH_CLIENT_ID`/`M2M_AUTH_CLIENT_SECRET` locally, never applies when a requestor token is present, and never applies with auth enabled.
+
 `fetch-challenge-resources` (ADR 0005) doesn't fit this diagram: its upstream API returns `200` with a silently empty result for an under-privileged caller rather than a `401`/`403`, so there's nothing for the reactive fallback above to react to. It instead decides the credential *before* calling `callTcApi()` — `forceM2M: true` unless the caller is `administrator` — via `shouldForceM2M`, then calls once with whichever credential it picked. See [ADR 0005](docs/adr/0005-challenge-resources-tool-for-challenge-search-agent.md) Decision 3/4.
 
 ### Agent Interaction — Term Extraction Detail
@@ -1101,7 +1103,7 @@ These are **unauthenticated** calls (no bearer token forwarded). The API base UR
 | `{TC_API_BASE}/v6/billing-accounts?clientId=` | `GET` | List a client's billing accounts (paginated) | `fetchClientProjectsTool` (ADR 0007) |
 | `{TC_API_BASE}/v6/projects?billingAccountId=` | `GET` | List a billing account's projects (paginated via headers, not a body envelope) | `fetchClientProjectsTool` (ADR 0007) |
 
-Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallengesTool` — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No reactive M2M fallback is configured for either. `fetchProjectTool` is also requestor-token-only, including for its billing-account enrichment call, and **never** escalates to M2M ([ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md)) — even though, unlike the two above, it's now `restricted` rather than `public`. `fetchClientProjectsTool` also forwards the requestor's token for every call and omits accounts without visible projects for non-admin callers (PM-6517). `fetchChallengeResourcesTool` branches instead (`forceM2M`, ADR 0005): the requestor's own token only when they're `administrator`, tc-ai-api's service M2M token otherwise.
+Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallengesTool` — the bearer token that authenticated the caller of `tc-ai-api` (member or M2M) is forwarded as-is via `callTcApi()`. See [Requestor Token Propagation to Topcoder Platform Tools](#requestor-token-propagation-to-topcoder-platform-tools) and [ADR 0002](docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md). No reactive M2M fallback is configured for either. The one exception is `challenge-context-workflow`, whose `fetch-challenge-details` step calls the exported `fetchChallenge` helper with `forceM2M: true` (service M2M token) instead of executing the tool — `challenge-ingestion-workflow` still executes the tool with the requestor's token. `fetchProjectTool` is also requestor-token-only, including for its billing-account enrichment call, and **never** escalates to M2M ([ADR 0007](docs/adr/0007-client-billing-account-project-visibility.md)) — even though, unlike the two above, it's now `restricted` rather than `public`. `fetchClientProjectsTool` also forwards the requestor's token for every call and omits accounts without visible projects for non-admin callers (PM-6517). `fetchChallengeResourcesTool` branches instead (`forceM2M`, ADR 0005): the requestor's own token only when they're `administrator`, tc-ai-api's service M2M token otherwise.
 
 ### 3. Ollama LLM API
 
@@ -1116,7 +1118,7 @@ Authorized as the **requesting user** for `fetchChallengeTool`/`searchChallenges
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `https://{AUTH0_DOMAIN}/.well-known/jwks.json`             | JWKS for member token verification                                                                                                  |
 | `https://{AUTH0_M2M_DOMAIN}/.well-known/jwks.json`         | JWKS for M2M token verification                                                                                                     |
-| `{M2M_AUTH_URL}` (proxied via `M2M_AUTH_PROXY_SERVER_URL`) | Issues tc-ai-api's own service M2M token (`M2MService`) — used only as an unconfigured fallback credential, not the default for any tool today |
+| `{M2M_AUTH_URL}` (proxied via `M2M_AUTH_PROXY_SERVER_URL`) | Issues tc-ai-api's own service M2M token (`M2MService`) — used for `forceM2M` calls (incl. the `challenge-context` workflow's challenge fetch), tools opted into fallback, and token-less calls under `DISABLE_AUTH=true` |
 
 ### 5. PostgreSQL
 
