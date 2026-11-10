@@ -1,9 +1,16 @@
 // Challenge API: GET /v6/challenges/:challengeId
 // Fetches full challenge details from the Topcoder API by challenge ID.
 //
-// Authorized as the requestor by default (their own token is forwarded
-// as-is); no M2M fallback configured for this tool — see
+// The TOOL is authorized as the requestor (their own token is forwarded
+// as-is); no M2M fallback configured for it — see
 // docs/adr/0002-tc-api-requestor-token-with-m2m-fallback.md.
+//
+// `fetchChallenge` is also exported for in-process callers that must read a
+// challenge with tc-ai-api's own service M2M token (`forceM2M`) — today only
+// the `challenge-context` workflow (see the ADR 0002 addendum). That option
+// is deliberately NOT part of the tool's input schema: the tool is public,
+// agent-attached and URL-addressable, so an input flag would let an LLM or
+// any HTTP caller escalate to service-level visibility.
 import { createTool } from '@mastra/core/tools';
 import { withAccessPolicy } from '../../../utils/auth/access-control';
 import { z } from 'zod';
@@ -125,7 +132,20 @@ export const fetchChallengeTool = withAccessPolicy(createTool({
     },
 }));
 
-const fetchChallenge = async (challengeId: string, requestContext: RequestContext | undefined) => {
+export interface FetchChallengeOptions {
+    /**
+     * Use tc-ai-api's service M2M token instead of the requestor's own.
+     * Only for trusted in-process callers whose own access policy already
+     * gates who can reach this code path.
+     */
+    forceM2M?: boolean;
+}
+
+export const fetchChallenge = async (
+    challengeId: string,
+    requestContext: RequestContext | undefined,
+    { forceM2M = false }: FetchChallengeOptions = {},
+) => {
     const url = `${BASE_URL}/${encodeURIComponent(challengeId)}`;
     const response = await callTcApi({
         toolId: TOOL_ID,
@@ -135,6 +155,7 @@ const fetchChallenge = async (challengeId: string, requestContext: RequestContex
             signal: AbortSignal.timeout(15_000),
         },
         requestContext,
+        forceM2M,
     });
 
     if (!response.ok) {

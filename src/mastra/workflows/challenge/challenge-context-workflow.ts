@@ -1,9 +1,8 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { noopObserve } from '@mastra/core/tools';
 import { z } from 'zod';
 import { tcAILogger } from '../../../utils/logger';
 import { generateWithStructuredOutputFallback } from '../../../utils/structured-output-wrapper';
-import { fetchChallengeTool } from '../../tools/challenge/fetch-challenge-tool';
+import { fetchChallenge } from '../../tools/challenge/fetch-challenge-tool';
 
 // ---------------------------------------------------------------------------
 // Zod Schemas
@@ -309,17 +308,16 @@ const fetchChallengeDetails = createStep({
     execute: async ({ inputData, requestContext }) => {
         tcAILogger.info(`[challenge-context:fetch-challenge-details] Fetching challenge: ${inputData.challengeId}`);
 
-        const toolResult = await fetchChallengeTool.execute?.(
-            { challengeId: inputData.challengeId },
-            { requestContext, observe: noopObserve },
-        );
-
-        if (!toolResult || 'error' in toolResult || !toolResult.challenge) {
-            throw new Error(`Failed to fetch challenge details for ID ${inputData.challengeId}`);
-        }
+        // Read with tc-ai-api's service M2M token rather than the caller's own
+        // (ADR 0002 addendum): who may run this workflow is already gated by
+        // its `challenge-context` access policy, and the agent-callable
+        // `fetch-challenge-by-id` tool stays requestor-token-only.
+        const { challenge } = await fetchChallenge(inputData.challengeId, requestContext, {
+            forceM2M: true,
+        });
 
         tcAILogger.info('[challenge-context:fetch-challenge-details] Challenge details fetched successfully');
-        return { challenge: toolResult.challenge };
+        return { challenge };
     },
 });
 
