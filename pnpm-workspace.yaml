@@ -2,6 +2,8 @@ packages:
   - .
 
 overrides:
+  # Temporary security fork for CVE-2026-112366 until picomatch publishes a fix.
+  'picomatch@^4': npm:@ryotsu/picomatch@4.0.7-a
   '@hono/node-server': 2.1.8
   'hono': 4.13.18
   'vite': 8.1.6
