@@ -1,0 +1,47 @@
+[
+  {
+    "issuer": "https://api.topcoder-dev.com",
+    "algorithm": "RS256",
+    "audience": "https://api.topcoder-dev.com/v6",
+    "jwksUri": "https://api.topcoder-dev.com/v6/authorizations/.well-known/jwks.json"
+  },
+  {
+    "issuer": "https://auth.topcoder-dev.com/",
+    "algorithm": "RS256",
+    "audience": "BXWXUWnilVUPdN01t2Se29Tw2ZYNGZvH",
+    "jwksUri": "https://auth.topcoder-dev.com/.well-known/jwks.json"
+  },
+  {
+    "issuer": "https://topcoder-dev.auth0.com/",
+    "algorithm": "RS256",
+    "audience": [
+      "BXWXUWnilVUPdN01t2Se29Tw2ZYNGZvH",
+      "https://m2m.topcoder-dev.com/"
+    ],
+    "jwksUri": "https://topcoder-dev.auth0.com/.well-known/jwks.json"
+  },
+  {
+    "issuer": "https://keycloak.topcoder-dev.com/realms/topcoder-m2m-dev",
+    "algorithm": "RS256",
+    "audience": "https://m2m.topcoder-dev.com/",
+    "jwksUri": "https://keycloak.topcoder-dev.com/realms/topcoder-m2m-dev/protocol/openid-connect/certs"
+  },
+  {
+    "issuer": "https://testsachin.topcoder-dev.com/",
+    "algorithm": "RS256",
+    "audience": [
+      "BXWXUWnilVUPdN01t2Se29Tw2ZYNGZvH",
+      "https://m2m.topcoder-dev.com/"
+    ],
+    "jwksUri": "https://testsachin.topcoder-dev.com/.well-known/jwks.json"
+  },
+  {
+    "issuer": "https://test-sachin-rs256.auth0.com/",
+    "algorithm": "RS256",
+    "audience": [
+      "BXWXUWnilVUPdN01t2Se29Tw2ZYNGZvH",
+      "https://m2m.topcoder-dev.com/"
+    ],
+    "jwksUri": "https://test-sachin-rs256.auth0.com/.well-known/jwks.json"
+  }
+]
