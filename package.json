@@ -26,7 +26,7 @@
   "packageManager": "pnpm@11.15.1",
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": "26.13.1"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.207",
@@ -61,7 +61,8 @@
     "mastra": "^1.37.0",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
-    "typescript": "^6.0.3",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "^8.72.1",
     "vitest": "^4.1.12"
   }

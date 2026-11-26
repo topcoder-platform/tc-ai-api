@@ -9,7 +9,7 @@ COPY . .
 RUN pnpm run test:dependency-compat && pnpm run lint && pnpm test && pnpm run build
 
 FROM alpine:3.24
-RUN apk upgrade --no-cache && apk add --no-cache 'libcrypto3>=3.5.9-r1' 'libssl3>=3.5.9-r1' 'zlib>=1.4-r0' 'nodejs-current~26' 'nodejs-current>=26.13.1-r0' ca-certificates \
+RUN apk upgrade --no-cache && apk add --no-cache 'libcrypto3>=3.5.9-r1' 'libssl3>=3.5.9-r1' 'zlib>=1.4-r0' 'nodejs-current~26.13.1' ca-certificates \
     && addgroup -S -g 10001 app && adduser -S -D -u 10001 -G app -h /home/app app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000 \
     TMPDIR=/tmp TEMP=/tmp TMP=/tmp MASTRA_STUDIO_DISABLED=true MASTRA_TELEMETRY_DISABLED=true \

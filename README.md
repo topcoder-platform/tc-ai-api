@@ -53,7 +53,7 @@ The service exposes a Hono-based HTTP API (managed by Mastra's built-in server),
 | **Linting**         | ESLint 9 + typescript-eslint                                |
 | **Formatting**      | Prettier 3.8+                                               |
 | **CI/CD**           | CircleCI → AWS ECS (Fargate)                                |
-| **Container**       | Docker (node:24.13.0-alpine)                                |
+| **Container**       | Docker (node:26.13.1-alpine)                                |
 
 ---
 
@@ -1160,7 +1160,7 @@ A code review automation workflow (details in the workflow file).
 
 ### Docker
 
-The multi-stage Dockerfile builds with Node.js 26.12.1 and pnpm 11.15.1, installs the frozen root lockfile, and runs lint, tests and dependency compatibility checks. The generated `.mastra/output` server receives the same security overrides and immutable shared-client reference before its production dependencies are installed.
+The multi-stage Dockerfile builds with Node.js 26.13.1 and pnpm 11.15.1, installs the frozen root lockfile, and runs lint, tests and dependency compatibility checks. The generated `.mastra/output` server receives the same security overrides and immutable shared-client reference before its production dependencies are installed.
 
 The final Alpine image contains the generated server and the `workspace` skill assets. It uses Alpine's dynamically linked Node.js 26 package, runs as UID 10001, and starts `index.mjs` directly. Mastra Studio is disabled and temporary files use `/tmp`. `WORKSPACE_PATH` defaults to `/app/workspace`; ECS may override it. The server listens on `PORT` (default 3000). Supply configuration through ECS environment variables or secrets; `.env` files are excluded from the image.
 
